@@ -1,0 +1,666 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:singalUI.ViewModels"
+             xmlns:v="using:singalUI.Views"
+             x:Class="singalUI.Views.CameraSetupView"
+             x:DataType="vm:CameraSetupViewModel"
+             x:Name="RootControl"
+             x:CompileBindings="True"
+             Background="#0d0d0d">
+
+    <Design.DataContext>
+        <vm:CameraSetupViewModel/>
+    </Design.DataContext>
+
+    <Grid RowDefinitions="Auto,*,Auto" ColumnDefinitions="*,380">
+        <!-- Connection Status Bar -->
+        <Border Grid.Row="0" Grid.ColumnSpan="2"
+                Background="#1c1c1c"
+                BorderBrush="#333333"
+                BorderThickness="0,0,0,2"
+                Padding="16,8">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12">
+                    <Ellipse Width="12" Height="12"
+                             Fill="{Binding CameraConnected, Converter={StaticResource ConnectedColorConverter}}"/>
+                    <TextBlock Text="Camera:"
+                               FontSize="14"
+                               Foreground="#ffffff"
+                               VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding CameraStatus}"
+                               FontSize="14"
+                               FontWeight="Medium"
+                               Foreground="#ffffff"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Main Content Area - Camera Preview -->
+        <Border Grid.Row="1" Grid.Column="0"
+                Background="#151515"
+                BorderBrush="#333333"
+                BorderThickness="2"
+                Margin="16,16,8,16"
+                CornerRadius="0">
+            <Grid RowDefinitions="Auto,*,Auto,Auto">
+                <!-- Camera Header with Focus Bar -->
+                <Border Grid.Row="0"
+                        Background="#1c1c1c"
+                        BorderBrush="#333333"
+                        BorderThickness="0,0,0,2"
+                        Padding="12,8"
+                        CornerRadius="0">
+                    <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" RowDefinitions="Auto,Auto">
+                        <!-- Camera Icon -->
+                        <Border Grid.Row="0" Grid.Column="0" Width="20" Height="20" Margin="0,4,12,0" VerticalAlignment="Center">
+                            <Path Data="M4 6h2l1.5-2h5l1.5 2h2c1.1 0 2 .9 2 2v10c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V8c0-1.1.9-2 2-2zm6 11c2.2 0 4-1.8 4-4s-1.8-4-4-4-4 1.8-4 4 1.8 4 4 4zm0-6c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2z"
+                                  Fill="#999999" 
+                                  Stretch="Uniform"/>
+                        </Border>
+                        
+                        <!-- Focus Level Label and Percentage -->
+                        <TextBlock Grid.Row="0" Grid.Column="1"
+                                   Text="Focus Level"
+                                   FontSize="13"
+                                   Foreground="#ffffff"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,12,0"/>
+                        <TextBlock Grid.Row="0" Grid.Column="2"
+                                   Text="{Binding FocusLevel, StringFormat={}{0:F0}%}"
+                                   FontSize="13"
+                                   FontWeight="Medium"
+                                   Foreground="#ffffff"
+                                   VerticalAlignment="Center"
+                                   HorizontalAlignment="Left"/>
+                        
+                        <!-- Camera Info on Right -->
+                        <TextBlock Grid.Row="0" Grid.Column="4"
+                                   Text="{Binding CameraFrameInfo}"
+                                   FontSize="12"
+                                   Foreground="#ffffff"
+                                   VerticalAlignment="Center"/>
+
+                        <!-- Focus Bar spanning full width -->
+                        <Border Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="5"
+                                Background="#0a0a0a"
+                                BorderBrush="#333333"
+                                BorderThickness="1"
+                                CornerRadius="0"
+                                Height="12"
+                                Padding="1"
+                                Margin="0,8,0,0">
+                            <Grid>
+                                <Border Background="#0a0a0a" CornerRadius="0"/>
+                                <Border HorizontalAlignment="Left"
+                                        Background="{Binding FocusLevel, Converter={StaticResource FocusLevelColorConverter}}"
+                                        CornerRadius="0"
+                                        Width="{Binding FocusLevel, Converter={StaticResource FocusLevelWidthConverter}}"/>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </Border>
+
+                <Border Grid.Row="1"
+                        x:Name="CameraPreviewViewport"
+                        Background="#0a0a0a"
+                        CornerRadius="0"
+                        ClipToBounds="True">
+                    <!-- Live Camera Feed with Pan/Zoom Support -->
+                    <Grid ClipToBounds="True">
+                        <Image x:Name="CameraPreviewImage"
+                               Source="{Binding CameraFrame}"
+                               Stretch="Uniform"
+                               ClipToBounds="True"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               RenderTransformOrigin="0.5,0.5">
+                            <Image.RenderTransform>
+                                <TransformGroup>
+                                    <ScaleTransform ScaleX="{Binding ZoomLevel}" ScaleY="{Binding ZoomLevel}"/>
+                                    <TranslateTransform X="{Binding PanX}" Y="{Binding PanY}"/>
+                                </TransformGroup>
+                            </Image.RenderTransform>
+                        </Image>
+                    </Grid>
+                </Border>
+
+                <!-- Stage Position - MOVED TO BOTTOM OF CAMERA VIEW -->
+                <Border Grid.Row="2"
+                        Background="#0f0f0f"
+                        BorderBrush="#333333"
+                        BorderThickness="0,2,0,0"
+                        Padding="12,10"
+                        CornerRadius="0">
+                    <Grid ColumnDefinitions="*,*,*" RowDefinitions="Auto,Auto" ColumnSpacing="18" RowSpacing="8">
+                        <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="X:"
+                                       FontSize="15"
+                                       FontWeight="Bold"
+                                       Foreground="#aaaaaa"
+                                       FontFamily="Consolas,Courier New"/>
+                            <TextBlock Text="{Binding CurrentPosition.X, StringFormat={}{0:F3} mm}"
+                                       FontSize="15"
+                                       FontWeight="Medium"
+                                       Foreground="#dddddd"
+                                       FontFamily="Consolas,Courier New"/>
+                        </StackPanel>
+                        <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="Y:"
+                                       FontSize="15"
+                                       FontWeight="Bold"
+                                       Foreground="#aaaaaa"
+                                       FontFamily="Consolas,Courier New"/>
+                            <TextBlock Text="{Binding CurrentPosition.Y, StringFormat={}{0:F3} mm}"
+                                       FontSize="15"
+                                       FontWeight="Medium"
+                                       Foreground="#dddddd"
+                                       FontFamily="Consolas,Courier New"/>
+                        </StackPanel>
+                        <StackPanel Grid.Row="0" Grid.Column="2" Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="Z:"
+                                       FontSize="15"
+                                       FontWeight="Bold"
+                                       Foreground="#aaaaaa"
+                                       FontFamily="Consolas,Courier New"/>
+                            <TextBlock Text="{Binding CurrentPosition.Z, StringFormat={}{0:F3} mm}"
+                                       FontSize="15"
+                                       FontWeight="Medium"
+                                       Foreground="#dddddd"
+                                       FontFamily="Consolas,Courier New"/>
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="Rx:"
+                                       FontSize="15"
+                                       FontWeight="Bold"
+                                       Foreground="#aaaaaa"
+                                       FontFamily="Consolas,Courier New"/>
+                            <TextBlock FontSize="15"
+                                       FontWeight="Medium"
+                                       Foreground="#dddddd"
+                                       FontFamily="Consolas,Courier New">
+                                <Run Text="{Binding CurrentPosition.Rx, StringFormat={}{0:F3}}"/>
+                                <Run Text="°"/>
+                            </TextBlock>
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="Ry:"
+                                       FontSize="15"
+                                       FontWeight="Bold"
+                                       Foreground="#aaaaaa"
+                                       FontFamily="Consolas,Courier New"/>
+                            <TextBlock FontSize="15"
+                                       FontWeight="Medium"
+                                       Foreground="#dddddd"
+                                       FontFamily="Consolas,Courier New">
+                                <Run Text="{Binding CurrentPosition.Ry, StringFormat={}{0:F3}}"/>
+                                <Run Text="°"/>
+                            </TextBlock>
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="2" Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="Rz:"
+                                       FontSize="15"
+                                       FontWeight="Bold"
+                                       Foreground="#aaaaaa"
+                                       FontFamily="Consolas,Courier New"/>
+                            <TextBlock FontSize="15"
+                                       FontWeight="Medium"
+                                       Foreground="#dddddd"
+                                       FontFamily="Consolas,Courier New">
+                                <Run Text="{Binding CurrentPosition.Rz, StringFormat={}{0:F3}}"/>
+                                <Run Text="°"/>
+                            </TextBlock>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <Border Grid.Row="3"
+                        Background="#1c1c1c"
+                        BorderBrush="#333333"
+                        BorderThickness="0,2,0,0"
+                        Padding="12,8"
+                        CornerRadius="0">
+                    <Grid ColumnDefinitions="Auto,*">
+                        <Border Grid.Column="0" Width="18" Height="18" Margin="0,2,0,0" VerticalAlignment="Center">
+                            <Path Data="M18 4H2C.9 4 0 4.9 0 6v8c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zM6 12c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm8 2H8v-1c0-1.33 2.67-2 4-2s4 .67 4 2v1z"
+                                  Fill="#999999" 
+                                  Stretch="Uniform"/>
+                        </Border>
+                        <TextBlock Grid.Column="1"
+                                   FontSize="13"
+                                   Foreground="#ffffff"
+                                   Margin="8,0,0,0">
+                            <Run Text="Resolution: "/>
+                            <Run Text="{Binding CameraFrameInfo}"/>
+                            <Run Text=" | Measured FPS: "/>
+                            <Run Text="{Binding LiveFps, StringFormat={}{0:F2}}"/>
+                        </TextBlock>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Border>
+
+        <!-- Right Panel - Collapsible Panels -->
+        <ScrollViewer Grid.Row="1" Grid.Column="1" Margin="8,16,16,16">
+            <StackPanel Spacing="12">
+
+                <!-- Camera Selection Panel -->
+                <v:CollapsiblePanelView>
+                    <v:CollapsiblePanelView.DataContext>
+                        <vm:CollapsiblePanelViewModel
+                            Title="Camera Selection"
+                            IconPath="M9.4 10.5l4.8-4.8c.4-.4.4-1 0-1.4-.4-.4-1-.4-1.4 0l-5.5 5.5c-.4.4-.4 1 0 1.4l5.5 5.5c.2.2.5.3.7.3s.5-.1.7-.3c.4-.4.4-1 0-1.4L9.4 10.5z"
+                            IsExpanded="true"/>
+                    </v:CollapsiblePanelView.DataContext>
+                    <v:CollapsiblePanelView.Content>
+                        <StackPanel Spacing="16">
+                            <StackPanel.Styles>
+                                <Style Selector="Button">
+                                    <Setter Property="Background" Value="#404040"/>
+                                    <Setter Property="BorderBrush" Value="#606060"/>
+                                    <Setter Property="Foreground" Value="#ffffff"/>
+                                </Style>
+                                <Style Selector="Button:disabled">
+                                    <Setter Property="Background" Value="#2f2f2f"/>
+                                    <Setter Property="BorderBrush" Value="#4a4a4a"/>
+                                    <Setter Property="Foreground" Value="#ffffff"/>
+                                    <Setter Property="Opacity" Value="1"/>
+                                </Style>
+                                <Style Selector="Button:disabled /template/ ContentPresenter">
+                                    <Setter Property="TextElement.Foreground" Value="#ffffff"/>
+                                    <Setter Property="Opacity" Value="1"/>
+                                </Style>
+                            </StackPanel.Styles>
+                            
+                            <!-- Camera Model + Lens Dropdown -->
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="Camera Model + Lens"
+                                           FontSize="13"
+                                           Foreground="#ffffff"/>
+                                <ComboBox SelectedIndex="{Binding SelectedCameraModel}"
+                                          PlaceholderText="Select camera model and lens"
+                                          FontSize="13"
+                                          Padding="8,6"
+                                          HorizontalAlignment="Stretch">
+                                    <ComboBoxItem Content="140g - 50mm"/>
+                                    <ComboBoxItem Content="200g - 35mm"/>
+                                    <ComboBoxItem Content="300g - 85mm"/>
+                                    <ComboBoxItem Content="Custom"/>
+                                </ComboBox>
+                            </StackPanel>
+                            
+                            <!-- Connected Cameras Dropdown -->
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="Connected Cameras"
+                                           FontSize="13"
+                                           Foreground="#ffffff"/>
+                                <ComboBox ItemsSource="{Binding ConnectedCameras}"
+                                          SelectedItem="{Binding SelectedConnectedCamera}"
+                                          PlaceholderText="Select connected camera"
+                                          FontSize="13"
+                                          Padding="8,6"
+                                          HorizontalAlignment="Stretch"/>
+                            </StackPanel>
+
+                            <!-- Camera File (.cti) Selection -->
+                            <StackPanel Spacing="6">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBlock Grid.Column="0"
+                                               Text="Camera File (.cti)"
+                                               FontSize="13"
+                                               Foreground="#ffffff"/>
+                                    <Button Grid.Column="1"
+                                            Content="Browse..."
+                                            Command="{Binding BrowseCtiFileCommand}"
+                                            Padding="8,4"
+                                            FontSize="12"
+                                            Background="#404040"
+                                            BorderBrush="#606060"
+                                            Foreground="#ffffff"
+                                            Margin="0,0,0,0"/>
+                                </Grid>
+                                <ComboBox ItemsSource="{Binding AvailableCtiFiles}"
+                                          SelectedItem="{Binding SelectedCtiFile}"
+                                          PlaceholderText="Select .cti file"
+                                          FontSize="13"
+                                          Padding="8,6"
+                                          HorizontalAlignment="Stretch"
+                                          IsEditable="True"/>
+                            </StackPanel>
+
+                            <!-- Camera Configs -->
+                            <StackPanel Spacing="6">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBlock Grid.Column="0"
+                                               Text="Camera Configs"
+                                               FontSize="13"
+                                               Foreground="#ffffff"/>
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                        <Button Content="Save"
+                                                Command="{Binding SavePresetCommand}"
+                                                Padding="8,4"
+                                                FontSize="12"
+                                                Background="#404040"
+                                                BorderBrush="#606060"
+                                                Foreground="#ffffff"/>
+                                        <Button Content="Load"
+                                                Command="{Binding LoadConfigCommand}"
+                                                Padding="8,4"
+                                                FontSize="12"
+                                                Background="#404040"
+                                                BorderBrush="#606060"
+                                                Foreground="#ffffff"/>
+                                        <Button Content="Delete"
+                                                Command="{Binding DeletePresetCommand}"
+                                                Padding="8,4"
+                                                FontSize="12"
+                                                Background="#404040"
+                                                BorderBrush="#606060"
+                                                Foreground="#ffffff"/>
+                                    </StackPanel>
+                                </Grid>
+                                <ComboBox ItemsSource="{Binding SavedConfigs}"
+                                          SelectedItem="{Binding SelectedPreset}"
+                                          PlaceholderText="Select or create config"
+                                          FontSize="13"
+                                          Padding="8,6"
+                                          HorizontalAlignment="Stretch"/>
+                                <Grid ColumnDefinitions="*,*" Margin="0,4,0,0">
+                                    <Button Grid.Column="0"
+                                            Content="Save As..."
+                                            Command="{Binding SaveConfigAsCommand}"
+                                            Padding="8,4"
+                                            FontSize="12"
+                                            Background="#404040"
+                                            BorderBrush="#606060"
+                                            Foreground="#ffffff"
+                                            Margin="0,0,3,0"/>
+                                    <Button Grid.Column="1"
+                                            Content="Load From File..."
+                                            Command="{Binding LoadConfigFromFileCommand}"
+                                            Padding="8,4"
+                                            FontSize="12"
+                                            Foreground="#ffffff"
+                                            Background="#404040"
+                                            BorderBrush="#606060"
+                                            Margin="3,0,0,0"/>
+                                </Grid>
+                            </StackPanel>
+                        </StackPanel>
+                    </v:CollapsiblePanelView.Content>
+                </v:CollapsiblePanelView>
+
+                <!-- Camera Parameters Panel -->
+                <v:CollapsiblePanelView>
+                    <v:CollapsiblePanelView.DataContext>
+                        <vm:CollapsiblePanelViewModel
+                            Title="Camera Parameters"
+                            IconPath="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L5.09 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.04.64.09.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"
+                            IsExpanded="true"/>
+                    </v:CollapsiblePanelView.DataContext>
+                    <v:CollapsiblePanelView.Content>
+                        <StackPanel Spacing="18">
+                            <!-- Auto Mode Toggles -->
+                            <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto">
+                                <CheckBox Grid.Column="0" Grid.Row="0"
+                                          IsChecked="{Binding AutoFocus}"
+                                          Content="Auto Focus"
+                                          FontSize="13"
+                                          Foreground="#ffffff"
+                                          Margin="0,0,8,4"/>
+                                <CheckBox Grid.Column="1" Grid.Row="0"
+                                          IsChecked="{Binding AutoIllumination}"
+                                          Content="Auto Illumination"
+                                          FontSize="13"
+                                          Foreground="#ffffff"
+                                          Margin="0,0,0,8"/>
+                            </Grid>
+
+                            <!-- Live Camera Controls -->
+                            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="8" ColumnSpacing="10">
+                                <TextBlock Grid.Row="0" Grid.Column="0"
+                                           Text="Exposure (us)"
+                                           FontSize="13"
+                                           Foreground="#ffffff"
+                                           VerticalAlignment="Center"/>
+                                <NumericUpDown Grid.Row="0" Grid.Column="1"
+                                               Value="{Binding CameraParameters.Exposure, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                               Minimum="100"
+                                               Maximum="100000"
+                                               Increment="100"
+                                               FormatString="F0"
+                                               FontSize="13"
+                                               HorizontalAlignment="Stretch"/>
+
+                                <TextBlock Grid.Row="1" Grid.Column="0"
+                                           Text="Gain (dB)"
+                                           FontSize="13"
+                                           Foreground="#ffffff"
+                                           VerticalAlignment="Center"/>
+                                <NumericUpDown Grid.Row="1" Grid.Column="1"
+                                               Value="{Binding CameraParameters.Gain, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                               Minimum="0"
+                                               Maximum="24"
+                                               Increment="0.1"
+                                               FormatString="F1"
+                                               FontSize="13"
+                                               HorizontalAlignment="Stretch"/>
+
+                                <TextBlock Grid.Row="2" Grid.Column="0"
+                                           Text="Target FPS"
+                                           FontSize="13"
+                                           Foreground="#ffffff"
+                                           VerticalAlignment="Center"/>
+                                <NumericUpDown Grid.Row="2" Grid.Column="1"
+                                               Value="{Binding CameraParameters.Fps, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                               Minimum="1"
+                                               Maximum="120"
+                                               Increment="0.5"
+                                               FormatString="F1"
+                                               FontSize="13"
+                                               HorizontalAlignment="Stretch"/>
+
+                                <TextBlock Grid.Row="3" Grid.Column="0"
+                                           Text="Illumination (%)"
+                                           FontSize="13"
+                                           Foreground="#ffffff"
+                                           VerticalAlignment="Center"/>
+                                <NumericUpDown Grid.Row="3" Grid.Column="1"
+                                               Value="{Binding CameraParameters.Illumination, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                               Minimum="0"
+                                               Maximum="100"
+                                               Increment="1"
+                                               FormatString="F0"
+                                               FontSize="13"
+                                               HorizontalAlignment="Stretch"/>
+                            </Grid>
+
+                            <!-- Binning -->
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Binning Mode"
+                                           FontSize="13"
+                                           Foreground="#ffffff"/>
+                                <ComboBox SelectedIndex="{Binding CameraParameters.Binning, Converter={StaticResource BinningToIndexConverter}}"
+                                          FontSize="13"
+                                          Width="250"
+                                          Padding="8,0,8,4">
+                                    <ComboBoxItem Content="1x1 (Full Resolution)"/>
+                                    <ComboBoxItem Content="2x2 (Half Resolution)"/>
+                                    <ComboBoxItem Content="4x4 (Quarter Resolution)"/>
+                                </ComboBox>
+                            </StackPanel>
+                        </StackPanel>
+                    </v:CollapsiblePanelView.Content>
+                </v:CollapsiblePanelView>
+
+                <!-- Pattern Analysis Panel -->
+                <v:CollapsiblePanelView>
+                    <v:CollapsiblePanelView.DataContext>
+                        <vm:CollapsiblePanelViewModel
+                            Title="Pattern Analysis"
+                            IconPath="M4 4h16v16H4V4zm2 2v12h12V6H6zm2 2h8v8H8V8z"
+                            IsExpanded="true"/>
+                    </v:CollapsiblePanelView.DataContext>
+                    <v:CollapsiblePanelView.Content>
+                        <StackPanel Spacing="16">
+                            <!-- Pattern Type Selection -->
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="Pattern Type"
+                                           FontSize="13"
+                                           Foreground="#ffffff"/>
+                                <ComboBox SelectedIndex="{Binding SelectedPatternType}"
+                                          PlaceholderText="Select pattern type"
+                                          FontSize="13"
+                                          Padding="8,6"
+                                          HorizontalAlignment="Stretch">
+                                    <ComboBoxItem Content="Checker Board"/>
+                                    <ComboBoxItem Content="Dot Grid"/>
+                                    <ComboBoxItem Content="Circular Grid"/>
+                                    <ComboBoxItem Content="Concentric Circles"/>
+                                    <ComboBoxItem Content="Asymmetric Circles"/>
+                                </ComboBox>
+                            </StackPanel>
+
+                            <!-- Algorithm Code Selection -->
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="Algorithm Code"
+                                           FontSize="13"
+                                           Foreground="#ffffff"/>
+                                <ComboBox SelectedIndex="{Binding SelectedAlgorithmCode}"
+                                          PlaceholderText="Select algorithm"
+                                          FontSize="13"
+                                          Padding="8,6"
+                                          HorizontalAlignment="Stretch">
+                                    <ComboBoxItem Content="HMF (Hierarchical Multi-Feature)"/>
+                                    <ComboBoxItem Content="SIFT (Scale-Invariant Feature Transform)"/>
+                                    <ComboBoxItem Content="SURF (Speeded Up Robust Features)"/>
+                                    <ComboBoxItem Content="ORB (Oriented FAST and Rotated BRIEF)"/>
+                                    <ComboBoxItem Content="Harris Corner Detection"/>
+                                    <ComboBoxItem Content="Blob Detection"/>
+                                </ComboBox>
+                            </StackPanel>
+
+                            <!-- Checker Board Pitch Configuration -->
+                            <Border IsVisible="{Binding SelectedPatternType, Converter={StaticResource CompareToZeroConverter}}"
+                                    Background="#1a1a1a"
+                                    BorderBrush="#303030"
+                                    BorderThickness="1"
+                                    CornerRadius="6"
+                                    Padding="12">
+                                <StackPanel Spacing="12">
+                                    <TextBlock Text="Checker Board Configuration"
+                                               FontSize="14"
+                                               FontWeight="SemiBold"
+                                               Foreground="#ffffff"/>
+
+                                    <!-- Inner Corners -->
+                                    <StackPanel Spacing="6">
+                                        <TextBlock Text="Inner Corners (for calibration)"
+                                                   FontSize="12"
+                                                   Foreground="#ffffff"/>
+                                        <v:TwoColumnInputControl/>
+                                    </StackPanel>
+
+                                    <!-- Pitch Dimensions -->
+                                    <StackPanel Spacing="6">
+                                        <TextBlock Text="Square Pitch (dimensions of each square)"
+                                                   FontSize="12"
+                                                   Foreground="#ffffff"/>
+                                        <v:TwoColumnInputControl>
+                                            <v:TwoColumnInputControl.DataContext>
+                                                <vm:TwoColumnInputViewModel
+                                                    LeftLabel="Pitch X (mm)"
+                                                    LeftValue="1.0"
+                                                    LeftMin="0.1"
+                                                    LeftMax="100"
+                                                    LeftFormat="F2"
+                                                    RightLabel="Pitch Y (mm)"
+                                                    RightValue="1.0"
+                                                    RightMin="0.1"
+                                                    RightMax="100"
+                                                    RightFormat="F2"/>
+                                            </v:TwoColumnInputControl.DataContext>
+                                            <v:TwoColumnInputControl.DataContext>
+                                                <vm:TwoColumnInputViewModel/>
+                                            </v:TwoColumnInputControl.DataContext>
+                                        </v:TwoColumnInputControl>
+                                    </StackPanel>
+
+                                    <!-- Unit Selection -->
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Text="Unit"
+                                                   FontSize="12"
+                                                   Foreground="#ffffff"/>
+                                        <ComboBox SelectedIndex="{Binding CheckerBoardUnit, Converter={StaticResource UnitToIndexConverter}}"
+                                                  FontSize="13"
+                                                  Padding="8,4"
+                                                  HorizontalAlignment="Stretch">
+                                            <ComboBoxItem Content="Millimeters (mm)"/>
+                                            <ComboBoxItem Content="Micrometers (μm)"/>
+                                            <ComboBoxItem Content="Inches (in)"/>
+                                        </ComboBox>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </v:CollapsiblePanelView.Content>
+                </v:CollapsiblePanelView>
+
+                <!-- Action Buttons -->
+                <Button Content="Capture Image"
+                        Command="{Binding CaptureImageCommand}"
+                        Padding="16,12"
+                        FontSize="14"
+                        HorizontalAlignment="Stretch"
+                        Margin="0,0,0,8"/>
+
+                <!-- Error Log -->
+                <Border Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="20" Margin="0,0,0,0">
+                    <StackPanel Spacing="16">
+                        <!-- Section Header -->
+                        <Grid ColumnDefinitions="Auto,*">
+                            <Border Grid.Column="0" Width="24" Height="24" CornerRadius="3" Margin="0,2,0,0">
+                                <Path Data="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"
+                                      Fill="#ba68c8" Stretch="Uniform"/>
+                            </Border>
+                            <TextBlock Grid.Column="1"
+                                       Text="Error Log"
+                                       FontSize="16"
+                                       FontWeight="SemiBold"
+                                       Foreground="#ffffff"
+                                       VerticalAlignment="Center"
+                                       Margin="12,0,0,0"/>
+                        </Grid>
+
+                        <ScrollViewer MaxHeight="300" HorizontalScrollBarVisibility="Auto">
+                            <TextBox Text="{Binding ErrorLog}"
+                                       IsReadOnly="True"
+                                       AcceptsReturn="True"
+                                       TextWrapping="Wrap"
+                                       BorderThickness="0"
+                                       FontSize="11"
+                                       Foreground="#ffffff"
+                                       FontFamily="Consolas,Courier New"
+                                       Background="Transparent"/>
+                        </ScrollViewer>
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Bottom Action Bar -->
+        <Border Grid.Row="2" Grid.ColumnSpan="2"
+                Background="#1c1c1c"
+                BorderBrush="#333333"
+                BorderThickness="0,2,0,0"
+                Padding="16,12">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="12">
+                <Button Content="Apply Settings"
+                        Command="{Binding ApplySettingsCommand}"
+                        Padding="20,12"
+                        FontSize="14"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>

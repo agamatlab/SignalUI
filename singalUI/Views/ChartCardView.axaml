@@ -1,0 +1,46 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:singalUI.ViewModels"
+             x:Class="singalUI.Views.ChartCardView"
+             x:DataType="vm:ChartCardViewModel"
+             Background="#252525"
+             BorderBrush="#404040"
+             BorderThickness="1"
+             CornerRadius="8"
+             Padding="16">
+
+    <Design.DataContext>
+        <vm:ChartCardViewModel/>
+    </Design.DataContext>
+
+    <StackPanel Spacing="12">
+        <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="{Binding Title}"
+                       FontSize="15"
+                       FontWeight="SemiBold"
+                       Foreground="#ffffff"/>
+            <TextBlock Text="{Binding RmsValue, StringFormat={}RMS: {0:F3}}"
+                       FontSize="13"
+                       Foreground="#ffffff"/>
+        </Grid>
+
+        <!-- Chart Bars -->
+        <ItemsControl ItemsSource="{Binding Bars}">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal" Spacing="2"/>
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <Border Width="8"
+                            Background="{Binding Color}"
+                            CornerRadius="1,1,0,0"
+                            VerticalAlignment="Bottom"
+                            Height="{Binding Height}"
+                            Margin="0,0,0,20"/>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </StackPanel>
+</UserControl>

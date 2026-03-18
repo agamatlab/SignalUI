@@ -1,0 +1,125 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>WinExe</OutputType>
+        <TargetFramework>net8.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ApplicationManifest>app.manifest</ApplicationManifest>
+        <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <!-- Use 64-bit PI DLL -->
+        <DefineConstants>X64</DefineConstants>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Folder Include="Models\" />
+        <Folder Include="Converters\" />
+        <Folder Include="Styles\" />
+        <Folder Include="Services\" />
+        <AvaloniaResource Include="Assets\**" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Protobuf Include="Protos/stage_control.proto" GrpcServices="Client" />
+        <PackageReference Include="Avalonia" Version="11.3.11" />
+        <PackageReference Include="Avalonia.Desktop" Version="11.3.11" />
+        <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.11" />
+        <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.11" />
+        <!--Condition below is needed to remove Avalonia.Diagnostics package from build output in Release configuration.-->
+        <PackageReference Include="Avalonia.Diagnostics" Version="11.3.11">
+            <IncludeAssets Condition="'$(Configuration)' != 'Debug'">None</IncludeAssets>
+            <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
+        </PackageReference>
+        <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.1" />
+        <PackageReference Include="FluentIcons.Common" Version="2.0.317" />
+        <PackageReference Include="Google.Protobuf" Version="3.33.5" />
+        <PackageReference Include="Grpc.Net.Client" Version="2.76.0" />
+        <PackageReference Include="Grpc.Tools" Version="2.76.0">
+          <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+          <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
+        <PackageReference Include="HotAvalonia" Version="3.0.2" />
+        <!-- OpenCV for image processing -->
+        <PackageReference Include="OpenCvSharp4" Version="4.9.0.20240103" />
+        <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.9.0.20240103" />
+        <!-- System.Drawing.Common required by mv.impact.acquire -->
+        <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
+        <!-- Serial port communication for stage controller -->
+        <PackageReference Include="System.IO.Ports" Version="8.0.0" />
+    </ItemGroup>
+
+
+    <ItemGroup>
+        <!-- Native DLLs - Copy to output directory root (DO NOT use <Reference> for native DLLs) -->
+        <None Include="libs\PoseEstApiWrapper.dll">
+            <Link>PoseEstApiWrapper.dll</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Include="..\..\PoseEstApi\PoseEstApi\TestCppDll\PoseEstApiBridge.dll">
+            <Link>PoseEstApiBridge.dll</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Include="..\..\PoseEstApi\PoseEstApi\lib\opencv_world4130.dll">
+            <Link>opencv_world4130.dll</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Include="..\..\PoseEstApi\PoseEstApi\TestCppDll\PoseEstApi.dll">
+            <Link>PoseEstApi.dll</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Include="..\..\PoseEstApi\PoseEstApi\lib\libiomp5md.dll">
+            <Link>libiomp5md.dll</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Include="..\..\PoseEstApi\PoseEstApi\Archive\12+12_G.txt">
+            <Link>Archive\12+12_G.txt</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Include="..\..\PoseEstApi\PoseEstApi\Archive\12+12_X.txt">
+            <Link>Archive\12+12_X.txt</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Include="..\..\PoseEstApi\PoseEstApi\Archive\12+12_Y.txt">
+            <Link>Archive\12+12_Y.txt</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <!-- PI GCS2 DLL - 64-bit version for x64 builds -->
+        <None Include="libs\PI_GCS2_DLL_x64.dll">
+            <Link>PI_GCS2_DLL_x64.dll</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <!-- PI GCS2 DLL - 32-bit version (backup) -->
+        <None Include="libs\PI_GCS2_DLL.dll">
+            <Link>PI_GCS2_DLL.dll</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+    </ItemGroup>
+    
+    <ItemGroup>
+        <!-- Matrix Vision local assemblies -->
+        <Reference Include="mv.impact.acquire">
+            <HintPath>C:\Program Files\MATRIX VISION\mvIMPACT Acquire\bin\netstandard2.0\mv.impact.acquire.dll</HintPath>
+            <Private>true</Private>
+        </Reference>
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- Copy Matrix Vision native DLLs to output -->
+        <None Include="C:\Program Files\MATRIX VISION\mvIMPACT Acquire\bin\**\mv*.dll" Link="MatrixVision\%(RecursiveDir)%(Filename)%(Extension)">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Include="C:\Program Files\MATRIX VISION\mvIMPACT Acquire\bin\mvGenTLProducer.cti">
+            <Link>mvGenTLProducer.cti</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+    </ItemGroup>
+
+    <ItemGroup>
+      <Compile Update="Views\ConfigView.axaml.cs">
+        <DependentUpon>ConfigView.axaml</DependentUpon>
+        <SubType>Code</SubType>
+      </Compile>
+      <Compile Update="libs\Sigmakoki.cs">
+        <DependentUpon>StageController.cs</DependentUpon>
+      </Compile>
+    </ItemGroup>
+</Project>

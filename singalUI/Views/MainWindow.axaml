@@ -1,0 +1,132 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:singalUI.ViewModels"
+        xmlns:v="using:singalUI.Views"
+        x:Class="singalUI.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="6-DOF CALIBRATOR PRO"
+        Width="1400"
+        Height="900"
+        MinWidth="800"
+        MinHeight="950"
+        WindowStartupLocation="CenterScreen"
+        Background="#0d0d0d">
+
+    <Design.DataContext>
+        <vm:MainWindowViewModel/>
+    </Design.DataContext>
+
+    <Grid RowDefinitions="Auto,*,Auto">
+        <!-- Menu Bar - Classic Microsoft Word Style -->
+        <Grid Grid.Row="0" Background="#2a2a2a" ColumnDefinitions="Auto,*,Auto">
+            <!-- Menu Tabs -->
+            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="0">
+                <!-- Camera Tab -->
+                <Border Name="CameraTab"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Padding="0"
+                        Cursor="Hand"
+                        PointerPressed="NavigateToCamera">
+                    <Border.Styles>
+                        <Style Selector="Border:pointerover">
+                            <Setter Property="Background" Value="#3a3a3a"/>
+                        </Style>
+                    </Border.Styles>
+                    <TextBlock Text="Camera"
+                               FontSize="14"
+                               FontFamily="Segoe UI,Arial"
+                               Foreground="#e0e0e0"
+                               Padding="20,8,20,8"
+                               VerticalAlignment="Center"/>
+                </Border>
+
+                <!-- Setup Tab -->
+                <Border Name="SetupTab"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Padding="0"
+                        Cursor="Hand"
+                        PointerPressed="NavigateToSetup">
+                    <Border.Styles>
+                        <Style Selector="Border:pointerover">
+                            <Setter Property="Background" Value="#3a3a3a"/>
+                        </Style>
+                    </Border.Styles>
+                    <TextBlock Text="Setup"
+                               FontSize="14"
+                               FontFamily="Segoe UI,Arial"
+                               Foreground="#e0e0e0"
+                               Padding="20,8,20,8"
+                               VerticalAlignment="Center"/>
+                </Border>
+
+                <!-- Analysis Tab -->
+                <Border Name="AnalysisTab"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Padding="0"
+                        Cursor="Hand"
+                        PointerPressed="NavigateToAnalysis">
+                    <Border.Styles>
+                        <Style Selector="Border:pointerover">
+                            <Setter Property="Background" Value="#3a3a3a"/>
+                        </Style>
+                    </Border.Styles>
+                    <TextBlock Text="Analysis"
+                               FontSize="14"
+                               FontFamily="Segoe UI,Arial"
+                               Foreground="#e0e0e0"
+                               Padding="20,8,20,8"
+                               VerticalAlignment="Center"/>
+                </Border>
+
+                <Border Name="ConfigTab"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Padding="0"
+                        Cursor="Hand"
+                        PointerPressed="NavigateToConfig">
+                    <Border.Styles>
+                        <Style Selector="Border:pointerover">
+                            <Setter Property="Background" Value="#3a3a3a"/>
+                        </Style>
+                    </Border.Styles>
+                    <TextBlock Text="Configure"
+                               FontSize="14"
+                               FontFamily="Segoe UI,Arial"
+                               Foreground="#e0e0e0"
+                               Padding="20,8,20,8"
+                               VerticalAlignment="Center"/>
+                </Border>
+            </StackPanel>
+
+            <!-- Center Title -->
+            <TextBlock Grid.Column="1"
+                       Text="6-DOF CALIBRATOR PRO v2.4.1"
+                       Foreground="#666666"
+                       FontFamily="Consolas,Courier New"
+                       FontSize="11"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"/>
+
+            <!-- Status Text -->
+            <TextBlock Grid.Column="2"
+                       Text="{Binding StatusBarText}"
+                       FontSize="11"
+                       FontFamily="Consolas,Courier New"
+                       Foreground="#999999"
+                       VerticalAlignment="Center"
+                       Margin="0,0,16,0"/>
+        </Grid>
+
+        <!-- Content Area -->
+        <Carousel Name="MainCarousel" Grid.Row="1">
+            <v:CameraSetupView/>
+            <v:CalibrationSetupView/>
+            <v:AnalysisView/>
+            <v:ConfigView/>
+        </Carousel>
+    </Grid>
+
+</Window>
