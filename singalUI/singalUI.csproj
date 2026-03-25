@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <OutputType>WinExe</OutputType>
         <TargetFramework>net8.0</TargetFramework>
@@ -93,6 +93,22 @@
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
     </ItemGroup>
+
+    <!-- NanoMeasCalib + bridge: optional until built; see PoseEstApi/RotPoseEstApi/native/RotCalibBridge -->
+    <Target Name="CopyRotCalibNative" AfterTargets="Build">
+        <PropertyGroup>
+            <_RotBridge>..\..\PoseEstApi\RotPoseEstApi\native\RotCalibBridge\bin\x64\$(Configuration)\RotCalibBridge.dll</_RotBridge>
+            <_NanoMeas>..\..\PoseEstApi\RotPoseEstApi\lib\NanoMeasCalib.dll</_NanoMeas>
+        </PropertyGroup>
+        <Copy Condition="Exists('$(_RotBridge)')"
+              SourceFiles="$(_RotBridge)"
+              DestinationFolder="$(OutputPath)"
+              SkipUnchangedFiles="true" />
+        <Copy Condition="Exists('$(_NanoMeas)')"
+              SourceFiles="$(_NanoMeas)"
+              DestinationFolder="$(OutputPath)"
+              SkipUnchangedFiles="true" />
+    </Target>
     
     <ItemGroup>
         <!-- Matrix Vision local assemblies -->

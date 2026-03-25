@@ -8,6 +8,7 @@ using Avalonia.Data.Core.Plugins;
 using Avalonia.Markup.Xaml;
 using singalUI.ViewModels;
 using singalUI.Views;
+using singalUI.Models;
 using singalUI.Services;
 
 namespace singalUI;
@@ -16,6 +17,22 @@ public partial class App : Application
 {
     // Using StageManager instead of GrpcStageService for direct USB/serial stage control
     public static MatrixVisionCameraService CameraService { get; } = new();
+
+    private static CalibrationAppMode _calibrationAppMode = CalibrationAppMode.SixDofStage;
+
+    /// <summary>Global calibration mode (6-DoF vs rotation-stage batch pipeline).</summary>
+    public static CalibrationAppMode CalibrationAppMode
+    {
+        get => _calibrationAppMode;
+        set
+        {
+            if (_calibrationAppMode == value) return;
+            _calibrationAppMode = value;
+            CalibrationAppModeChanged?.Invoke(null, EventArgs.Empty);
+        }
+    }
+
+    public static event EventHandler? CalibrationAppModeChanged;
 
     public override void Initialize()
     {
@@ -62,6 +79,7 @@ public partial class App : Application
             {
                 try
                 {
+                    libs.NanoMeasCalibNative.TryShutdown();
                     // Disconnect all stages before exit
                     StageManager.DisconnectAll();
                     CameraService?.Dispose();

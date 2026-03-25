@@ -1,10 +1,24 @@
-﻿using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using singalUI.Models;
 
 namespace singalUI.ViewModels;
 
 public partial class MainWindowViewModel : ViewModelBase
 {
+    public MainWindowViewModel()
+    {
+        _calibrationModeIndex = (int)singalUI.App.CalibrationAppMode;
+    }
+
+    [ObservableProperty]
+    private int _calibrationModeIndex;
+
+    partial void OnCalibrationModeIndexChanged(int value)
+    {
+        singalUI.App.CalibrationAppMode = (CalibrationAppMode)value;
+    }
+
     [ObservableProperty]
     private string _statusBarText = "System Ready";
 

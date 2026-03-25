@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:singalUI.ViewModels"
              xmlns:v="using:singalUI.Views"
+             xmlns:m="using:singalUI.Models"
              x:Class="singalUI.Views.ConfigView"
              x:DataType="vm:ConfigViewModel"
              Background="#1a1a1a">
@@ -407,13 +408,18 @@
                                 <Path Data="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14h-2v-4h2v4zm0-6h-2V7h2v4z"
                                       Fill="#e57373" Stretch="Uniform"/>
                             </Border>
-                            <TextBlock Grid.Column="1"
-                                       Text="Pose Estimation Results"
-                                       FontSize="16"
-                                       FontWeight="SemiBold"
-                                       Foreground="#ffffff"
-                                       VerticalAlignment="Center"
-                                       Margin="12,0,0,0"/>
+                            <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center" Spacing="2">
+                                <TextBlock Text="Pose estimation results"
+                                           IsVisible="{Binding ShowSixDofConfig}"
+                                           FontSize="16"
+                                           FontWeight="SemiBold"
+                                           Foreground="#ffffff"/>
+                                <TextBlock Text="Rotation calib — T_CW (camera→world)"
+                                           IsVisible="{Binding ShowRotationCalibPanel}"
+                                           FontSize="16"
+                                           FontWeight="SemiBold"
+                                           Foreground="#ffffff"/>
+                            </StackPanel>
                         </Grid>
 
                         <!-- Status Indicator -->
@@ -433,6 +439,43 @@
                                            Foreground="#ffffff"
                                            VerticalAlignment="Center"/>
                             </Grid>
+                        </Border>
+
+                        <!-- Raw vs zero-relative 6-DoF dashboard (both calibration modes) -->
+                        <Border Background="#1a1a1a"
+                                BorderBrush="#303030"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="12">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="6-DoF output (dashboard)"
+                                           FontSize="12"
+                                           FontWeight="SemiBold"
+                                           Foreground="#ffffff"/>
+                                <Grid ColumnDefinitions="Auto,Auto,Auto"
+                                      VerticalAlignment="Center">
+                                    <TextBlock Grid.Column="0"
+                                               Text="Set zero"
+                                               VerticalAlignment="Center"
+                                               Foreground="#bbbbbb"
+                                               FontSize="12"
+                                               Margin="0,0,12,0"/>
+                                    <ToggleSwitch Grid.Column="1"
+                                                  IsChecked="{Binding DisplayPoseAsRaw, Mode=TwoWay}"
+                                                  VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="2"
+                                               Text="Display raw"
+                                               VerticalAlignment="Center"
+                                               Foreground="#bbbbbb"
+                                               FontSize="12"
+                                               Margin="12,0,0,0"/>
+                                </Grid>
+                                <TextBlock Text="{Binding PoseDeltaHint}"
+                                           IsVisible="{Binding DisplayPoseAsRaw, Converter={StaticResource InverseBoolConverter}}"
+                                           FontSize="11"
+                                           Foreground="#9e9e9e"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
                         </Border>
 
                         <!-- Rotation Data -->
@@ -585,6 +628,51 @@
                     </StackPanel>
                 </Border>
 
+                <!-- Rotation calibration (batch) -->
+                <Border IsVisible="{Binding ShowRotationCalibPanel}"
+                        Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="20">
+                    <StackPanel Spacing="12">
+                        <TextBlock Text="Rotation calibration (NanoMeasCalib)"
+                                   FontSize="16"
+                                   FontWeight="SemiBold"
+                                   Foreground="#ffffff"/>
+                        <TextBlock Text="{Binding RotationDatasetHint}"
+                                   FontSize="11"
+                                   Foreground="#cccccc"
+                                   TextWrapping="Wrap"/>
+                        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto">
+                            <TextBlock Grid.Column="0" Text="Manual θ (deg) if no Rz axis:"
+                                       VerticalAlignment="Center"
+                                       Foreground="#ffffff" FontSize="12" Margin="0,0,12,0"/>
+                            <NumericUpDown Grid.Column="1"
+                                           Value="{Binding ManualThetaDegrees}"
+                                           Minimum="-360" Maximum="360" Increment="0.1"
+                                           FormatString="F3"
+                                           HorizontalAlignment="Stretch"/>
+                        </Grid>
+                        <Button Content="Add sample (live pose + θ)"
+                                Command="{Binding AddRotationSampleCommand}"
+                                IsEnabled="{Binding IsPoseEstimationRunning, Converter={StaticResource InverseBoolConverter}}"
+                                Padding="16,12" FontSize="14" HorizontalAlignment="Stretch"
+                                Background="#1565c0" Foreground="#ffffff"/>
+                        <Button Content="Clear sample list"
+                                Command="{Binding ClearRotationSamplesCommand}"
+                                Padding="16,12" FontSize="14" HorizontalAlignment="Stretch"/>
+                        <Button Content="Import samples CSV"
+                                Command="{Binding ImportRotationSamplesCsvCommand}"
+                                Padding="16,12" FontSize="14" HorizontalAlignment="Stretch"/>
+                        <ListBox ItemsSource="{Binding RotationSamples}"
+                                 MinHeight="100" MaxHeight="220"
+                                 Background="#1a1a1a" Foreground="#e0e0e0">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="m:RotationCalibrationSample">
+                                    <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" FontSize="11"/>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </StackPanel>
+                </Border>
+
                 <!-- Action Buttons -->
                 <Border Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="20">
                     <StackPanel Spacing="12">
@@ -616,6 +704,11 @@
                                    IsVisible="{Binding IsPoseEstimationRunning}"
                                    FontSize="12"
                                    Foreground="#ffcc80"
+                                   TextWrapping="Wrap"/>
+                        <TextBlock Text="Rotation mode: main run uses NanoMeasCalib on the sample list (≥12 points). Results show T_CW euler."
+                                   IsVisible="{Binding ShowRotationCalibPanel}"
+                                   FontSize="11"
+                                   Foreground="#aaaaaa"
                                    TextWrapping="Wrap"/>
 
                         <Button Content="Get Error Information"

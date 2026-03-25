@@ -18,9 +18,23 @@
 
     <Grid RowDefinitions="Auto,*,Auto">
         <!-- Menu Bar - Classic Microsoft Word Style -->
-        <Grid Grid.Row="0" Background="#2a2a2a" ColumnDefinitions="Auto,*,Auto">
+        <Grid Grid.Row="0" Background="#2a2a2a" ColumnDefinitions="Auto,Auto,*,Auto">
+            <ComboBox Grid.Column="0"
+                      MinWidth="200"
+                      MaxWidth="280"
+                      Margin="8,4,12,4"
+                      VerticalAlignment="Center"
+                      FontSize="12"
+                      FontFamily="Segoe UI,Arial"
+                      Foreground="#e0e0e0"
+                      Background="#1a1a1a"
+                      BorderBrush="#404040"
+                      SelectedIndex="{Binding CalibrationModeIndex}">
+                <ComboBoxItem Content="6-DoF stage calibration"/>
+                <ComboBoxItem Content="XY-rot stage (rotation calib)"/>
+            </ComboBox>
             <!-- Menu Tabs -->
-            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="0">
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="0">
                 <!-- Camera Tab -->
                 <Border Name="CameraTab"
                         Background="Transparent"
@@ -102,7 +116,7 @@
             </StackPanel>
 
             <!-- Center Title -->
-            <TextBlock Grid.Column="1"
+            <TextBlock Grid.Column="2"
                        Text="6-DOF CALIBRATOR PRO v2.4.1"
                        Foreground="#666666"
                        FontFamily="Consolas,Courier New"
@@ -111,7 +125,7 @@
                        VerticalAlignment="Center"/>
 
             <!-- Status Text -->
-            <TextBlock Grid.Column="2"
+            <TextBlock Grid.Column="3"
                        Text="{Binding StatusBarText}"
                        FontSize="11"
                        FontFamily="Consolas,Courier New"

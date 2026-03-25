@@ -1,12 +1,21 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using singalUI.libs;
+using singalUI.Models;
+using singalUI.Services;
 using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Platform.Storage;
 using OpenCvSharp;
 
 namespace singalUI.ViewModels
@@ -19,7 +28,9 @@ namespace singalUI.ViewModels
         private const int DefaultImageHeight = 480;
 
         private PoseEstimateResult? _lastResult;
+        private RotationCalibrationNativeResult? _lastRotationCalibResult;
         private const int PoseEstimateTimeoutMs = 180000;
+        private const int RotationCalibTimeoutMs = 600000;
         private int _poseRunSequence = 0;
         private int _poseEstimationRunning = 0;
         private readonly string _errorLogFile = System.IO.Path.Combine(
@@ -30,6 +41,12 @@ namespace singalUI.ViewModels
 
         // Error log for UI display
         private const int MaxErrorLogLines = 100;
+
+        /// <summary>Latest absolute pose for dashboard (deg / mm), before zero or raw toggle.</summary>
+        private double _rawRxDeg, _rawRyDeg, _rawRzDeg, _rawTxMm, _rawTyMm, _rawTzMm;
+
+        /// <summary>Snapshot when user selects Set zero (relative) mode.</summary>
+        private double _zeroRxDeg, _zeroRyDeg, _zeroRzDeg, _zeroTxMm, _zeroTyMm, _zeroTzMm;
 
         #region Pattern Analysis Properties
 
@@ -121,6 +138,24 @@ namespace singalUI.ViewModels
         [ObservableProperty]
         private double _tz;
 
+        /// <summary>True = show absolute pose; false = show Δ vs snapshot taken when switching to Set zero.</summary>
+        [ObservableProperty]
+        private bool _displayPoseAsRaw = true;
+
+        partial void OnDisplayPoseAsRawChanged(bool value)
+        {
+            if (!value)
+                CapturePoseZeroBaseline();
+            RefreshDisplayedPoseValues();
+            OnPropertyChanged(nameof(PoseDeltaHint));
+        }
+
+        /// <summary>Explains relative mode under the toggle.</summary>
+        public string PoseDeltaHint =>
+            DisplayPoseAsRaw
+                ? ""
+                : "Values are Δ (raw − snapshot at the moment Set zero was selected). Raw string below stays absolute.";
+
         [ObservableProperty]
         private string _rawPoseData = "No data available";
 
@@ -130,8 +165,34 @@ namespace singalUI.ViewModels
         [ObservableProperty]
         private bool _isPoseEstimationRunning;
 
+        partial void OnIsPoseEstimationRunningChanged(bool value) => RefreshRunButtonText();
+
         [ObservableProperty]
         private string _runPoseButtonText = "Run Pose Estimation";
+
+        [ObservableProperty]
+        private bool _isRotationCalibrationMode;
+
+        public bool ShowSixDofConfig => !IsRotationCalibrationMode;
+
+        public bool ShowRotationCalibPanel => IsRotationCalibrationMode;
+
+        partial void OnIsRotationCalibrationModeChanged(bool value)
+        {
+            OnPropertyChanged(nameof(ShowSixDofConfig));
+            OnPropertyChanged(nameof(ShowRotationCalibPanel));
+            RefreshRunButtonText();
+        }
+
+        [ObservableProperty]
+        private ObservableCollection<RotationCalibrationSample> _rotationSamples = new();
+
+        [ObservableProperty]
+        private double _manualThetaDegrees;
+
+        [ObservableProperty]
+        private string _rotationDatasetHint =
+            "Add samples: uses live camera pose (PoseEst) + stage Rz (deg→rad) or manual θ. Need ≥12 points; ~360 recommended. CSV columns: theta_rad,rx,ry,rz,tx,ty,tz";
 
         #endregion
 
@@ -147,9 +208,27 @@ namespace singalUI.ViewModels
 
         public ConfigViewModel()
         {
+            App.CalibrationAppModeChanged += OnGlobalCalibrationModeChanged;
+            SyncCalibrationModeFromApp();
             LogToError("[ConfigViewModel] Constructor started");
             InitializeEstimator();
             LogToError("[ConfigViewModel] Constructor completed");
+        }
+
+        private void OnGlobalCalibrationModeChanged(object? sender, EventArgs e) =>
+            SyncCalibrationModeFromApp();
+
+        private void SyncCalibrationModeFromApp()
+        {
+            IsRotationCalibrationMode = App.CalibrationAppMode == CalibrationAppMode.RotationStage;
+        }
+
+        private void RefreshRunButtonText()
+        {
+            if (IsRotationCalibrationMode)
+                RunPoseButtonText = IsPoseEstimationRunning ? "Running rotation calibration..." : "Run rotation calibration";
+            else
+                RunPoseButtonText = IsPoseEstimationRunning ? "Running Pose Estimation..." : "Run Pose Estimation";
         }
 
         private void InitializeEstimator()
@@ -226,6 +305,12 @@ namespace singalUI.ViewModels
         [RelayCommand]
         private async Task RunPoseEstimation()
         {
+            if (IsRotationCalibrationMode)
+            {
+                await RunRotationCalibration();
+                return;
+            }
+
             int runId = Interlocked.Increment(ref _poseRunSequence);
             if (Interlocked.CompareExchange(ref _poseEstimationRunning, 1, 0) != 0)
             {
@@ -238,62 +323,16 @@ namespace singalUI.ViewModels
             try
             {
                 IsPoseEstimationRunning = true;
-                RunPoseButtonText = "Running Pose Estimation...";
                 ResultStatusMessage = "Pose estimation running. This may take around 30-60 seconds.";
                 ResultStatusColor = "#ff9800";
 
                 var stopwatch = Stopwatch.StartNew();
-
-                // Create camera intrinsics from UI values
-                var intrinsics = new CameraIntrinsics
-                {
-                    Fx = Fx,
-                    Fy = Fy,
-                    Cx = Cx,
-                    Cy = Cy
-                };
-
-                var (imageData, imageRows, imageCols, frameSeq) = GetLatestCameraImageData();
-                var imagePath = SaveFrameForPoseEstimation(imageData, imageRows, imageCols, frameSeq);
-
-                LogToError($"[RunPoseEstimation#{runId}] Running with: " +
-                    $"Image={imageCols}x{imageRows}, " +
-                    $"FrameSeq={frameSeq}, " +
-                    $"Focal={FocalLength}mm, " +
-                    $"PixelSize={PixelSize}mm, " +
-                    $"ImagePath={imagePath}, " +
-                    $"Components={ComponentsX}x{ComponentsY}");
-
-                LogToError($"[RunPoseEstimation#{runId}] Dispatching native pose call (timeout={PoseEstimateTimeoutMs}ms)");
-
-                var poseTask = Task.Factory.StartNew(() => PoseEstApiBridgeClient.EstimatePoseFromImagePath(
-                    imagePath: imagePath,
-                    intrinsicMatrix: intrinsics.ToArray(),
-                    pixelSize: PixelSize,
-                    focalLength: FocalLength,
-                    pitchX: PitchX,
-                    pitchY: PitchY,
-                    componentsX: ComponentsX,
-                    componentsY: ComponentsY,
-                    windowSize: WindowSize,
-                    codePitchBlocks: CodePitchBlocks
-                ), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
-
-                var completed = await Task.WhenAny(poseTask, Task.Delay(PoseEstimateTimeoutMs));
-                if (completed != poseTask)
-                {
-                    stopwatch.Stop();
-                    ResultStatusMessage = $"Pose estimation timed out after {PoseEstimateTimeoutMs} ms";
-                    ResultStatusColor = "#f44336";
-                    HasResults = false;
-                    LogToError($"[RunPoseEstimation#{runId}] TIMEOUT after {stopwatch.ElapsedMilliseconds}ms (native call still running)");
-                    return;
-                }
-
-                _lastResult = await poseTask;
+                var (result, imagePath) = await EstimatePoseFromLiveFrameAsync(runId);
                 stopwatch.Stop();
 
-                // Update UI with results
+                _lastResult = result;
+                _lastRotationCalibResult = null;
+
                 UpdateResults(_lastResult);
                 LastEstimationTime = $"Last run: {DateTime.Now:HH:mm:ss}";
                 PrintPoseResultToDebug(_lastResult, stopwatch.ElapsedMilliseconds, imagePath);
@@ -317,9 +356,296 @@ namespace singalUI.ViewModels
             finally
             {
                 IsPoseEstimationRunning = false;
-                RunPoseButtonText = "Run Pose Estimation";
                 Interlocked.Exchange(ref _poseEstimationRunning, 0);
                 LogToError($"[RunPoseEstimation#{runId}] End");
+            }
+        }
+
+        private async Task RunRotationCalibration()
+        {
+            int runId = Interlocked.Increment(ref _poseRunSequence);
+            if (Interlocked.CompareExchange(ref _poseEstimationRunning, 1, 0) != 0)
+            {
+                LogToError($"[RunRotationCalib#{runId}] Skipped: previous run still active");
+                return;
+            }
+
+            LogToError($"[RunRotationCalib#{runId}] Starting rotation calibration...");
+            try
+            {
+                IsPoseEstimationRunning = true;
+                ResultStatusMessage = "Rotation calibration running (NanoMeasCalib)...";
+                ResultStatusColor = "#ff9800";
+
+                if (RotationSamples.Count < 12)
+                {
+                    ResultStatusMessage = $"Need at least 12 samples (have {RotationSamples.Count}).";
+                    ResultStatusColor = "#f44336";
+                    HasResults = false;
+                    return;
+                }
+
+                var ordered = RotationSamples.OrderBy(s => s.ThetaRad).ToList();
+                int n = ordered.Count;
+                var theta = new double[n];
+                var meas = new double[6 * n];
+                for (int i = 0; i < n; i++)
+                {
+                    theta[i] = ordered[i].ThetaRad;
+                    meas[6 * i + 0] = ordered[i].Rx;
+                    meas[6 * i + 1] = ordered[i].Ry;
+                    meas[6 * i + 2] = ordered[i].Rz;
+                    meas[6 * i + 3] = ordered[i].Tx;
+                    meas[6 * i + 4] = ordered[i].Ty;
+                    meas[6 * i + 5] = ordered[i].Tz;
+                }
+
+                var stopwatch = Stopwatch.StartNew();
+                var calibTask = Task.Factory.StartNew(() => NanoMeasCalibNative.RunRotationCalibration(theta, meas, n),
+                    CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+
+                var completed = await Task.WhenAny(calibTask, Task.Delay(RotationCalibTimeoutMs));
+                if (completed != calibTask)
+                {
+                    stopwatch.Stop();
+                    ResultStatusMessage = $"Rotation calibration timed out after {RotationCalibTimeoutMs} ms";
+                    ResultStatusColor = "#f44336";
+                    HasResults = false;
+                    LogToError($"[RunRotationCalib#{runId}] TIMEOUT after {stopwatch.ElapsedMilliseconds}ms");
+                    return;
+                }
+
+                _lastRotationCalibResult = await calibTask;
+                _lastResult = null;
+                stopwatch.Stop();
+
+                if (_lastRotationCalibResult.IsSuccess)
+                {
+                    ApplyDisplayFromTcWEuler(_lastRotationCalibResult.T_CW_Euler, _lastRotationCalibResult.Status);
+                    ResultStatusMessage =
+                        $"Rotation calib OK — showing T_CW (camera→world, rad/mm internal → deg/mm UI). {NanoMeasCalibNative.StatusMessage(_lastRotationCalibResult.Status)}";
+                    ResultStatusColor = "#4caf50";
+                    LogToError($"[RunRotationCalib#{runId}] OK in {stopwatch.ElapsedMilliseconds}ms");
+                }
+                else
+                {
+                    HasResults = false;
+                    ResultStatusMessage =
+                        $"Rotation calib failed: {NanoMeasCalibNative.StatusMessage(_lastRotationCalibResult.Status)} (code {_lastRotationCalibResult.Status})";
+                    ResultStatusColor = "#f44336";
+                    LogToError($"[RunRotationCalib#{runId}] Failed status={_lastRotationCalibResult.Status}");
+                }
+
+                LastEstimationTime = $"Last run: {DateTime.Now:HH:mm:ss}";
+            }
+            catch (DllNotFoundException ex)
+            {
+                HasResults = false;
+                ResultStatusMessage =
+                    "RotCalibBridge.dll / NanoMeasCalib.dll not found. Build native/RotCalibBridge (VS) and place NanoMeasCalib.lib/.dll under PoseEstApi/RotPoseEstApi/lib.";
+                ResultStatusColor = "#f44336";
+                LogToError($"[RunRotationCalib] {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                HasResults = false;
+                ResultStatusMessage = $"Rotation calib error: {ex.Message}";
+                ResultStatusColor = "#f44336";
+                LogToError($"[RunRotationCalib] {ex}");
+            }
+            finally
+            {
+                IsPoseEstimationRunning = false;
+                Interlocked.Exchange(ref _poseEstimationRunning, 0);
+            }
+        }
+
+        /// <summary>Runs PoseEst bridge on current live frame; throws on timeout or pipeline errors.</summary>
+        private async Task<(PoseEstimateResult result, string imagePath)> EstimatePoseFromLiveFrameAsync(int runId)
+        {
+            var intrinsics = new CameraIntrinsics
+            {
+                Fx = Fx,
+                Fy = Fy,
+                Cx = Cx,
+                Cy = Cy
+            };
+
+            var (imageData, imageRows, imageCols, frameSeq) = GetLatestCameraImageData();
+            var imagePath = SaveFrameForPoseEstimation(imageData, imageRows, imageCols, frameSeq);
+
+            LogToError($"[PoseFrame#{runId}] Image={imageCols}x{imageRows}, seq={frameSeq}, path={imagePath}");
+
+            var poseTask = Task.Factory.StartNew(() => PoseEstApiBridgeClient.EstimatePoseFromImagePath(
+                imagePath: imagePath,
+                intrinsicMatrix: intrinsics.ToArray(),
+                pixelSize: PixelSize,
+                focalLength: FocalLength,
+                pitchX: PitchX,
+                pitchY: PitchY,
+                componentsX: ComponentsX,
+                componentsY: ComponentsY,
+                windowSize: WindowSize,
+                codePitchBlocks: CodePitchBlocks
+            ), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+
+            var completed = await Task.WhenAny(poseTask, Task.Delay(PoseEstimateTimeoutMs));
+            if (completed != poseTask)
+            {
+                LogToError($"[PoseFrame#{runId}] TIMEOUT after {PoseEstimateTimeoutMs}ms");
+                throw new InvalidOperationException($"Pose estimation timed out after {PoseEstimateTimeoutMs} ms.");
+            }
+
+            var result = await poseTask;
+            return (result, imagePath);
+        }
+
+        [RelayCommand]
+        private async Task AddRotationSample()
+        {
+            int runId = Interlocked.Increment(ref _poseRunSequence);
+            if (Interlocked.CompareExchange(ref _poseEstimationRunning, 1, 0) != 0)
+            {
+                LogToError($"[AddRotationSample#{runId}] Skipped: operation in progress");
+                return;
+            }
+
+            try
+            {
+                IsPoseEstimationRunning = true;
+                ResultStatusMessage = "Capturing pose for rotation sample...";
+                ResultStatusColor = "#ff9800";
+
+                double thetaRad = TryGetStageRotationThetaRad();
+                if (double.IsNaN(thetaRad))
+                    thetaRad = ManualThetaDegrees * Math.PI / 180.0;
+
+                var (result, _) = await EstimatePoseFromLiveFrameAsync(runId);
+                if (result.Status != libs.PoseStatus.Success)
+                {
+                    ResultStatusMessage = $"Sample not added — pose status {result.Status}: {result.StatusMessage}";
+                    ResultStatusColor = "#ff9800";
+                    LogToError($"[AddRotationSample#{runId}] Pose failed: {result.StatusMessage}");
+                    return;
+                }
+
+                RotationSamples.Add(new RotationCalibrationSample
+                {
+                    ThetaRad = thetaRad,
+                    Rx = result.Rx,
+                    Ry = result.Ry,
+                    Rz = result.Rz,
+                    Tx = result.Tx,
+                    Ty = result.Ty,
+                    Tz = result.Tz,
+                });
+
+                ResultStatusMessage = $"Added sample #{RotationSamples.Count} at θ={thetaRad * 180 / Math.PI:F3}°";
+                ResultStatusColor = "#4caf50";
+                LogToError($"[AddRotationSample#{runId}] Added, N={RotationSamples.Count}");
+            }
+            catch (Exception ex)
+            {
+                ResultStatusMessage = $"Add sample failed: {ex.Message}";
+                ResultStatusColor = "#f44336";
+                LogToError($"[AddRotationSample#{runId}] {ex.Message}");
+            }
+            finally
+            {
+                IsPoseEstimationRunning = false;
+                Interlocked.Exchange(ref _poseEstimationRunning, 0);
+            }
+        }
+
+        [RelayCommand]
+        private void ClearRotationSamples()
+        {
+            RotationSamples.Clear();
+            _lastRotationCalibResult = null;
+            LogToError("[RotationSamples] Cleared");
+            ResultStatusMessage = "Rotation sample list cleared";
+            ResultStatusColor = "#707070";
+        }
+
+        [RelayCommand]
+        private async Task ImportRotationSamplesCsv()
+        {
+            try
+            {
+                if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime d ||
+                    d.MainWindow is not Avalonia.Controls.Window w)
+                {
+                    ResultStatusMessage = "Cannot open file dialog (no main window).";
+                    ResultStatusColor = "#f44336";
+                    return;
+                }
+
+                var files = await w.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+                {
+                    Title = "Import rotation samples CSV",
+                    AllowMultiple = false,
+                    FileTypeFilter = new List<FilePickerFileType>
+                    {
+                        new("CSV") { Patterns = new[] { "*.csv" } },
+                        FilePickerFileTypes.All,
+                    },
+                });
+
+                var path = files?.Count > 0 ? files[0].TryGetLocalPath() : null;
+                if (string.IsNullOrEmpty(path) || !File.Exists(path))
+                {
+                    ResultStatusMessage = "Import cancelled.";
+                    ResultStatusColor = "#707070";
+                    return;
+                }
+
+                var lines = await File.ReadAllLinesAsync(path);
+                int added = 0;
+                foreach (var line in lines)
+                {
+                    var t = line.Trim();
+                    if (t.Length == 0 || t.StartsWith('#'))
+                        continue;
+                    var parts = t.Split(new[] { ',', ';', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length < 7)
+                        continue;
+
+                    if (!double.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var thetaRad))
+                        continue;
+                    var nums = new double[6];
+                    var ok = true;
+                    for (int k = 0; k < 6; k++)
+                    {
+                        if (!double.TryParse(parts[1 + k], NumberStyles.Float, CultureInfo.InvariantCulture, out nums[k]))
+                        {
+                            ok = false;
+                            break;
+                        }
+                    }
+                    if (!ok) continue;
+
+                    RotationSamples.Add(new RotationCalibrationSample
+                    {
+                        ThetaRad = thetaRad,
+                        Rx = nums[0],
+                        Ry = nums[1],
+                        Rz = nums[2],
+                        Tx = nums[3],
+                        Ty = nums[4],
+                        Tz = nums[5],
+                    });
+                    added++;
+                }
+
+                ResultStatusMessage = $"Imported {added} samples from CSV (total {RotationSamples.Count}).";
+                ResultStatusColor = "#4caf50";
+                LogToError($"[ImportRotationCsv] {added} rows from {path}");
+            }
+            catch (Exception ex)
+            {
+                ResultStatusMessage = $"CSV import failed: {ex.Message}";
+                ResultStatusColor = "#f44336";
+                LogToError($"[ImportRotationCsv] {ex}");
             }
         }
 
@@ -328,10 +654,20 @@ namespace singalUI.ViewModels
         {
             LogToError("[GetError] Fetching error information...");
 
-            if (_lastResult == null)
+            if (_lastResult == null && _lastRotationCalibResult == null)
             {
                 ErrorLog = $"[{DateTime.Now:HH:mm:ss}] No estimation has been run yet.\n" +
-                    $"Please run 'Run Pose Estimation' first.\n\n" + ErrorLog;
+                    $"Please run 'Run Pose Estimation' or rotation calibration first.\n\n" + ErrorLog;
+            }
+            else if (_lastRotationCalibResult != null)
+            {
+                var errorInfo = new System.Text.StringBuilder();
+                errorInfo.AppendLine("=== Last rotation calibration ===");
+                errorInfo.AppendLine($"Timestamp: {DateTime.Now:O}");
+                errorInfo.AppendLine($"Native status: {_lastRotationCalibResult.Status} — {NanoMeasCalibNative.StatusMessage(_lastRotationCalibResult.Status)}");
+                errorInfo.AppendLine($"Return code: {_lastRotationCalibResult.ReturnCode}");
+                ErrorLog = errorInfo.ToString() + "\n\n" + ErrorLog;
+                LogToError("[GetError] Rotation calibration info appended");
             }
             else
             {
@@ -339,7 +675,7 @@ namespace singalUI.ViewModels
                 errorInfo.AppendLine($"=== Error Information ===");
                 errorInfo.AppendLine($"Timestamp: {DateTime.Now:O}");
                 errorInfo.AppendLine();
-                errorInfo.AppendLine($"Last Result Status: {_lastResult.Status}");
+                errorInfo.AppendLine($"Last Result Status: {_lastResult!.Status}");
                 errorInfo.AppendLine($"Status Message: {_lastResult.StatusMessage}");
                 errorInfo.AppendLine();
                 errorInfo.AppendLine($"Possible Error Causes:");
@@ -359,7 +695,7 @@ namespace singalUI.ViewModels
                 errorInfo.AppendLine($"  - Pitch: {PitchX}x{PitchY} mm");
                 errorInfo.AppendLine();
 
-                if (_lastResult.Status != libs.PoseStatus.Success)
+                if (_lastResult!.Status != libs.PoseStatus.Success)
                 {
                     errorInfo.AppendLine($"Recommendation:");
                     if (_lastResult.Status == libs.PoseStatus.CoarseFail)
@@ -423,14 +759,12 @@ namespace singalUI.ViewModels
 
             HasResults = false;
             _lastResult = null;
+            _lastRotationCalibResult = null;
             ResultStatusMessage = "Results cleared";
             ResultStatusColor = "#707070";
-            Rx = 0;
-            Ry = 0;
-            Rz = 0;
-            Tx = 0;
-            Ty = 0;
-            Tz = 0;
+            _rawRxDeg = _rawRyDeg = _rawRzDeg = _rawTxMm = _rawTyMm = _rawTzMm = 0;
+            _zeroRxDeg = _zeroRyDeg = _zeroRzDeg = _zeroTxMm = _zeroTyMm = _zeroTzMm = 0;
+            RefreshDisplayedPoseValues();
             RawPoseData = "No data available";
 
             LogToError("[ClearResults] Results cleared");
@@ -523,6 +857,27 @@ namespace singalUI.ViewModels
 
         #region Helper Methods
 
+        /// <summary>Maps T_CW_euler [Rx,Ry,Rz rad; tx,ty,tz mm] into the same result fields as pose estimation.</summary>
+        private void ApplyDisplayFromTcWEuler(double[] tCwEuler, int nativeStatus)
+        {
+            if (tCwEuler == null || tCwEuler.Length < 6)
+            {
+                HasResults = false;
+                return;
+            }
+
+            HasResults = nativeStatus == 0;
+            StoreRawPoseSix(
+                tCwEuler[0] * 180 / Math.PI,
+                tCwEuler[1] * 180 / Math.PI,
+                tCwEuler[2] * 180 / Math.PI,
+                tCwEuler[3],
+                tCwEuler[4],
+                tCwEuler[5]);
+            RawPoseData =
+                $"T_CW euler [rad,mm]: [{string.Join(", ", tCwEuler.Select(v => v.ToString("F6")))}] | native status {nativeStatus}";
+        }
+
         private void UpdateResults(PoseEstimateResult result)
         {
             HasResults = true;
@@ -548,18 +903,58 @@ namespace singalUI.ViewModels
                 ResultStatusColor = "#f44336";
             }
 
-            // Update rotation values (convert to degrees for display)
-            Rx = result.Rx * 180 / Math.PI;
-            Ry = result.Ry * 180 / Math.PI;
-            Rz = result.Rz * 180 / Math.PI;
+            StoreRawPoseSix(
+                result.Rx * 180 / Math.PI,
+                result.Ry * 180 / Math.PI,
+                result.Rz * 180 / Math.PI,
+                result.Tx,
+                result.Ty,
+                result.Tz);
 
-            // Update translation values (already in mm)
-            Tx = result.Tx;
-            Ty = result.Ty;
-            Tz = result.Tz;
-
-            // Update raw data display
             RawPoseData = $"[{string.Join(", ", result.PoseData.Select(d => d.ToString("F4")))}]";
+        }
+
+        private void CapturePoseZeroBaseline()
+        {
+            _zeroRxDeg = _rawRxDeg;
+            _zeroRyDeg = _rawRyDeg;
+            _zeroRzDeg = _rawRzDeg;
+            _zeroTxMm = _rawTxMm;
+            _zeroTyMm = _rawTyMm;
+            _zeroTzMm = _rawTzMm;
+        }
+
+        private void StoreRawPoseSix(double rxDeg, double ryDeg, double rzDeg, double txMm, double tyMm, double tzMm)
+        {
+            _rawRxDeg = rxDeg;
+            _rawRyDeg = ryDeg;
+            _rawRzDeg = rzDeg;
+            _rawTxMm = txMm;
+            _rawTyMm = tyMm;
+            _rawTzMm = tzMm;
+            RefreshDisplayedPoseValues();
+        }
+
+        private void RefreshDisplayedPoseValues()
+        {
+            if (DisplayPoseAsRaw)
+            {
+                Rx = _rawRxDeg;
+                Ry = _rawRyDeg;
+                Rz = _rawRzDeg;
+                Tx = _rawTxMm;
+                Ty = _rawTyMm;
+                Tz = _rawTzMm;
+            }
+            else
+            {
+                Rx = _rawRxDeg - _zeroRxDeg;
+                Ry = _rawRyDeg - _zeroRyDeg;
+                Rz = _rawRzDeg - _zeroRzDeg;
+                Tx = _rawTxMm - _zeroTxMm;
+                Ty = _rawTyMm - _zeroTyMm;
+                Tz = _rawTzMm - _zeroTzMm;
+            }
         }
 
         private (double[] imageData, int rows, int cols, long frameSeq) GetLatestCameraImageData()
@@ -627,6 +1022,23 @@ namespace singalUI.ViewModels
             return imagePath;
         }
 
+        /// <summary>Rz axis position from first connected stage that has Rz (PI reports degrees).</summary>
+        private static double TryGetStageRotationThetaRad()
+        {
+            foreach (var w in StageManager.Wrappers)
+            {
+                if (!w.IsConnected || w.Controller == null)
+                    continue;
+                int idx = w.GetAxisIndex(AxisType.Rz);
+                if (idx < 0)
+                    continue;
+                double p = w.Controller.GetPosition(idx);
+                return p * Math.PI / 180.0;
+            }
+
+            return double.NaN;
+        }
+
         private void PrintPoseResultToDebug(PoseEstimateResult result, long elapsedMs, string imagePath)
         {
             var message =
@@ -661,6 +1073,7 @@ namespace singalUI.ViewModels
 
         public void Dispose()
         {
+            App.CalibrationAppModeChanged -= OnGlobalCalibrationModeChanged;
         }
 
         #endregion
