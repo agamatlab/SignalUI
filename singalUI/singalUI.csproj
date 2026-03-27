@@ -129,6 +129,10 @@
       <Compile Remove="Services/Services/MatrixVisionCameraService.cs" />
     </ItemGroup>
 
+    <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows')) == 'true'">
+      <Compile Remove="Services/Services/MatrixVisionCameraService.NonWindows.cs" />
+    </ItemGroup>
+
     <ItemGroup>
       <Compile Update="Views\ConfigView.axaml.cs">
         <DependentUpon>ConfigView.axaml</DependentUpon>
