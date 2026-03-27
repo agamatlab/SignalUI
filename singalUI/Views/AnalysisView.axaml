@@ -39,17 +39,26 @@
                 </StackPanel>
 
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12">
+                    <Border Background="#202020"
+                            BorderBrush="#505050"
+                            BorderThickness="1"
+                            CornerRadius="6"
+                            Padding="6,4">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <Button Content="2D"
+                                    Command="{Binding ShowSix2DPlotsCommand}"
+                                    Padding="10,6"
+                                    FontSize="13"/>
+                            <Button Content="3D"
+                                    Command="{Binding ShowSingle3DPlotCommand}"
+                                    Padding="10,6"
+                                    FontSize="13"/>
+                        </StackPanel>
+                    </Border>
                     <CheckBox Content="Grid" IsChecked="{Binding ShowGrid}" FontSize="14" Foreground="#ffffff"/>
                     <CheckBox Content="Points" IsChecked="{Binding ShowPoints}" FontSize="14" Foreground="#ffffff"/>
                     <CheckBox Content="Mesh" IsChecked="{Binding ShowMesh}" FontSize="14" Foreground="#ffffff"/>
-                    <Button Content="Reset View"
-                            Command="{Binding ResetViewCommand}"
-                            Padding="12,8"
-                            FontSize="13"
-                            Background="#404040"
-                            Foreground="#ffffff"
-                            BorderBrush="#505050"/>
-                    <Button Content="Full Screen"
+                    <Button Content="{Binding FullScreenButtonLabel}"
                             Command="{Binding ToggleFullScreenCommand}"
                             Padding="12,8"
                             FontSize="13"
@@ -60,20 +69,53 @@
             </Grid>
         </Border>
 
-        <!-- 3D Visualization Area -->
+        <!-- Main Visualization Area -->
         <Border Grid.Row="1" Grid.Column="0" 
                 Margin="16,16,8,16"
                 Background="#0d0d0d"
                 BorderBrush="#333333"
                 BorderThickness="2"
                 CornerRadius="0">
-            <v:Simple3DView 
-                x:Name="Visualization3D"
-                Data="{Binding Visualization3DData}"
-                ShowGrid="{Binding ShowGrid}"
-                ShowPoints="{Binding ShowPoints}"
-                ShowMesh="{Binding ShowMesh}"
-                ShowLines="True"/>
+            <Grid>
+                <Border IsVisible="{Binding IsTwoDGridMode}"
+                        Padding="6">
+                    <ItemsControl ItemsSource="{Binding ChartCards}"
+                                  HorizontalAlignment="Stretch"
+                                  VerticalAlignment="Stretch">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Columns="2" Rows="3"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <v:ChartCardView MinHeight="0"
+                                                 MinWidth="0"
+                                                 Margin="2"
+                                                 HorizontalAlignment="Stretch"
+                                                 VerticalAlignment="Stretch"
+                                                 Command="{Binding $parent[UserControl].((vm:AnalysisViewModel)DataContext).Select2DChartCommand}"
+                                                 CommandParameter="{Binding}"/>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Border>
+
+                <v:ChartCardView DataContext="{Binding Selected2DChart}"
+                                 IsVisible="{Binding $parent[UserControl].((vm:AnalysisViewModel)DataContext).IsSelected2DChartFullScreen}"
+                                 Margin="16"
+                                 HorizontalAlignment="Stretch"
+                                 VerticalAlignment="Stretch"/>
+
+                <v:Simple3DView 
+                    x:Name="Visualization3D"
+                    IsVisible="{Binding IsSingle3DMode}"
+                    Data="{Binding Visualization3DData}"
+                    ShowGrid="{Binding ShowGrid}"
+                    ShowPoints="{Binding ShowPoints}"
+                    ShowMesh="{Binding ShowMesh}"
+                    ShowLines="True"/>
+            </Grid>
         </Border>
 
         <!-- Right Panel - Scrollable -->

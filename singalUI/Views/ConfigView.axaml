@@ -388,6 +388,10 @@
                                    FontSize="11"
                                    Foreground="#ffffff"
                                    FontStyle="Italic"/>
+                        <TextBlock Text="{Binding CameraResolutionStatus}"
+                                   FontSize="11"
+                                   Foreground="#8ec5ff"
+                                   FontStyle="Italic"/>
                     </StackPanel>
                 </Border>
 

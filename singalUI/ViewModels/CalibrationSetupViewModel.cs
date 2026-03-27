@@ -449,20 +449,39 @@ namespace singalUI.ViewModels
         }
 
         /// <summary>
-        /// Get the unit for an axis type
+        /// Get the unit for an axis type based on controller type
+        /// PI Controller: nanometer (nm) for linear, microradian (µrad) for rotation
+        /// SigmaKoki: micrometer (µm) for linear, degree (°) for rotation
         /// </summary>
         private string GetAxisUnit(AxisType axis)
         {
-            return axis switch
+            // Determine controller type from selected stage wrapper
+            bool isPIController = SelectedStageWrapper?.HardwareType == StageHardwareType.PI;
+            bool isSigmaKoki = SelectedStageWrapper?.HardwareType == StageHardwareType.Sigmakoki;
+
+            // Linear axes (X, Y, Z)
+            if (axis == AxisType.X || axis == AxisType.Y || axis == AxisType.Z)
             {
-                AxisType.X => "µm",
-                AxisType.Y => "µm",
-                AxisType.Z => "µm",
-                AxisType.Rx => "deg",
-                AxisType.Ry => "deg",
-                AxisType.Rz => "deg",
-                _ => ""
-            };
+                if (isPIController)
+                    return "nm";  // nanometer for PI
+                else if (isSigmaKoki)
+                    return "µm";  // micrometer for SigmaKoki
+                else
+                    return "µm";  // default to micrometer
+            }
+            
+            // Rotation axes (Rx, Ry, Rz)
+            if (axis == AxisType.Rx || axis == AxisType.Ry || axis == AxisType.Rz)
+            {
+                if (isPIController)
+                    return "µrad"; // microradian for PI
+                else if (isSigmaKoki)
+                    return "°";    // degree for SigmaKoki
+                else
+                    return "°";    // default to degree
+            }
+
+            return "";
         }
 
         // Get the first enabled axis from MotionRows

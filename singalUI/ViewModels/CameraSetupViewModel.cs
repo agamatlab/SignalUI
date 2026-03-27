@@ -27,6 +27,7 @@ namespace singalUI.ViewModels
         private readonly DispatcherTimer _cameraFrameTimer;
         private readonly DispatcherTimer _liveCameraApplyTimer;
         private readonly Random _random = new();
+        private readonly Dictionary<string, string> _patternConfigFileMap = new(StringComparer.OrdinalIgnoreCase);
         private readonly string _logFile = Path.Combine(Path.GetTempPath(), "singalui_debug.log");
         private readonly string _cameraLogFile = Path.Combine(Path.GetTempPath(), "singalui_camera.log");
         private WriteableBitmap? _reusableBitmap;
@@ -86,9 +87,31 @@ namespace singalUI.ViewModels
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "singalUI",
             "CameraConfigs");
+        private static readonly string[] PatternConfigDirectoryCandidates =
+        {
+            Path.Combine(Environment.CurrentDirectory, "pattern-configs"),
+            Path.Combine(Environment.CurrentDirectory, "singalUI", "pattern-configs"),
+            Path.Combine(AppContext.BaseDirectory, "pattern-configs"),
+            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "pattern-configs"),
+            "/Users/aghamatlabakbarzade/ms/lastSignal/pattern-configs"
+        };
 
         [ObservableProperty]
         private ObservableCollection<string> _savedConfigs = new();
+
+        [ObservableProperty]
+        private ObservableCollection<string> _availablePatternConfigs = new();
+
+        [ObservableProperty]
+        private string? _selectedPatternConfig;
+
+        partial void OnSelectedPatternConfigChanged(string? value)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                LoadSelectedPatternConfig();
+            }
+        }
 
         // Pattern Analysis
         [ObservableProperty]
@@ -110,6 +133,21 @@ namespace singalUI.ViewModels
         private int _checkerBoardUnit = 0; // 0 = mm, 1 = μm, 2 = in
 
         [ObservableProperty]
+        private bool _patternHasCode;
+
+        [ObservableProperty]
+        private string _patternConfigType = "Checker Board";
+
+        [ObservableProperty]
+        private double _patternConfigPitchSize = 1.0;
+
+        [ObservableProperty]
+        private string _patternCompatibleLenses = "Not specified";
+
+        [ObservableProperty]
+        private int _codePitchBlocks = 6;
+
+        [ObservableProperty]
         private int _selectedCameraModel = -1;
 
         [ObservableProperty]
@@ -124,12 +162,39 @@ namespace singalUI.ViewModels
         [ObservableProperty]
         private double _panY = 0.0;
 
+        // Session Name from shared store
+        public string SessionName
+        {
+            get => SharedConfigParametersStore.Instance.SessionName;
+            set
+            {
+                if (SharedConfigParametersStore.Instance.SessionName != value)
+                {
+                    SharedConfigParametersStore.Instance.SessionName = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         // Auto Mode Toggles
         [ObservableProperty]
         private bool _autoFocus = false;
 
         [ObservableProperty]
         private bool _autoIllumination = false;
+
+        [ObservableProperty]
+        private bool _advancedMode = false;
+
+        // FFT Focus Calculation
+        [ObservableProperty]
+        private bool _enableFftFocus = false;  // Default: disabled (checkbox unchecked)
+
+        [ObservableProperty]
+        private int _fftCalculationInterval = 10;  // Calculate every 10 frames (for performance)
+
+        [ObservableProperty]
+        private double _rawFocusValue = 0.0;  // Raw FFT energy value (for debugging)
 
         // Modular collections for collapsible panels
         [ObservableProperty]
@@ -249,6 +314,7 @@ namespace singalUI.ViewModels
 
             // Load saved configs
             LoadSavedConfigs();
+            LoadPatternConfigs();
 
             // NOTE: Position timer disabled - using real gRPC stream instead
             // _positionUpdateTimer = new Timer(100) { AutoReset = true };
@@ -390,8 +456,32 @@ namespace singalUI.ViewModels
                 FrameCount = seq;
                 _lastRenderedSeq = seq;
 
-                // Simulate focus level fluctuation
-                FocusLevel = 65 + _random.NextDouble() * 25;
+                // Calculate real focus quality using FFT (only if enabled)
+                if (EnableFftFocus && seq % FftCalculationInterval == 0)
+                {
+                    try
+                    {
+                        double rawFocus = FocusCalculator.CalculateFFTFocus(buffer, width, height, downsampleFactor: 4);
+                        RawFocusValue = rawFocus;
+                        FocusLevel = rawFocus;  // Already normalized to 0-100
+                        
+                        // Log every 60 calculations
+                        if (seq % (FftCalculationInterval * 60) == 0)
+                        {
+                            Log($"[FFT Focus] Frame {seq}: {FocusLevel:F1}% (raw: {RawFocusValue:F2})");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Log($"[FFT Focus] Calculation error: {ex.Message}");
+                        // Keep previous FocusLevel value on error
+                    }
+                }
+                else if (!EnableFftFocus)
+                {
+                    // When FFT is disabled, show a neutral value
+                    FocusLevel = 50.0;
+                }
             }
             catch (Exception ex)
             {
@@ -771,8 +861,35 @@ namespace singalUI.ViewModels
         [RelayCommand]
         private void CaptureImage()
         {
-            // TODO: Implement image capture to file
-            Log("[CaptureImage] Single frame capture requested");
+            try
+            {
+                var cameraService = App.CameraService;
+                var (buffer, width, height, seq) = cameraService.GetLatestFrameSnapshot();
+
+                if (buffer == null || width <= 0 || height <= 0)
+                {
+                    Log("[CaptureImage] No frame available to save");
+                    CameraStatus = "No frame available";
+                    return;
+                }
+
+                string outputDir = Path.Combine(Environment.CurrentDirectory, "imgs");
+                Directory.CreateDirectory(outputDir);
+
+                string fileName = $"capture_{DateTime.Now:yyyyMMdd_HHmmss_fff}.png";
+                string filePath = Path.Combine(outputDir, fileName);
+
+                using var mat = new Mat(height, width, MatType.CV_8UC1, buffer);
+                Cv2.ImWrite(filePath, mat);
+
+                Log($"[CaptureImage] Saved frame {seq} to {filePath}");
+                CameraStatus = $"Captured: {fileName}";
+            }
+            catch (Exception ex)
+            {
+                Log($"[CaptureImage] Error: {ex.Message}");
+                CameraStatus = $"Capture failed: {ex.Message}";
+            }
         }
 
         [RelayCommand]
@@ -1202,6 +1319,128 @@ namespace singalUI.ViewModels
             {
                 Log($"[LoadConfigFromFile] Error: {ex.Message}");
             }
+        }
+
+        [RelayCommand]
+        private void LoadSelectedPatternConfig()
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(SelectedPatternConfig))
+                {
+                    Log("[LoadSelectedPatternConfig] No pattern config selected");
+                    return;
+                }
+
+                if (!_patternConfigFileMap.TryGetValue(SelectedPatternConfig, out var path) || !File.Exists(path))
+                {
+                    Log($"[LoadSelectedPatternConfig] Pattern config not found for selection: {SelectedPatternConfig}");
+                    return;
+                }
+
+                var json = File.ReadAllText(path);
+                var config = CameraConfig.FromJson(json);
+
+                if (config == null)
+                {
+                    Log("[LoadSelectedPatternConfig] Failed to parse config");
+                    return;
+                }
+
+                config.ApplyPatternToViewModel(this);
+                Log($"[LoadSelectedPatternConfig] Loaded pattern config: {SelectedPatternConfig}");
+            }
+            catch (Exception ex)
+            {
+                Log($"[LoadSelectedPatternConfig] Error: {ex.Message}");
+            }
+        }
+
+        private void LoadPatternConfigs()
+        {
+            try
+            {
+                var directory = EnsurePatternConfigDirectory();
+                AvailablePatternConfigs.Clear();
+                _patternConfigFileMap.Clear();
+
+                Log($"[LoadPatternConfigs] Searching directory: {directory}");
+                
+                if (!Directory.Exists(directory))
+                {
+                    Log($"[LoadPatternConfigs] Directory does not exist: {directory}");
+                    return;
+                }
+
+                var files = Directory.GetFiles(directory, "*.json");
+                Log($"[LoadPatternConfigs] Found {files.Length} JSON files");
+
+                foreach (var file in files.OrderBy(Path.GetFileName))
+                {
+                    Log($"[LoadPatternConfigs] Processing file: {file}");
+                    var displayName = GetPatternConfigDisplayName(file);
+                    var uniqueName = displayName;
+                    var duplicateIndex = 2;
+
+                    while (_patternConfigFileMap.ContainsKey(uniqueName))
+                    {
+                        uniqueName = $"{displayName} ({duplicateIndex})";
+                        duplicateIndex++;
+                    }
+
+                    _patternConfigFileMap[uniqueName] = file;
+                    AvailablePatternConfigs.Add(uniqueName);
+                    Log($"[LoadPatternConfigs] Added config: {uniqueName}");
+                }
+
+                if (AvailablePatternConfigs.Count > 0 && string.IsNullOrWhiteSpace(SelectedPatternConfig))
+                {
+                    SelectedPatternConfig = AvailablePatternConfigs[0];
+                }
+
+                Log($"[LoadPatternConfigs] Loaded {AvailablePatternConfigs.Count} pattern configs from {directory}");
+            }
+            catch (Exception ex)
+            {
+                Log($"[LoadPatternConfigs] Error: {ex.Message}");
+                Log($"[LoadPatternConfigs] Stack trace: {ex.StackTrace}");
+            }
+        }
+
+        private static string GetPatternConfigDisplayName(string filePath)
+        {
+            try
+            {
+                var json = File.ReadAllText(filePath);
+                var config = CameraConfig.FromJson(json);
+                if (!string.IsNullOrWhiteSpace(config?.Name))
+                {
+                    return config.Name;
+                }
+            }
+            catch
+            {
+                // Fall back to the filename if parsing fails.
+            }
+
+            return Path.GetFileNameWithoutExtension(filePath);
+        }
+
+        private string EnsurePatternConfigDirectory()
+        {
+            foreach (var candidate in PatternConfigDirectoryCandidates)
+            {
+                Log($"[EnsurePatternConfigDirectory] Checking: {candidate}");
+                if (Directory.Exists(candidate))
+                {
+                    Log($"[EnsurePatternConfigDirectory] Found: {candidate}");
+                    return candidate;
+                }
+            }
+
+            Log($"[EnsurePatternConfigDirectory] No existing directory found, creating: {PatternConfigDirectoryCandidates[0]}");
+            Directory.CreateDirectory(PatternConfigDirectoryCandidates[0]);
+            return PatternConfigDirectoryCandidates[0];
         }
 
         // Stage Movement Commands

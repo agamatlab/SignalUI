@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using System.Collections.ObjectModel;
+using System.Linq;
 
 namespace singalUI.ViewModels
 {
@@ -27,6 +28,15 @@ namespace singalUI.ViewModels
         private string _statValue = string.Empty;
 
         [ObservableProperty]
+        private ObservableCollection<double> _seriesValues = new();
+
+        [ObservableProperty]
+        private string _unit = string.Empty;
+
+        [ObservableProperty]
+        private bool _isSelected;
+
+        [ObservableProperty]
         private int _rowIndex;
 
         [ObservableProperty]
@@ -39,7 +49,9 @@ namespace singalUI.ViewModels
         public ChartCardViewModel(string title, double rmsValue, string color,
                                  ObservableCollection<BarItem> bars,
                                  string statLabel, string statValue,
-                                 int rowIndex, int columnIndex)
+                                 int rowIndex, int columnIndex,
+                                 string unit = "",
+                                 ObservableCollection<double>? seriesValues = null)
         {
             Title = title;
             RmsValue = rmsValue;
@@ -49,6 +61,8 @@ namespace singalUI.ViewModels
             StatValue = statValue;
             RowIndex = rowIndex;
             ColumnIndex = columnIndex;
+            Unit = unit;
+            SeriesValues = seriesValues ?? new ObservableCollection<double>();
         }
     }
 

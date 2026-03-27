@@ -37,6 +37,9 @@ namespace singalUI.ViewModels
         [ObservableProperty]
         private bool _showRz = true;
 
+        [ObservableProperty]
+        private int _selectedPlotLayout;
+
         // Modular Chart Cards Collection
         [ObservableProperty]
         private ObservableCollection<ChartCardViewModel> _chartCards = new();
@@ -50,6 +53,9 @@ namespace singalUI.ViewModels
         // Full Screen Mode
         [ObservableProperty]
         private bool _isFullScreen = false;
+
+        [ObservableProperty]
+        private ChartCardViewModel? _selected2DChart;
 
         // Preview Mode
         [ObservableProperty]
@@ -73,11 +79,48 @@ namespace singalUI.ViewModels
         [ObservableProperty]
         private string _errorLog = "";
 
+        public bool IsSix2DMode => SelectedPlotLayout == 0;
+
+        public bool IsSingle3DMode => SelectedPlotLayout == 1;
+
+        public bool IsTwoDGridMode => IsSix2DMode && (!IsFullScreen || Selected2DChart == null);
+
+        public bool IsSelected2DChartFullScreen => IsSix2DMode && IsFullScreen && Selected2DChart != null;
+
+        public string FullScreenButtonLabel => IsFullScreen ? "Minimize" : "Full Screen";
+
         public AnalysisViewModel()
         {
+            SelectedPlotLayout = 0;
             Generate3DData();
             GenerateMockData();
             LogError("AnalysisViewModel initialized - Error log ready");
+        }
+
+        partial void OnSelectedPlotLayoutChanged(int value)
+        {
+            OnPropertyChanged(nameof(IsSix2DMode));
+            OnPropertyChanged(nameof(IsSingle3DMode));
+            OnPropertyChanged(nameof(IsTwoDGridMode));
+            OnPropertyChanged(nameof(IsSelected2DChartFullScreen));
+        }
+
+        partial void OnIsFullScreenChanged(bool value)
+        {
+            OnPropertyChanged(nameof(IsTwoDGridMode));
+            OnPropertyChanged(nameof(IsSelected2DChartFullScreen));
+            OnPropertyChanged(nameof(FullScreenButtonLabel));
+        }
+
+        partial void OnSelected2DChartChanged(ChartCardViewModel? value)
+        {
+            foreach (var card in ChartCards)
+            {
+                card.IsSelected = ReferenceEquals(card, value);
+            }
+
+            OnPropertyChanged(nameof(IsTwoDGridMode));
+            OnPropertyChanged(nameof(IsSelected2DChartFullScreen));
         }
 
         private void Generate3DData()
@@ -222,13 +265,20 @@ namespace singalUI.ViewModels
                     $"{axis.Name} Error:",
                     $"{rms:F3} +/- {std:F3} {axis.Unit}",
                     axis.RowIndex,
-                    axis.ColumnIndex
+                    axis.ColumnIndex,
+                    axis.Unit,
+                    new ObservableCollection<double>(data)
                 ));
             }
 
             // Overall RMS (combined position errors)
             double overallRms = CalculateRms(allData);
             Overall_Rms = $"{overallRms:F3} mm RMS";
+
+            if (ChartCards.Count > 0)
+            {
+                Selected2DChart = ChartCards[0];
+            }
         }
 
         private List<double> GenerateData(int count, double min, double max, Random random)
@@ -309,6 +359,29 @@ namespace singalUI.ViewModels
         {
             Generate3DData();
             LogError("3D view reset");
+        }
+
+        [RelayCommand]
+        private void ShowSix2DPlots()
+        {
+            SelectedPlotLayout = 0;
+        }
+
+        [RelayCommand]
+        private void ShowSingle3DPlot()
+        {
+            SelectedPlotLayout = 1;
+        }
+
+        [RelayCommand]
+        private void Select2DChart(ChartCardViewModel? chart)
+        {
+            if (chart == null)
+            {
+                return;
+            }
+
+            Selected2DChart = chart;
         }
 
         [RelayCommand]

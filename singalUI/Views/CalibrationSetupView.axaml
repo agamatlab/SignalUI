@@ -10,6 +10,13 @@
         <vm:CalibrationSetupViewModel/>
     </Design.DataContext>
 
+    <UserControl.Styles>
+        <Style Selector="NumericUpDown">
+            <Setter Property="MinWidth" Value="130"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+        </Style>
+    </UserControl.Styles>
+
     <Grid RowDefinitions="Auto,*,Auto" ColumnDefinitions="*,300">
         <!-- Sampling Mode Selector -->
         <Border Grid.Row="0" Grid.ColumnSpan="2"
@@ -160,7 +167,7 @@
                         BorderBrush="#404040"
                         BorderThickness="0,0,0,1"
                         Padding="16,12">
-                    <Grid ColumnDefinitions="50,70,*,80,160,180,120">
+                    <Grid ColumnDefinitions="50,70,*,80,180,200,150">
                         <TextBlock Grid.Column="0" Text="On"
                                    FontSize="14"
                                    FontWeight="SemiBold"
@@ -202,7 +209,7 @@
                                     BorderThickness="0,0,0,1"
                                     Padding="16,10"
                                     Background="#252525">
-                                <Grid ColumnDefinitions="50,70,*,80,160,140,100">
+                                <Grid ColumnDefinitions="50,70,*,80,180,180,130">
                                     <CheckBox Grid.Column="0"
                                               IsChecked="{Binding IsEnabled}"
                                               Foreground="#ffffff"
@@ -329,7 +336,7 @@
                         BorderBrush="#404040"
                         BorderThickness="0,0,0,1"
                         Padding="16,12">
-                    <Grid ColumnDefinitions="50,70,*,80,160,180,120,160">
+                    <Grid ColumnDefinitions="50,70,*,80,180,200,150,160">
                         <TextBlock Grid.Column="0" Text="On"
                                    FontSize="14"
                                    FontWeight="SemiBold"
@@ -376,7 +383,7 @@
                                     BorderThickness="0,0,0,1"
                                     Padding="16,10"
                                     Background="#252525">
-                                <Grid ColumnDefinitions="50,70,*,80,160,180,120,160">
+                                <Grid ColumnDefinitions="50,70,*,80,180,200,150,160">
                                     <CheckBox Grid.Column="0"
                                               IsChecked="{Binding IsEnabled}"
                                               Foreground="#ffffff"

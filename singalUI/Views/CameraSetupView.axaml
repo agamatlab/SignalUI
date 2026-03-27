@@ -12,7 +12,7 @@
         <vm:CameraSetupViewModel/>
     </Design.DataContext>
 
-    <Grid RowDefinitions="Auto,*,Auto" ColumnDefinitions="*,380">
+    <Grid RowDefinitions="Auto,*,Auto" ColumnDefinitions="*,430">
         <!-- Connection Status Bar -->
         <Border Grid.Row="0" Grid.ColumnSpan="2"
                 Background="#1c1c1c"
@@ -33,6 +33,11 @@
                                Foreground="#ffffff"
                                VerticalAlignment="Center"/>
                 </StackPanel>
+                <Button Grid.Column="2"
+                        Content="Connect Camera"
+                        Command="{Binding RefreshConnectionCommand}"
+                        Padding="14,6"
+                        FontSize="13"/>
             </Grid>
         </Border>
 
@@ -43,7 +48,7 @@
                 BorderThickness="2"
                 Margin="16,16,8,16"
                 CornerRadius="0">
-            <Grid RowDefinitions="Auto,*,Auto,Auto">
+            <Grid RowDefinitions="Auto,*,Auto">
                 <!-- Camera Header with Focus Bar -->
                 <Border Grid.Row="0"
                         Background="#1c1c1c"
@@ -125,111 +130,97 @@
                     </Grid>
                 </Border>
 
-                <!-- Stage Position - MOVED TO BOTTOM OF CAMERA VIEW -->
+                <!-- Stage Position + Camera Stats -->
                 <Border Grid.Row="2"
                         Background="#0f0f0f"
                         BorderBrush="#333333"
                         BorderThickness="0,2,0,0"
                         Padding="12,10"
                         CornerRadius="0">
-                    <Grid ColumnDefinitions="*,*,*" RowDefinitions="Auto,Auto" ColumnSpacing="18" RowSpacing="8">
-                        <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="X:"
-                                       FontSize="15"
-                                       FontWeight="Bold"
-                                       Foreground="#aaaaaa"
-                                       FontFamily="Consolas,Courier New"/>
-                            <TextBlock Text="{Binding CurrentPosition.X, StringFormat={}{0:F3} mm}"
-                                       FontSize="15"
-                                       FontWeight="Medium"
-                                       Foreground="#dddddd"
-                                       FontFamily="Consolas,Courier New"/>
-                        </StackPanel>
-                        <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="Y:"
-                                       FontSize="15"
-                                       FontWeight="Bold"
-                                       Foreground="#aaaaaa"
-                                       FontFamily="Consolas,Courier New"/>
-                            <TextBlock Text="{Binding CurrentPosition.Y, StringFormat={}{0:F3} mm}"
-                                       FontSize="15"
-                                       FontWeight="Medium"
-                                       Foreground="#dddddd"
-                                       FontFamily="Consolas,Courier New"/>
-                        </StackPanel>
-                        <StackPanel Grid.Row="0" Grid.Column="2" Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="Z:"
-                                       FontSize="15"
-                                       FontWeight="Bold"
-                                       Foreground="#aaaaaa"
-                                       FontFamily="Consolas,Courier New"/>
-                            <TextBlock Text="{Binding CurrentPosition.Z, StringFormat={}{0:F3} mm}"
-                                       FontSize="15"
-                                       FontWeight="Medium"
-                                       Foreground="#dddddd"
-                                       FontFamily="Consolas,Courier New"/>
-                        </StackPanel>
-                        <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="Rx:"
-                                       FontSize="15"
-                                       FontWeight="Bold"
-                                       Foreground="#aaaaaa"
-                                       FontFamily="Consolas,Courier New"/>
-                            <TextBlock FontSize="15"
-                                       FontWeight="Medium"
-                                       Foreground="#dddddd"
-                                       FontFamily="Consolas,Courier New">
-                                <Run Text="{Binding CurrentPosition.Rx, StringFormat={}{0:F3}}"/>
-                                <Run Text="°"/>
-                            </TextBlock>
-                        </StackPanel>
-                        <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="Ry:"
-                                       FontSize="15"
-                                       FontWeight="Bold"
-                                       Foreground="#aaaaaa"
-                                       FontFamily="Consolas,Courier New"/>
-                            <TextBlock FontSize="15"
-                                       FontWeight="Medium"
-                                       Foreground="#dddddd"
-                                       FontFamily="Consolas,Courier New">
-                                <Run Text="{Binding CurrentPosition.Ry, StringFormat={}{0:F3}}"/>
-                                <Run Text="°"/>
-                            </TextBlock>
-                        </StackPanel>
-                        <StackPanel Grid.Row="1" Grid.Column="2" Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="Rz:"
-                                       FontSize="15"
-                                       FontWeight="Bold"
-                                       Foreground="#aaaaaa"
-                                       FontFamily="Consolas,Courier New"/>
-                            <TextBlock FontSize="15"
-                                       FontWeight="Medium"
-                                       Foreground="#dddddd"
-                                       FontFamily="Consolas,Courier New">
-                                <Run Text="{Binding CurrentPosition.Rz, StringFormat={}{0:F3}}"/>
-                                <Run Text="°"/>
-                            </TextBlock>
-                        </StackPanel>
-                    </Grid>
-                </Border>
-
-                <Border Grid.Row="3"
-                        Background="#1c1c1c"
-                        BorderBrush="#333333"
-                        BorderThickness="0,2,0,0"
-                        Padding="12,8"
-                        CornerRadius="0">
-                    <Grid ColumnDefinitions="Auto,*">
-                        <Border Grid.Column="0" Width="18" Height="18" Margin="0,2,0,0" VerticalAlignment="Center">
-                            <Path Data="M18 4H2C.9 4 0 4.9 0 6v8c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zM6 12c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm8 2H8v-1c0-1.33 2.67-2 4-2s4 .67 4 2v1z"
-                                  Fill="#999999" 
-                                  Stretch="Uniform"/>
-                        </Border>
-                        <TextBlock Grid.Column="1"
+                    <Grid RowDefinitions="Auto,Auto" RowSpacing="8">
+                        <Grid Grid.Row="0" ColumnDefinitions="*,*,*" RowDefinitions="Auto,Auto" ColumnSpacing="18" RowSpacing="8">
+                            <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="X:"
+                                           FontSize="15"
+                                           FontWeight="Bold"
+                                           Foreground="#aaaaaa"
+                                           FontFamily="Consolas,Courier New"/>
+                                <TextBlock Text="{Binding CurrentPosition.X, StringFormat={}{0:F3} mm}"
+                                           FontSize="15"
+                                           FontWeight="Medium"
+                                           Foreground="#dddddd"
+                                           FontFamily="Consolas,Courier New"/>
+                            </StackPanel>
+                            <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="Y:"
+                                           FontSize="15"
+                                           FontWeight="Bold"
+                                           Foreground="#aaaaaa"
+                                           FontFamily="Consolas,Courier New"/>
+                                <TextBlock Text="{Binding CurrentPosition.Y, StringFormat={}{0:F3} mm}"
+                                           FontSize="15"
+                                           FontWeight="Medium"
+                                           Foreground="#dddddd"
+                                           FontFamily="Consolas,Courier New"/>
+                            </StackPanel>
+                            <StackPanel Grid.Row="0" Grid.Column="2" Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="Z:"
+                                           FontSize="15"
+                                           FontWeight="Bold"
+                                           Foreground="#aaaaaa"
+                                           FontFamily="Consolas,Courier New"/>
+                                <TextBlock Text="{Binding CurrentPosition.Z, StringFormat={}{0:F3} mm}"
+                                           FontSize="15"
+                                           FontWeight="Medium"
+                                           Foreground="#dddddd"
+                                           FontFamily="Consolas,Courier New"/>
+                            </StackPanel>
+                            <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="Rx:"
+                                           FontSize="15"
+                                           FontWeight="Bold"
+                                           Foreground="#aaaaaa"
+                                           FontFamily="Consolas,Courier New"/>
+                                <TextBlock FontSize="15"
+                                           FontWeight="Medium"
+                                           Foreground="#dddddd"
+                                           FontFamily="Consolas,Courier New">
+                                    <Run Text="{Binding CurrentPosition.Rx, StringFormat={}{0:F3}}"/>
+                                    <Run Text="°"/>
+                                </TextBlock>
+                            </StackPanel>
+                            <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="Ry:"
+                                           FontSize="15"
+                                           FontWeight="Bold"
+                                           Foreground="#aaaaaa"
+                                           FontFamily="Consolas,Courier New"/>
+                                <TextBlock FontSize="15"
+                                           FontWeight="Medium"
+                                           Foreground="#dddddd"
+                                           FontFamily="Consolas,Courier New">
+                                    <Run Text="{Binding CurrentPosition.Ry, StringFormat={}{0:F3}}"/>
+                                    <Run Text="°"/>
+                                </TextBlock>
+                            </StackPanel>
+                            <StackPanel Grid.Row="1" Grid.Column="2" Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="Rz:"
+                                           FontSize="15"
+                                           FontWeight="Bold"
+                                           Foreground="#aaaaaa"
+                                           FontFamily="Consolas,Courier New"/>
+                                <TextBlock FontSize="15"
+                                           FontWeight="Medium"
+                                           Foreground="#dddddd"
+                                           FontFamily="Consolas,Courier New">
+                                    <Run Text="{Binding CurrentPosition.Rz, StringFormat={}{0:F3}}"/>
+                                    <Run Text="°"/>
+                                </TextBlock>
+                            </StackPanel>
+                        </Grid>
+                        <TextBlock Grid.Row="1"
                                    FontSize="13"
-                                   Foreground="#ffffff"
-                                   Margin="8,0,0,0">
+                                   Foreground="#ffffff">
                             <Run Text="Resolution: "/>
                             <Run Text="{Binding CameraFrameInfo}"/>
                             <Run Text=" | Measured FPS: "/>
@@ -302,90 +293,11 @@
                                           HorizontalAlignment="Stretch"/>
                             </StackPanel>
 
-                            <!-- Camera File (.cti) Selection -->
-                            <StackPanel Spacing="6">
-                                <Grid ColumnDefinitions="*,Auto">
-                                    <TextBlock Grid.Column="0"
-                                               Text="Camera File (.cti)"
-                                               FontSize="13"
-                                               Foreground="#ffffff"/>
-                                    <Button Grid.Column="1"
-                                            Content="Browse..."
-                                            Command="{Binding BrowseCtiFileCommand}"
-                                            Padding="8,4"
-                                            FontSize="12"
-                                            Background="#404040"
-                                            BorderBrush="#606060"
-                                            Foreground="#ffffff"
-                                            Margin="0,0,0,0"/>
-                                </Grid>
-                                <ComboBox ItemsSource="{Binding AvailableCtiFiles}"
-                                          SelectedItem="{Binding SelectedCtiFile}"
-                                          PlaceholderText="Select .cti file"
-                                          FontSize="13"
-                                          Padding="8,6"
-                                          HorizontalAlignment="Stretch"
-                                          IsEditable="True"/>
-                            </StackPanel>
-
-                            <!-- Camera Configs -->
-                            <StackPanel Spacing="6">
-                                <Grid ColumnDefinitions="*,Auto">
-                                    <TextBlock Grid.Column="0"
-                                               Text="Camera Configs"
-                                               FontSize="13"
-                                               Foreground="#ffffff"/>
-                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
-                                        <Button Content="Save"
-                                                Command="{Binding SavePresetCommand}"
-                                                Padding="8,4"
-                                                FontSize="12"
-                                                Background="#404040"
-                                                BorderBrush="#606060"
-                                                Foreground="#ffffff"/>
-                                        <Button Content="Load"
-                                                Command="{Binding LoadConfigCommand}"
-                                                Padding="8,4"
-                                                FontSize="12"
-                                                Background="#404040"
-                                                BorderBrush="#606060"
-                                                Foreground="#ffffff"/>
-                                        <Button Content="Delete"
-                                                Command="{Binding DeletePresetCommand}"
-                                                Padding="8,4"
-                                                FontSize="12"
-                                                Background="#404040"
-                                                BorderBrush="#606060"
-                                                Foreground="#ffffff"/>
-                                    </StackPanel>
-                                </Grid>
-                                <ComboBox ItemsSource="{Binding SavedConfigs}"
-                                          SelectedItem="{Binding SelectedPreset}"
-                                          PlaceholderText="Select or create config"
-                                          FontSize="13"
-                                          Padding="8,6"
-                                          HorizontalAlignment="Stretch"/>
-                                <Grid ColumnDefinitions="*,*" Margin="0,4,0,0">
-                                    <Button Grid.Column="0"
-                                            Content="Save As..."
-                                            Command="{Binding SaveConfigAsCommand}"
-                                            Padding="8,4"
-                                            FontSize="12"
-                                            Background="#404040"
-                                            BorderBrush="#606060"
-                                            Foreground="#ffffff"
-                                            Margin="0,0,3,0"/>
-                                    <Button Grid.Column="1"
-                                            Content="Load From File..."
-                                            Command="{Binding LoadConfigFromFileCommand}"
-                                            Padding="8,4"
-                                            FontSize="12"
-                                            Foreground="#ffffff"
-                                            Background="#404040"
-                                            BorderBrush="#606060"
-                                            Margin="3,0,0,0"/>
-                                </Grid>
-                            </StackPanel>
+                            <Button Content="Connect Camera"
+                                    Command="{Binding RefreshConnectionCommand}"
+                                    Padding="10,8"
+                                    FontSize="13"
+                                    HorizontalAlignment="Stretch"/>
                         </StackPanel>
                     </v:CollapsiblePanelView.Content>
                 </v:CollapsiblePanelView>
@@ -399,7 +311,7 @@
                             IsExpanded="true"/>
                     </v:CollapsiblePanelView.DataContext>
                     <v:CollapsiblePanelView.Content>
-                        <StackPanel Spacing="18">
+                        <StackPanel Spacing="14">
                             <!-- Auto Mode Toggles -->
                             <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto">
                                 <CheckBox Grid.Column="0" Grid.Row="0"
@@ -416,8 +328,39 @@
                                           Margin="0,0,0,8"/>
                             </Grid>
 
+                            <!-- FFT Focus Calculation -->
+                            <CheckBox IsChecked="{Binding EnableFftFocus}"
+                                      Content="Enable FFT Focus Calculation"
+                                      FontSize="13"
+                                      Foreground="#ffffff"
+                                      Margin="0,8,0,0"
+                                      ToolTip.Tip="Calculate focus quality using FFT analysis (high precision, ~2ms per calculation)"/>
+
+                            <!-- FFT Calculation Interval (only visible when enabled) -->
+                            <StackPanel Spacing="4" 
+                                        Margin="0,4,0,0"
+                                        IsVisible="{Binding EnableFftFocus}">
+                                <TextBlock Text="Calculation Interval (frames)"
+                                           FontSize="12"
+                                           Foreground="#aaaaaa"/>
+                                <NumericUpDown Value="{Binding FftCalculationInterval}"
+                                               Minimum="1"
+                                               Maximum="60"
+                                               Increment="1"
+                                               FontSize="12"
+                                               Padding="6,4"
+                                               HorizontalAlignment="Stretch"
+                                               ToolTip.Tip="Calculate focus every N frames (higher = better performance, lower = more responsive)"/>
+                                
+                                <!-- Raw Focus Value Display (for debugging) -->
+                                <TextBlock Text="{Binding RawFocusValue, StringFormat='Raw FFT Energy: {0:F2}'}"
+                                           FontSize="11"
+                                           Foreground="#666666"
+                                           Margin="0,4,0,0"/>
+                            </StackPanel>
+
                             <!-- Live Camera Controls -->
-                            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="8" ColumnSpacing="10">
+                            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="8" ColumnSpacing="10">
                                 <TextBlock Grid.Row="0" Grid.Column="0"
                                            Text="Exposure (us)"
                                            FontSize="13"
@@ -473,26 +416,28 @@
                                                FormatString="F0"
                                                FontSize="13"
                                                HorizontalAlignment="Stretch"/>
+
+                                <TextBlock Grid.Row="4" Grid.Column="0"
+                                           Text="Binning"
+                                           FontSize="13"
+                                           Foreground="#ffffff"
+                                           VerticalAlignment="Center"/>
+                                <ComboBox Grid.Row="4" Grid.Column="1"
+                                          SelectedIndex="{Binding CameraParameters.Binning, Mode=TwoWay, Converter={StaticResource BinningToIndexConverter}}"
+                                          FontSize="13"
+                                          Padding="8,6"
+                                          HorizontalAlignment="Stretch">
+                                    <ComboBoxItem Content="1x1"/>
+                                    <ComboBoxItem Content="2x2"/>
+                                    <ComboBoxItem Content="4x4"/>
+                                </ComboBox>
                             </Grid>
 
-                            <!-- Binning -->
-                            <StackPanel Spacing="8">
-                                <TextBlock Text="Binning Mode"
-                                           FontSize="13"
-                                           Foreground="#ffffff"/>
-                                <ComboBox SelectedIndex="{Binding CameraParameters.Binning, Converter={StaticResource BinningToIndexConverter}}"
-                                          FontSize="13"
-                                          Width="250"
-                                          Padding="8,0,8,4">
-                                    <ComboBoxItem Content="1x1 (Full Resolution)"/>
-                                    <ComboBoxItem Content="2x2 (Half Resolution)"/>
-                                    <ComboBoxItem Content="4x4 (Quarter Resolution)"/>
-                                </ComboBox>
-                            </StackPanel>
                         </StackPanel>
                     </v:CollapsiblePanelView.Content>
                 </v:CollapsiblePanelView>
 
+                <!-- Pattern Analysis Panel -->
                 <!-- Pattern Analysis Panel -->
                 <v:CollapsiblePanelView>
                     <v:CollapsiblePanelView.DataContext>
@@ -503,105 +448,246 @@
                     </v:CollapsiblePanelView.DataContext>
                     <v:CollapsiblePanelView.Content>
                         <StackPanel Spacing="16">
-                            <!-- Pattern Type Selection -->
-                            <StackPanel Spacing="6">
-                                <TextBlock Text="Pattern Type"
-                                           FontSize="13"
-                                           Foreground="#ffffff"/>
-                                <ComboBox SelectedIndex="{Binding SelectedPatternType}"
-                                          PlaceholderText="Select pattern type"
-                                          FontSize="13"
-                                          Padding="8,6"
-                                          HorizontalAlignment="Stretch">
-                                    <ComboBoxItem Content="Checker Board"/>
-                                    <ComboBoxItem Content="Dot Grid"/>
-                                    <ComboBoxItem Content="Circular Grid"/>
-                                    <ComboBoxItem Content="Concentric Circles"/>
-                                    <ComboBoxItem Content="Asymmetric Circles"/>
-                                </ComboBox>
-                            </StackPanel>
+                            <!-- Pattern Config File Selection -->
+                            <Border Background="#141414"
+                                    BorderBrush="#2f6fed"
+                                    BorderThickness="1"
+                                    CornerRadius="6"
+                                    Padding="12">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="Pattern Config File"
+                                               FontSize="13"
+                                               FontWeight="SemiBold"
+                                               Foreground="#ffffff"/>
+                                    <ComboBox ItemsSource="{Binding DataContext.AvailablePatternConfigs, ElementName=RootControl}"
+                                              SelectedItem="{Binding DataContext.SelectedPatternConfig, ElementName=RootControl}"
+                                              FontSize="13"
+                                              Padding="8,6"
+                                              HorizontalAlignment="Stretch"/>
+                                </StackPanel>
+                            </Border>
 
-                            <!-- Algorithm Code Selection -->
-                            <StackPanel Spacing="6">
-                                <TextBlock Text="Algorithm Code"
-                                           FontSize="13"
-                                           Foreground="#ffffff"/>
-                                <ComboBox SelectedIndex="{Binding SelectedAlgorithmCode}"
-                                          PlaceholderText="Select algorithm"
-                                          FontSize="13"
-                                          Padding="8,6"
-                                          HorizontalAlignment="Stretch">
-                                    <ComboBoxItem Content="HMF (Hierarchical Multi-Feature)"/>
-                                    <ComboBoxItem Content="SIFT (Scale-Invariant Feature Transform)"/>
-                                    <ComboBoxItem Content="SURF (Speeded Up Robust Features)"/>
-                                    <ComboBoxItem Content="ORB (Oriented FAST and Rotated BRIEF)"/>
-                                    <ComboBoxItem Content="Harris Corner Detection"/>
-                                    <ComboBoxItem Content="Blob Detection"/>
-                                </ComboBox>
-                            </StackPanel>
-
-                            <!-- Checker Board Pitch Configuration -->
-                            <Border IsVisible="{Binding SelectedPatternType, Converter={StaticResource CompareToZeroConverter}}"
-                                    Background="#1a1a1a"
+                            <!-- Pattern Config Info Display -->
+                            <Border Background="#1a1a1a"
                                     BorderBrush="#303030"
                                     BorderThickness="1"
                                     CornerRadius="6"
                                     Padding="12">
-                                <StackPanel Spacing="12">
-                                    <TextBlock Text="Checker Board Configuration"
-                                               FontSize="14"
-                                               FontWeight="SemiBold"
-                                               Foreground="#ffffff"/>
-
-                                    <!-- Inner Corners -->
-                                    <StackPanel Spacing="6">
-                                        <TextBlock Text="Inner Corners (for calibration)"
-                                                   FontSize="12"
-                                                   Foreground="#ffffff"/>
-                                        <v:TwoColumnInputControl/>
-                                    </StackPanel>
-
-                                    <!-- Pitch Dimensions -->
-                                    <StackPanel Spacing="6">
-                                        <TextBlock Text="Square Pitch (dimensions of each square)"
-                                                   FontSize="12"
-                                                   Foreground="#ffffff"/>
-                                        <v:TwoColumnInputControl>
-                                            <v:TwoColumnInputControl.DataContext>
-                                                <vm:TwoColumnInputViewModel
-                                                    LeftLabel="Pitch X (mm)"
-                                                    LeftValue="1.0"
-                                                    LeftMin="0.1"
-                                                    LeftMax="100"
-                                                    LeftFormat="F2"
-                                                    RightLabel="Pitch Y (mm)"
-                                                    RightValue="1.0"
-                                                    RightMin="0.1"
-                                                    RightMax="100"
-                                                    RightFormat="F2"/>
-                                            </v:TwoColumnInputControl.DataContext>
-                                            <v:TwoColumnInputControl.DataContext>
-                                                <vm:TwoColumnInputViewModel/>
-                                            </v:TwoColumnInputControl.DataContext>
-                                        </v:TwoColumnInputControl>
-                                    </StackPanel>
-
-                                    <!-- Unit Selection -->
-                                    <StackPanel Spacing="4">
-                                        <TextBlock Text="Unit"
-                                                   FontSize="12"
-                                                   Foreground="#ffffff"/>
-                                        <ComboBox SelectedIndex="{Binding CheckerBoardUnit, Converter={StaticResource UnitToIndexConverter}}"
-                                                  FontSize="13"
-                                                  Padding="8,4"
-                                                  HorizontalAlignment="Stretch">
-                                            <ComboBoxItem Content="Millimeters (mm)"/>
-                                            <ComboBoxItem Content="Micrometers (μm)"/>
-                                            <ComboBoxItem Content="Inches (in)"/>
-                                        </ComboBox>
-                                    </StackPanel>
+                                <StackPanel Spacing="10">
+                                    <!-- Type -->
+                                    <Grid ColumnDefinitions="100,*">
+                                        <TextBlock Grid.Column="0" 
+                                                   Text="Type" 
+                                                   FontSize="12" 
+                                                   Foreground="#aaaaaa" 
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" 
+                                                   Text="{Binding DataContext.PatternConfigType, ElementName=RootControl}" 
+                                                   FontSize="12" 
+                                                   Foreground="#ffffff" 
+                                                   VerticalAlignment="Center"
+                                                   Margin="12,0,0,0"/>
+                                    </Grid>
+                                    
+                                    <!-- Has Code -->
+                                    <Grid ColumnDefinitions="100,*">
+                                        <TextBlock Grid.Column="0" 
+                                                   Text="Has Code" 
+                                                   FontSize="12" 
+                                                   Foreground="#aaaaaa" 
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" 
+                                                   Text="{Binding DataContext.PatternHasCode, ElementName=RootControl}" 
+                                                   FontSize="12" 
+                                                   Foreground="#ffffff" 
+                                                   VerticalAlignment="Center"
+                                                   Margin="12,0,0,0"/>
+                                    </Grid>
+                                    
+                                    <!-- Pitch Size -->
+                                    <Grid ColumnDefinitions="100,*">
+                                        <TextBlock Grid.Column="0" 
+                                                   Text="Pitch Size" 
+                                                   FontSize="12" 
+                                                   Foreground="#aaaaaa" 
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" 
+                                                   Text="{Binding DataContext.PatternConfigPitchSize, ElementName=RootControl, StringFormat={}{0:F3}}" 
+                                                   FontSize="12" 
+                                                   Foreground="#ffffff" 
+                                                   VerticalAlignment="Center"
+                                                   Margin="12,0,0,0"/>
+                                    </Grid>
+                                    
+                                    <!-- Lenses -->
+                                    <Grid ColumnDefinitions="100,*">
+                                        <TextBlock Grid.Column="0" 
+                                                   Text="Lenses" 
+                                                   FontSize="12" 
+                                                   Foreground="#aaaaaa" 
+                                                   VerticalAlignment="Top"/>
+                                        <TextBlock Grid.Column="1" 
+                                                   Text="{Binding DataContext.PatternCompatibleLenses, ElementName=RootControl}" 
+                                                   FontSize="12" 
+                                                   Foreground="#ffffff" 
+                                                   TextWrapping="Wrap" 
+                                                   VerticalAlignment="Top"
+                                                   Margin="12,0,0,0"/>
+                                    </Grid>
                                 </StackPanel>
                             </Border>
+
+                            <!-- Advanced Mode Toggle -->
+                            <CheckBox IsChecked="{Binding AdvancedMode}"
+                                      Content="Advanced Mode"
+                                      FontSize="13"
+                                      Foreground="#ffffff"/>
+
+                            <!-- Advanced Configuration (only visible in Advanced Mode) -->
+                            <StackPanel Spacing="16" IsVisible="{Binding AdvancedMode}">
+                                <!-- Code Pitch Configuration -->
+                                <StackPanel Spacing="6">
+                                    <TextBlock Text="Code Pitch (blocks)"
+                                               FontSize="13"
+                                               Foreground="#ffffff"/>
+                                    <NumericUpDown Value="{Binding CodePitchBlocks}"
+                                                   IsEnabled="{Binding AdvancedMode}"
+                                                   Minimum="1"
+                                                   Maximum="20"
+                                                   Increment="1"
+                                                   FontSize="13"
+                                                   Padding="8,6"
+                                                   HorizontalAlignment="Stretch"/>
+                                </StackPanel>
+
+                                <!-- Pattern Type Selection -->
+                                <StackPanel Spacing="6">
+                                    <TextBlock Text="Pattern Type"
+                                               FontSize="13"
+                                               Foreground="#ffffff"/>
+                                    <ComboBox SelectedIndex="{Binding SelectedPatternType}"
+                                              IsEnabled="{Binding AdvancedMode}"
+                                              PlaceholderText="Select pattern type"
+                                              FontSize="13"
+                                              Padding="8,6"
+                                              HorizontalAlignment="Stretch">
+                                        <ComboBoxItem Content="Checker Board"/>
+                                        <ComboBoxItem Content="Dot Grid"/>
+                                        <ComboBoxItem Content="Circular Grid"/>
+                                        <ComboBoxItem Content="Concentric Circles"/>
+                                        <ComboBoxItem Content="Asymmetric Circles"/>
+                                    </ComboBox>
+                                </StackPanel>
+
+                                <!-- Algorithm Code Selection -->
+                                <StackPanel Spacing="6">
+                                    <TextBlock Text="Algorithm Code"
+                                               FontSize="13"
+                                               Foreground="#ffffff"/>
+                                    <ComboBox SelectedIndex="{Binding SelectedAlgorithmCode}"
+                                              IsEnabled="{Binding AdvancedMode}"
+                                              PlaceholderText="Select algorithm"
+                                              FontSize="13"
+                                              Padding="8,6"
+                                              HorizontalAlignment="Stretch">
+                                        <ComboBoxItem Content="HMF (Hierarchical Multi-Feature)"/>
+                                        <ComboBoxItem Content="SIFT (Scale-Invariant Feature Transform)"/>
+                                        <ComboBoxItem Content="SURF (Speeded Up Robust Features)"/>
+                                        <ComboBoxItem Content="ORB (Oriented FAST and Rotated BRIEF)"/>
+                                        <ComboBoxItem Content="Harris Corner Detection"/>
+                                        <ComboBoxItem Content="Blob Detection"/>
+                                    </ComboBox>
+                                </StackPanel>
+
+                                <!-- Checker Board Configuration -->
+                                <Border IsVisible="{Binding SelectedPatternType, Converter={StaticResource CompareToZeroConverter}}"
+                                        Background="#1a1a1a"
+                                        BorderBrush="#303030"
+                                        BorderThickness="1"
+                                        CornerRadius="6"
+                                        Padding="12">
+                                    <StackPanel Spacing="12">
+                                        <TextBlock Text="Checker Board Configuration"
+                                                   FontSize="14"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="#ffffff"/>
+
+                                        <!-- Inner Corners -->
+                                        <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                                            <StackPanel Grid.Column="0" Spacing="4">
+                                                <TextBlock Text="Columns"
+                                                           FontSize="12"
+                                                           Foreground="#ffffff"/>
+                                                <NumericUpDown Value="{Binding CheckerBoardColumns}"
+                                                               IsEnabled="{Binding AdvancedMode}"
+                                                               Minimum="2"
+                                                               Maximum="50"
+                                                               Increment="1"
+                                                               FontSize="13"
+                                                               HorizontalAlignment="Stretch"/>
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="1" Spacing="4">
+                                                <TextBlock Text="Rows"
+                                                           FontSize="12"
+                                                           Foreground="#ffffff"/>
+                                                <NumericUpDown Value="{Binding CheckerBoardRows}"
+                                                               IsEnabled="{Binding AdvancedMode}"
+                                                               Minimum="2"
+                                                               Maximum="50"
+                                                               Increment="1"
+                                                               FontSize="13"
+                                                               HorizontalAlignment="Stretch"/>
+                                            </StackPanel>
+                                        </Grid>
+
+                                        <!-- Pitch Dimensions -->
+                                        <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                                            <StackPanel Grid.Column="0" Spacing="4">
+                                                <TextBlock Text="Pitch X (mm)"
+                                                           FontSize="12"
+                                                           Foreground="#ffffff"/>
+                                                <NumericUpDown Value="{Binding CheckerBoardPitchX}"
+                                                               IsEnabled="{Binding AdvancedMode}"
+                                                               Minimum="0.1"
+                                                               Maximum="100"
+                                                               Increment="0.1"
+                                                               FormatString="F2"
+                                                               FontSize="13"
+                                                               HorizontalAlignment="Stretch"/>
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="1" Spacing="4">
+                                                <TextBlock Text="Pitch Y (mm)"
+                                                           FontSize="12"
+                                                           Foreground="#ffffff"/>
+                                                <NumericUpDown Value="{Binding CheckerBoardPitchY}"
+                                                               IsEnabled="{Binding AdvancedMode}"
+                                                               Minimum="0.1"
+                                                               Maximum="100"
+                                                               Increment="0.1"
+                                                               FormatString="F2"
+                                                               FontSize="13"
+                                                               HorizontalAlignment="Stretch"/>
+                                            </StackPanel>
+                                        </Grid>
+
+                                        <!-- Unit Selection -->
+                                        <StackPanel Spacing="4">
+                                            <TextBlock Text="Unit"
+                                                       FontSize="12"
+                                                       Foreground="#ffffff"/>
+                                            <ComboBox SelectedIndex="{Binding CheckerBoardUnit, Converter={StaticResource UnitToIndexConverter}}"
+                                                      IsEnabled="{Binding AdvancedMode}"
+                                                      FontSize="13"
+                                                      Padding="8,4"
+                                                      HorizontalAlignment="Stretch">
+                                                <ComboBoxItem Content="Millimeters (mm)"/>
+                                                <ComboBoxItem Content="Micrometers (μm)"/>
+                                                <ComboBoxItem Content="Inches (in)"/>
+                                            </ComboBox>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
                         </StackPanel>
                     </v:CollapsiblePanelView.Content>
                 </v:CollapsiblePanelView>

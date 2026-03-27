@@ -18,7 +18,11 @@ using PI;
     /// Get current position of an axis
     /// </summary>
     /// <param name="axisIndex">0-based axis index</param>
-    /// <returns>Current position in millimeters (linear) or degrees (rotation)</returns>
+    /// <returns>
+    /// Current position:
+    /// - PI Controller: nanometers (nm) for linear axes, microradians (µrad) for rotation axes
+    /// - SigmaKoki: micrometers (µm) for linear axes, degrees (°) for rotation axes
+    /// </returns>
     public abstract double GetPosition(int axisIndex);
 
     /// <summary>
@@ -42,6 +46,11 @@ using PI;
     public abstract bool AreAxesReferenced();
   }
 
+/// <summary>
+/// SigmaKoki controller implementation
+/// Units: MICROMETERS (µm) for linear axes, DEGREES (°) for rotation axes
+/// All position and movement values are in these units.
+/// </summary>
 public class SigmakokiController : StageController {
 
     private string[] axes = Array.Empty<string>();
@@ -557,7 +566,7 @@ public class SigmakokiController : StageController {
             {
                 if (int.TryParse(parts[axisIndex].Trim(), out int steps))
                 {
-                    // Convert steps to mm
+                    // Convert steps to µm (micrometers)
                     return steps / StepsPerMm;
                 }
             }
@@ -697,7 +706,7 @@ public class PIController : StageController {
     private const int NUMBEROFSTEPS = 2000;
 
     /// <summary>
-    /// PI controllers use MILLIMETERS for linear axes and DEGREES for rotation axes.
+    /// PI controllers use NANOMETERS (nm) for linear axes and MICRORADIANS (µrad) for rotation axes.
     /// All position and movement values are in these units.
     /// </summary>
 
@@ -1184,7 +1193,7 @@ public class PIController : StageController {
             return 0.0;
         }
 
-        // Position is returned in mm for linear axes, degrees for rotation
+        // Position is returned in nm for linear axes, µrad for rotation (PI controller)
         return position[0];
     }
 

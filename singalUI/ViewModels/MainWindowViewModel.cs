@@ -20,6 +20,20 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private string _applicationVersion = "6-DOF Calibrator Pro v2.4.1";
 
+    // Session Name from shared store
+    public string SessionName
+    {
+        get => singalUI.Services.SharedConfigParametersStore.Instance.SessionName;
+        set
+        {
+            if (singalUI.Services.SharedConfigParametersStore.Instance.SessionName != value)
+            {
+                singalUI.Services.SharedConfigParametersStore.Instance.SessionName = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
     partial void OnActiveTabChanged(string value)
     {
         StatusBarText = value switch
