@@ -329,7 +329,7 @@
                             </Grid>
 
                             <!-- FFT Focus Calculation -->
-                            <CheckBox IsChecked="{Binding EnableFftFocus}"
+                            <CheckBox IsChecked="{Binding EnableFftFocus, Mode=TwoWay}"
                                       Content="Enable FFT Focus Calculation"
                                       FontSize="13"
                                       Foreground="#ffffff"

@@ -17,8 +17,8 @@ namespace singalUI.Services
         /// <param name="width">Image width in pixels</param>
         /// <param name="height">Image height in pixels</param>
         /// <param name="downsampleFactor">Downsample factor for performance (1=full, 2=1/4, 4=1/16)</param>
-        /// <returns>Focus score 0-100 (0=blurry, 100=sharp)</returns>
-        public static double CalculateFFTFocus(
+        /// <returns>Tuple of (normalized focus score 0-100, raw average energy)</returns>
+        public static (double normalized, double rawEnergy) CalculateFFTFocus(
             byte[] grayBuffer, 
             int width, 
             int height, 
@@ -26,7 +26,14 @@ namespace singalUI.Services
         {
             if (grayBuffer == null || width <= 0 || height <= 0)
             {
-                return 0.0;
+                Console.WriteLine($"[FocusCalculator] Invalid input: buffer={grayBuffer?.Length ?? 0}, width={width}, height={height}");
+                return (0.0, 0.0);
+            }
+
+            if (grayBuffer.Length < width * height)
+            {
+                Console.WriteLine($"[FocusCalculator] Buffer too small: {grayBuffer.Length} < {width * height}");
+                return (0.0, 0.0);
             }
 
             try
@@ -34,43 +41,54 @@ namespace singalUI.Services
                 // Create Mat from grayscale buffer
                 using var mat = new Mat(height, width, MatType.CV_8UC1, grayBuffer);
                 
-                // Downsample for performance (4x = 1/16 resolution)
+                // Downsample for performance (2x = 1/4 resolution for better accuracy)
                 using var small = new Mat();
-                if (downsampleFactor > 1)
-                {
-                    int newW = width / downsampleFactor;
-                    int newH = height / downsampleFactor;
-                    Cv2.Resize(mat, small, new Size(newW, newH), interpolation: InterpolationFlags.Area);
-                }
-                else
-                {
-                    mat.CopyTo(small);
-                }
+                int newW = width / 2;
+                int newH = height / 2;
+                Cv2.Resize(mat, small, new Size(newW, newH), interpolation: InterpolationFlags.Area);
 
-                // Convert to float32 for FFT
-                using var floatMat = new Mat();
-                small.ConvertTo(floatMat, MatType.CV_32F);
+                // Extract center region (60% of image) for more accurate focus measurement
+                int roiWidth = (int)(small.Width * 0.6);
+                int roiHeight = (int)(small.Height * 0.6);
+                int roiX = (small.Width - roiWidth) / 2;
+                int roiY = (small.Height - roiHeight) / 2;
+                using var centerROI = new Mat(small, new Rect(roiX, roiY, roiWidth, roiHeight));
 
-                // Perform 2D FFT
-                using var fftResult = new Mat();
-                Cv2.Dft(floatMat, fftResult, DftFlags.ComplexOutput);
-
-                // Split into real and imaginary parts
-                Mat[] planes = Cv2.Split(fftResult);
+                // Method 1: Laplacian variance (edge sharpness)
+                using var laplacian = new Mat();
+                Cv2.Laplacian(centerROI, laplacian, MatType.CV_64F, ksize: 3);
+                Cv2.MeanStdDev(laplacian, out var meanLap, out var stddevLap);
+                double varianceLap = stddevLap.Val0 * stddevLap.Val0;
                 
-                // Calculate magnitude spectrum
+                // Method 2: Sobel gradient magnitude (directional edges)
+                using var sobelX = new Mat();
+                using var sobelY = new Mat();
+                Cv2.Sobel(centerROI, sobelX, MatType.CV_64F, 1, 0, ksize: 3);
+                Cv2.Sobel(centerROI, sobelY, MatType.CV_64F, 0, 1, ksize: 3);
+                
+                using var gradMag = new Mat();
+                Cv2.Magnitude(sobelX, sobelY, gradMag);
+                Cv2.MeanStdDev(gradMag, out var meanGrad, out var stddevGrad);
+                double avgGradient = meanGrad.Val0;
+                
+                // Method 3: High-frequency content via FFT
+                using var floatROI = new Mat();
+                centerROI.ConvertTo(floatROI, MatType.CV_32F);
+                using var fftResult = new Mat();
+                Cv2.Dft(floatROI, fftResult, DftFlags.ComplexOutput);
+                
+                Mat[] planes = Cv2.Split(fftResult);
                 using var magnitude = new Mat();
                 Cv2.Magnitude(planes[0], planes[1], magnitude);
-
-                // Calculate high-frequency energy (outer 50% of spectrum)
+                
+                // Calculate high-frequency energy (outer 40% of spectrum)
                 int centerX = magnitude.Width / 2;
                 int centerY = magnitude.Height / 2;
-                int innerRadius = Math.Min(centerX, centerY) / 2;
-
+                int innerRadius = (int)(Math.Min(centerX, centerY) * 0.6);
+                
                 double highFreqEnergy = 0.0;
                 int count = 0;
-
-                // Sum energy in high-frequency regions (outside inner circle)
+                
                 for (int y = 0; y < magnitude.Height; y++)
                 {
                     for (int x = 0; x < magnitude.Width; x++)
@@ -78,8 +96,7 @@ namespace singalUI.Services
                         int dx = x - centerX;
                         int dy = y - centerY;
                         double dist = Math.Sqrt(dx * dx + dy * dy);
-
-                        // Only count high-frequency components (outer region)
+                        
                         if (dist > innerRadius)
                         {
                             highFreqEnergy += magnitude.At<float>(y, x);
@@ -87,46 +104,78 @@ namespace singalUI.Services
                         }
                     }
                 }
-
-                // Cleanup Mat arrays
+                
                 foreach (var plane in planes)
                 {
                     plane.Dispose();
                 }
-
-                // Calculate average high-frequency energy
-                double avgEnergy = count > 0 ? highFreqEnergy / count : 0.0;
-
-                // Normalize to 0-100 scale
-                return NormalizeFFTScore(avgEnergy);
+                
+                double avgHighFreq = count > 0 ? highFreqEnergy / count : 0.0;
+                
+                // Combine all three metrics with weights
+                // Laplacian: 40%, Gradient: 30%, FFT: 30%
+                double combinedScore = 
+                    NormalizeLaplacianScore(varianceLap) * 0.4 +
+                    NormalizeGradientScore(avgGradient) * 0.3 +
+                    NormalizeFFTScore(avgHighFreq) * 0.3;
+                
+                // Use Laplacian variance as the "raw" value for display
+                double rawValue = varianceLap;
+                
+                Console.WriteLine($"[FocusCalculator] Lap={varianceLap:F0}, Grad={avgGradient:F1}, FFT={avgHighFreq:F1} → Combined={combinedScore:F1}%");
+                
+                return (combinedScore, rawValue);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[FocusCalculator] FFT error: {ex.Message}");
-                return 0.0;
+                Console.WriteLine($"[FocusCalculator] Focus calculation error: {ex.Message}");
+                return (0.0, 0.0);
             }
         }
 
         /// <summary>
-        /// Normalize raw FFT energy to 0-100 scale
-        /// Uses logarithmic scaling for better discrimination at high focus levels
+        /// Normalize Laplacian variance to 0-100 scale
         /// </summary>
-        /// <param name="rawEnergy">Raw FFT high-frequency energy</param>
-        /// <returns>Normalized focus score 0-100</returns>
-        private static double NormalizeFFTScore(double rawEnergy)
+        private static double NormalizeLaplacianScore(double variance)
         {
-            // Typical range for raw FFT energy: 0-2000
-            // Use logarithmic scaling for better discrimination
-            // log10(1) = 0, log10(10) = 1, log10(100) = 2, log10(1000) = 3
+            // Calibrated for typical camera variance: 10000-150000
+            if (variance < 1000.0)
+            {
+                return 0.0;
+            }
             
-            // Add 1 to avoid log(0)
-            double logEnergy = Math.Log10(rawEnergy + 1);
+            double logVariance = Math.Log10(variance);
+            // Map log(10000)=4 to log(150000)=5.18 → 0 to 100
+            double normalized = (logVariance - 4.0) / 1.2 * 100.0;
             
-            // Scale to 0-100 range
-            // log10(2000) ≈ 3.3, so multiply by ~30 to get 0-100 range
-            double normalized = logEnergy * 30.0;
+            return Math.Clamp(normalized, 0.0, 100.0);
+        }
+        
+        /// <summary>
+        /// Normalize gradient magnitude to 0-100 scale
+        /// </summary>
+        private static double NormalizeGradientScore(double avgGradient)
+        {
+            // Typical gradient range: 5-50
+            double normalized = (avgGradient - 5.0) / 45.0 * 100.0;
+            return Math.Clamp(normalized, 0.0, 100.0);
+        }
+        
+        /// <summary>
+        /// Normalize FFT high-frequency energy to 0-100 scale
+        /// </summary>
+        private static double NormalizeFFTScore(double avgEnergy)
+        {
+            // Typical FFT energy range: 10-1000
+            if (avgEnergy < 10.0)
+            {
+                return 0.0;
+            }
             
-            // Clamp to 0-100
+            double logEnergy = Math.Log10(avgEnergy);
+            // Map log(10)=1 to log(1000)=3 → 0 to 100
+            double normalized = (logEnergy - 1.0) / 2.0 * 100.0;
+            
             return Math.Clamp(normalized, 0.0, 100.0);
         }
     }

@@ -81,7 +81,7 @@ public class CameraConfig
 
     // FFT Focus Calculation
     [JsonPropertyName("enableFftFocus")]
-    public bool EnableFftFocus { get; set; } = false;
+    public bool EnableFftFocus { get; set; } = true;
 
     [JsonPropertyName("fftCalculationInterval")]
     public int FftCalculationInterval { get; set; } = 10;

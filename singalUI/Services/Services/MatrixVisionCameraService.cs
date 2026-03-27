@@ -80,7 +80,10 @@ namespace singalUI.Services
                 Console.WriteLine($"=== [MatrixVision] MVIMPACT_ACQUIRE: {mvPath ?? "NOT SET"}");
 
                 Console.WriteLine("=== [MatrixVision] Updating device list ===");
+                // Force device manager to refresh - call multiple times to ensure detection
                 DeviceManager.updateDeviceList();
+                System.Threading.Thread.Sleep(100); // Brief delay for device enumeration
+                DeviceManager.updateDeviceList(); // Second call to catch any delayed devices
 
                 Console.WriteLine($"=== [MatrixVision] Device count: {DeviceManager.deviceCount} ===");
                 if (DeviceManager.deviceCount == 0)
@@ -340,7 +343,12 @@ namespace singalUI.Services
         /// </summary>
         public void SetExposure(double exposureUs)
         {
-            if (_device == null) return;
+            Console.WriteLine($"[MatrixVision] SetExposure called with {exposureUs:F1} µs");
+            if (_device == null)
+            {
+                Console.WriteLine($"[MatrixVision] SetExposure failed: device is null");
+                return;
+            }
             try
             {
                 lock (_lock)
@@ -353,14 +361,21 @@ namespace singalUI.Services
 
                     if (acqCtrl.exposureTime.isValid)
                     {
+                        double before = acqCtrl.exposureTime.read();
                         acqCtrl.exposureTime.write(exposureUs);
                         double applied = acqCtrl.exposureTime.read();
+                        Console.WriteLine($"[MatrixVision] Exposure changed: {before:F1} → {applied:F1} µs (requested: {exposureUs:F1})");
                         StatusChanged?.Invoke($"Exposure applied: {applied:F1} us");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"[MatrixVision] SetExposure failed: exposureTime property not valid");
                     }
                 }
             }
             catch (Exception ex)
             {
+                Console.WriteLine($"[MatrixVision] SetExposure exception: {ex.Message}");
                 StatusChanged?.Invoke($"Exposure apply failed: {ex.Message}");
             }
         }
@@ -383,7 +398,12 @@ namespace singalUI.Services
         /// </summary>
         public void SetGain(double gain)
         {
-            if (_device == null) return;
+            Console.WriteLine($"[MatrixVision] SetGain called with {gain:F2} dB");
+            if (_device == null)
+            {
+                Console.WriteLine($"[MatrixVision] SetGain failed: device is null");
+                return;
+            }
             try
             {
                 lock (_lock)
@@ -396,14 +416,21 @@ namespace singalUI.Services
 
                     if (analogCtrl.gain.isValid)
                     {
+                        double before = analogCtrl.gain.read();
                         analogCtrl.gain.write(gain);
                         double applied = analogCtrl.gain.read();
+                        Console.WriteLine($"[MatrixVision] Gain changed: {before:F2} → {applied:F2} dB (requested: {gain:F2})");
                         StatusChanged?.Invoke($"Gain applied: {applied:F2} dB");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"[MatrixVision] SetGain failed: gain property not valid");
                     }
                 }
             }
             catch (Exception ex)
             {
+                Console.WriteLine($"[MatrixVision] SetGain exception: {ex.Message}");
                 StatusChanged?.Invoke($"Gain apply failed: {ex.Message}");
             }
         }

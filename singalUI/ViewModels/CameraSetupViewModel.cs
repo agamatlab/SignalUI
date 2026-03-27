@@ -188,7 +188,16 @@ namespace singalUI.ViewModels
 
         // FFT Focus Calculation
         [ObservableProperty]
-        private bool _enableFftFocus = false;  // Default: disabled (checkbox unchecked)
+        private bool _enableFftFocus = true;  // Default: enabled (checkbox checked)
+
+        partial void OnEnableFftFocusChanged(bool value)
+        {
+            Console.WriteLine($"[FFT Focus] EnableFftFocus changed to: {value}");
+            if (value)
+            {
+                Console.WriteLine($"[FFT Focus] FFT enabled - will calculate every {FftCalculationInterval} frames");
+            }
+        }
 
         [ObservableProperty]
         private int _fftCalculationInterval = 10;  // Calculate every 10 frames (for performance)
@@ -299,6 +308,9 @@ namespace singalUI.ViewModels
 
         public CameraSetupViewModel()
         {
+            Console.WriteLine("===========================================");
+            Console.WriteLine("=== NEW CODE VERSION 2024-03-27 21:06 ===");
+            Console.WriteLine("===========================================");
             Console.WriteLine("[CameraSetupViewModel] Constructor START");
             // Initialize logging
             File.WriteAllText(_logFile, $"=== Log started at {DateTime.Now:O} ===\n");
@@ -456,31 +468,46 @@ namespace singalUI.ViewModels
                 FrameCount = seq;
                 _lastRenderedSeq = seq;
 
-                // Calculate real focus quality using FFT (only if enabled)
-                if (EnableFftFocus && seq % FftCalculationInterval == 0)
+                // Debug: Log FFT state every 100 frames
+                if (seq % 100 == 0)
                 {
-                    try
+                    Log($"[FFT Debug] Frame {seq}: EnableFftFocus={EnableFftFocus}, Interval={FftCalculationInterval}, FocusLevel={FocusLevel:F1}");
+                }
+
+                // Calculate real focus quality using FFT (only if enabled)
+                if (EnableFftFocus)
+                {
+                    if (seq % FftCalculationInterval == 0)
                     {
-                        double rawFocus = FocusCalculator.CalculateFFTFocus(buffer, width, height, downsampleFactor: 4);
-                        RawFocusValue = rawFocus;
-                        FocusLevel = rawFocus;  // Already normalized to 0-100
-                        
-                        // Log every 60 calculations
-                        if (seq % (FftCalculationInterval * 60) == 0)
+                        try
                         {
-                            Log($"[FFT Focus] Frame {seq}: {FocusLevel:F1}% (raw: {RawFocusValue:F2})");
+                            Log($"[FFT Focus] Starting calculation for frame {seq}...");
+                            var (normalized, rawEnergy) = FocusCalculator.CalculateFFTFocus(buffer, width, height, downsampleFactor: 4);
+                            RawFocusValue = rawEnergy;
+                            FocusLevel = normalized;  // Normalized to 0-100
+                            
+                            Log($"[FFT Focus] Frame {seq}: {FocusLevel:F1}% (raw energy: {RawFocusValue:F2})");
+                            
+                            // Log raw energy for calibration (every 10 calculations)
+                            if (seq % (FftCalculationInterval * 10) == 0)
+                            {
+                                Log($"[FFT Focus] Calibration info: raw={RawFocusValue:F2}, normalized={FocusLevel:F1}%");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Log($"[FFT Focus] Calculation error: {ex.Message}");
+                            Log($"[FFT Focus] Stack trace: {ex.StackTrace}");
+                            FocusLevel = 0.0; // Set to 0 on error to indicate problem
                         }
                     }
-                    catch (Exception ex)
-                    {
-                        Log($"[FFT Focus] Calculation error: {ex.Message}");
-                        // Keep previous FocusLevel value on error
-                    }
+                    // When FFT is enabled but not on interval frame, keep previous FocusLevel
                 }
-                else if (!EnableFftFocus)
+                else
                 {
                     // When FFT is disabled, show a neutral value
                     FocusLevel = 50.0;
+                    RawFocusValue = 0.0;
                 }
             }
             catch (Exception ex)
@@ -535,9 +562,11 @@ namespace singalUI.ViewModels
         {
             if (parameters == null)
             {
+                Console.WriteLine("[HookCameraParameters] Parameters is null");
                 return;
             }
 
+            Console.WriteLine($"[HookCameraParameters] Hooking up property changed events for CameraParameters");
             parameters.PropertyChanged -= OnCameraParametersPropertyChanged;
             parameters.PropertyChanged += OnCameraParametersPropertyChanged;
             ResetAppliedCameraParameters();
@@ -545,6 +574,7 @@ namespace singalUI.ViewModels
 
         private void OnCameraParametersPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
         {
+            Console.WriteLine($"[CameraParam] Property changed: {e.PropertyName}");
             ResetAppliedCameraParameters();
             TryApplyLiveCameraParameters();
         }
@@ -562,6 +592,11 @@ namespace singalUI.ViewModels
             var cameraService = App.CameraService;
             if (cameraService == null || !cameraService.IsConnected)
             {
+                // Don't spam logs, but log occasionally
+                if (DateTime.UtcNow.Second % 10 == 0)
+                {
+                    Console.WriteLine($"[TryApply] Camera not connected - service null: {cameraService == null}, connected: {cameraService?.IsConnected ?? false}");
+                }
                 return;
             }
 
@@ -584,11 +619,18 @@ namespace singalUI.ViewModels
             bool gainChanged = !_lastAppliedGain.HasValue || Math.Abs(gain - _lastAppliedGain.Value) > 0.001;
             bool fpsChanged = !_lastAppliedFps.HasValue || Math.Abs(fps - _lastAppliedFps.Value) > 0.001;
 
+            // Log every time we check (for debugging)
+            if (exposureChanged || gainChanged || fpsChanged)
+            {
+                Console.WriteLine($"[TryApply] Changes detected - Exp:{exposureChanged} Gain:{gainChanged} FPS:{fpsChanged}");
+            }
+
             if (exposureChanged)
             {
                 cameraService.SetExposure(effectiveExposure);
                 _lastAppliedExposure = exposure;
                 _lastAppliedEffectiveExposure = effectiveExposure;
+                Console.WriteLine($"[Illumination] Applied: exposure={exposure:F1}µs × illumination={illumination:F0}% = effective={effectiveExposure:F1}µs");
             }
 
             if (gainChanged)
@@ -906,11 +948,19 @@ namespace singalUI.ViewModels
                     cameraService.StopAcquisition();
                     IsAcquiring = false;
 
-                    // Re-initialize camera
+                    // Add a small delay to ensure cleanup completes
+                    await Task.Delay(200);
+
+                    // Re-initialize camera (this will call updateDeviceList)
                     var success = await Task.Run(() => cameraService.Initialize());
                     CameraConnected = success;
-                    CameraStatus = success ? "Connected" : "Failed to connect";
+                    CameraStatus = success ? "Connected" : "Failed to connect - Check camera power and connection";
                     Log($"[RefreshConnection] Camera: {(success ? "Connected" : "Failed")}");
+                    
+                    if (!success)
+                    {
+                        Log("[RefreshConnection] Tip: Ensure camera is powered on and connected before clicking reconnect");
+                    }
                 }
                 else
                 {
