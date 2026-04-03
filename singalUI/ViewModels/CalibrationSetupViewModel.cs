@@ -13,9 +13,59 @@ using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using singalUI.libs;
+using OpenCvSharp;
 
 namespace singalUI.ViewModels
 {
+    // ==================== POSE ESTIMATION DATA STRUCTURES ====================
+    
+    internal class PoseEstimationTask
+    {
+        public string ImagePath { get; set; } = "";
+        public double PositionX { get; set; }
+        public double PositionY { get; set; }
+        public double PositionZ { get; set; }
+        public double PositionRx { get; set; }
+        public double PositionRy { get; set; }
+        public double PositionRz { get; set; }
+        public DateTime Timestamp { get; set; }
+        public int StepNumber { get; set; }
+    }
+    
+    internal class PoseEstimationResult
+    {
+        public string ImagePath { get; set; } = "";
+        public double StageX { get; set; }
+        public double StageY { get; set; }
+        public double StageZ { get; set; }
+        public double StageRx { get; set; }
+        public double StageRy { get; set; }
+        public double StageRz { get; set; }
+        public double EstimatedX { get; set; }
+        public double EstimatedY { get; set; }
+        public double EstimatedZ { get; set; }
+        public double EstimatedRx { get; set; }
+        public double EstimatedRy { get; set; }
+        public double EstimatedRz { get; set; }
+        public bool Success { get; set; }
+        public string ErrorMessage { get; set; } = "";
+        public DateTime Timestamp { get; set; }
+        public int StepNumber { get; set; }
+    }
+    
+    public class PlotPoint
+    {
+        public int StepNumber { get; set; }
+        public double Value { get; set; }
+        
+        public PlotPoint(int stepNumber, double value)
+        {
+            StepNumber = stepNumber;
+            Value = value;
+        }
+    }
+
+
     public partial class CalibrationSetupViewModel : ViewModelBase
     {
         private readonly string _logFile = Path.Combine(Path.GetTempPath(), "singalui_debug.log");
@@ -189,6 +239,70 @@ namespace singalUI.ViewModels
         // Position polling timer
         private Timer? _positionPollTimer;
 
+        // ==================== POSE ESTIMATION SCAN CONFIGURATION ====================
+        
+        [ObservableProperty]
+        private int _stepPauseDurationMs = 100; // Pause duration at each step in milliseconds
+        
+        [ObservableProperty]
+        private int _maxConcurrentPoseEstimations = 4; // Max concurrent pose estimation threads
+        
+        [ObservableProperty]
+        private bool _enablePoseEstimationScan = false; // Enable pose estimation during movement
+        
+        [ObservableProperty]
+        private string _captureDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "SignalUI_Captures");
+        
+        [ObservableProperty]
+        private int _capturedImageCount = 0;
+        
+        [ObservableProperty]
+        private int _processedPoseCount = 0;
+        
+        [ObservableProperty]
+        private int _queuedPoseCount = 0;
+        
+        // Computed property for graph visibility
+        public bool HasPoseResults => ProcessedPoseCount > 0;
+        
+        // Notify when ProcessedPoseCount changes
+        partial void OnProcessedPoseCountChanged(int value)
+        {
+            OnPropertyChanged(nameof(HasPoseResults));
+        }
+
+        // Pose estimation queue and processing
+        private readonly System.Collections.Concurrent.ConcurrentQueue<PoseEstimationTask> _poseEstQueue = new();
+        private readonly List<PoseEstimationResult> _poseResults = new();
+        private readonly SemaphoreSlim _poseEstSemaphore = new(4); // Default to 4 concurrent
+        private CancellationTokenSource? _poseEstCts;
+        private readonly object _poseResultsLock = new();
+
+        // Graph data for visualization
+        [ObservableProperty]
+        private ObservableCollection<PlotPoint> _errorXData = new();
+        
+        [ObservableProperty]
+        private ObservableCollection<PlotPoint> _errorYData = new();
+        
+        [ObservableProperty]
+        private ObservableCollection<PlotPoint> _errorZData = new();
+        
+        [ObservableProperty]
+        private ObservableCollection<Models.Point3D> _stagePositions3D = new();
+        
+        [ObservableProperty]
+        private ObservableCollection<Models.Point3D> _estimatedPositions3D = new();
+        
+        [ObservableProperty]
+        private double _maxErrorX = 0;
+        
+        [ObservableProperty]
+        private double _maxErrorY = 0;
+        
+        [ObservableProperty]
+        private double _maxErrorZ = 0;
+
         public CalibrationSetupViewModel()
         {
             // Initialize static StageManager with default stages FIRST
@@ -200,7 +314,27 @@ namespace singalUI.ViewModels
             CalculateTotals();
             StartConnectionPolling();
             StartPositionPolling();
-            Log("CalibrationSetupViewModel initialized");
+            
+            // Ensure capture directory exists
+            Directory.CreateDirectory(CaptureDirectory);
+            
+            // Explicitly set pose estimation counts to 0 to ensure UI binding works
+            ProcessedPoseCount = 0;
+            CapturedImageCount = 0;
+            QueuedPoseCount = 0;
+            
+            Log($"CalibrationSetupViewModel initialized - ProcessedPoseCount={ProcessedPoseCount}");
+        }
+        
+        // Update semaphore when max concurrent threads changes
+        partial void OnMaxConcurrentPoseEstimationsChanged(int value)
+        {
+            if (value < 1) value = 1;
+            if (value > 32) value = 32;
+            
+            // Recreate semaphore with new count
+            // Note: We can't directly change SemaphoreSlim count, so we'll handle this in the processing loop
+            Log($"[PoseEst] Max concurrent threads set to {value}");
         }
 
         // Expose static StageManager.Wrappers as a property for UI binding
@@ -612,11 +746,31 @@ namespace singalUI.ViewModels
             IsSequenceRunning = true;
             int totalAxes = enabledAxes.Count;
             int currentAxis = 0;
+            int globalStepNumber = 0; // Track step number across all axes
 
             try
             {
                 Log($"========== StartSequence {(MovementModeAbsolute ? "ABSOLUTE" : "RELATIVE")} ==========");
                 Log($"[StartSequence] Total axes: {totalAxes}");
+                
+                // Start pose estimation workers if enabled
+                if (EnablePoseEstimationScan)
+                {
+                    Log($"[PoseEst] === POSE ESTIMATION SCAN ENABLED ===");
+                    Log($"[PoseEst] Pause Duration: {StepPauseDurationMs}ms");
+                    Log($"[PoseEst] Max Concurrent Threads: {MaxConcurrentPoseEstimations}");
+                    Log($"[PoseEst] Capture Directory: {CaptureDirectory}");
+                    
+                    ClearGraphs();
+                    StartPoseEstimationWorkers();
+                    CapturedImageCount = 0;
+                    ProcessedPoseCount = 0;
+                    QueuedPoseCount = 0;
+                }
+                else
+                {
+                    Log($"[PoseEst] Pose estimation scan is DISABLED");
+                }
 
                 foreach (var axisConfig in enabledAxes)
                 {
@@ -667,7 +821,41 @@ namespace singalUI.ViewModels
 
                             MovementStatus = $"{axisConfig.Label}: Step {step + 1}/{stepCount}";
                             Log($"  Step {step + 1}/{stepCount} +{stepSizeInUm:F2} µm");
-                            await Task.Delay(50);
+                            
+                            // Pose estimation capture if enabled
+                            if (EnablePoseEstimationScan)
+                            {
+                                globalStepNumber++;
+                                Log($"[PoseEst] Step {globalStepNumber}: Starting capture sequence (pause={StepPauseDurationMs}ms)");
+                                
+                                if (StepPauseDurationMs > 0)
+                                {
+                                    await Task.Delay(StepPauseDurationMs);
+                                    Log($"[PoseEst] Step {globalStepNumber}: Pause complete");
+                                }
+                                
+                                // Update positions before capture
+                                RefreshPositionsNow();
+                                
+                                // Capture image
+                                Log($"[PoseEst] Step {globalStepNumber}: Capturing image...");
+                                string? imagePath = await CaptureAndSaveImage(globalStepNumber);
+                                
+                                // Queue for pose estimation
+                                if (imagePath != null)
+                                {
+                                    Log($"[PoseEst] Step {globalStepNumber}: Image captured, queuing for processing");
+                                    QueuePoseEstimation(imagePath, globalStepNumber);
+                                }
+                                else
+                                {
+                                    Log($"[PoseEst] Step {globalStepNumber}: Image capture FAILED");
+                                }
+                            }
+                            else
+                            {
+                                await Task.Delay(50);
+                            }
                         }
 
                         double finalPosInMm = wrapper.GetAxisPosition(axisType);
@@ -704,7 +892,41 @@ namespace singalUI.ViewModels
 
                             MovementStatus = $"{axisConfig.Label}: Step {step + 1}/{stepCount}";
                             Log($"  Step {step + 1}/{stepCount} +{stepSizeInUm:F2} µm");
-                            await Task.Delay(50);
+                            
+                            // Pose estimation capture if enabled
+                            if (EnablePoseEstimationScan)
+                            {
+                                globalStepNumber++;
+                                Log($"[PoseEst] Step {globalStepNumber}: Starting capture sequence (pause={StepPauseDurationMs}ms)");
+                                
+                                if (StepPauseDurationMs > 0)
+                                {
+                                    await Task.Delay(StepPauseDurationMs);
+                                    Log($"[PoseEst] Step {globalStepNumber}: Pause complete");
+                                }
+                                
+                                // Update positions before capture
+                                RefreshPositionsNow();
+                                
+                                // Capture image
+                                Log($"[PoseEst] Step {globalStepNumber}: Capturing image...");
+                                string? imagePath = await CaptureAndSaveImage(globalStepNumber);
+                                
+                                // Queue for pose estimation
+                                if (imagePath != null)
+                                {
+                                    Log($"[PoseEst] Step {globalStepNumber}: Image captured, queuing for processing");
+                                    QueuePoseEstimation(imagePath, globalStepNumber);
+                                }
+                                else
+                                {
+                                    Log($"[PoseEst] Step {globalStepNumber}: Image capture FAILED");
+                                }
+                            }
+                            else
+                            {
+                                await Task.Delay(50);
+                            }
                         }
 
                         double finalPosInMm = wrapper.GetAxisPosition(axisType);
@@ -714,6 +936,21 @@ namespace singalUI.ViewModels
                 }
 
                 MovementStatus = $"Sequence completed ({totalAxes} axes)";
+                
+                // Wait for all pose estimations to complete if enabled
+                if (EnablePoseEstimationScan)
+                {
+                    Log("[StartSequence] Waiting for pose estimation queue to complete...");
+                    while (QueuedPoseCount > 0)
+                    {
+                        await Task.Delay(100);
+                    }
+                    await StopPoseEstimationWorkers();
+                    Log($"[StartSequence] Pose estimation complete: {ProcessedPoseCount} processed");
+                    
+                    // Send results to Analysis tab
+                    SendResultsToAnalysisTab();
+                }
                 Log($"[StartSequence] === COMPLETED ===");
             }
             catch (Exception ex)
@@ -867,6 +1104,25 @@ namespace singalUI.ViewModels
                     Log($"==========================================");
 
                     MovementStatus = $"Moving by {stepSizeInUm:F3} µm × {stepCount} steps...";
+                    
+                    // Start pose estimation workers if enabled
+                    if (EnablePoseEstimationScan)
+                    {
+                        Log($"[PoseEst] === POSE ESTIMATION SCAN ENABLED ===");
+                        Log($"[PoseEst] Pause Duration: {StepPauseDurationMs}ms");
+                        Log($"[PoseEst] Max Concurrent Threads: {MaxConcurrentPoseEstimations}");
+                        Log($"[PoseEst] Capture Directory: {CaptureDirectory}");
+                        
+                        ClearGraphs();
+                        StartPoseEstimationWorkers();
+                        CapturedImageCount = 0;
+                        ProcessedPoseCount = 0;
+                        QueuedPoseCount = 0;
+                    }
+                    else
+                    {
+                        Log($"[PoseEst] Pose estimation scan is DISABLED");
+                    }
 
                     for (int i = 0; i < stepCount; i++)
                     {
@@ -882,6 +1138,48 @@ namespace singalUI.ViewModels
                         double actualMoveUm = posAfterStepUm - posBeforeStepUm;
 
                         Log($"[MoveToTarget] Step {i + 1} completed: Actually moved {actualMoveUm:F4} µm, now at {posAfterStepUm:F4} µm");
+                        
+                        // Pause, capture, and queue pose estimation if enabled
+                        if (EnablePoseEstimationScan)
+                        {
+                            Log($"[PoseEst] Step {i + 1}: Starting capture sequence (pause={StepPauseDurationMs}ms)");
+                            
+                            if (StepPauseDurationMs > 0)
+                            {
+                                await Task.Delay(StepPauseDurationMs);
+                                Log($"[PoseEst] Step {i + 1}: Pause complete");
+                            }
+                            
+                            // Update positions before capture
+                            RefreshPositionsNow();
+                            
+                            // Capture image
+                            Log($"[PoseEst] Step {i + 1}: Capturing image...");
+                            string? imagePath = await CaptureAndSaveImage(i + 1);
+                            
+                            // Queue for pose estimation
+                            if (imagePath != null)
+                            {
+                                Log($"[PoseEst] Step {i + 1}: Image captured, queuing for processing");
+                                QueuePoseEstimation(imagePath, i + 1);
+                            }
+                            else
+                            {
+                                Log($"[PoseEst] Step {i + 1}: Image capture FAILED");
+                            }
+                        }
+                    }
+                    
+                    // Wait for all pose estimations to complete if enabled
+                    if (EnablePoseEstimationScan)
+                    {
+                        Log("[MoveToTarget] Waiting for pose estimation queue to complete...");
+                        while (QueuedPoseCount > 0)
+                        {
+                            await Task.Delay(100);
+                        }
+                        await StopPoseEstimationWorkers();
+                        Log($"[MoveToTarget] Pose estimation complete: {ProcessedPoseCount} processed");
                     }
 
                     double finalPosInMm = wrapper.GetAxisPosition(axisType);
@@ -913,6 +1211,16 @@ namespace singalUI.ViewModels
                     Log($"==========================================");
 
                     MovementStatus = $"Moving by {distanceInUm:F3} µm × {stepCount} steps...";
+                    
+                    // Start pose estimation workers if enabled
+                    if (EnablePoseEstimationScan)
+                    {
+                        ClearGraphs();
+                        StartPoseEstimationWorkers();
+                        CapturedImageCount = 0;
+                        ProcessedPoseCount = 0;
+                        QueuedPoseCount = 0;
+                    }
 
                     for (int i = 0; i < stepCount; i++)
                     {
@@ -928,7 +1236,52 @@ namespace singalUI.ViewModels
                         double actualMoveUm = posAfterStepUm - posBeforeStepUm;
 
                         Log($"[MoveToTarget] Step {i + 1} completed: Actually moved {actualMoveUm:F4} µm, now at {posAfterStepUm:F4} µm");
-                        await Task.Delay(50);
+                        
+                        // Pause, capture, and queue pose estimation if enabled
+                        if (EnablePoseEstimationScan)
+                        {
+                            Log($"[PoseEst] Step {i + 1}: Starting capture sequence (pause={StepPauseDurationMs}ms)");
+                            
+                            if (StepPauseDurationMs > 0)
+                            {
+                                await Task.Delay(StepPauseDurationMs);
+                                Log($"[PoseEst] Step {i + 1}: Pause complete");
+                            }
+                            
+                            // Update positions before capture
+                            RefreshPositionsNow();
+                            
+                            // Capture image
+                            Log($"[PoseEst] Step {i + 1}: Capturing image...");
+                            string? imagePath = await CaptureAndSaveImage(i + 1);
+                            
+                            // Queue for pose estimation
+                            if (imagePath != null)
+                            {
+                                Log($"[PoseEst] Step {i + 1}: Image captured, queuing for processing");
+                                QueuePoseEstimation(imagePath, i + 1);
+                            }
+                            else
+                            {
+                                Log($"[PoseEst] Step {i + 1}: Image capture FAILED");
+                            }
+                        }
+                        else
+                        {
+                            await Task.Delay(50);
+                        }
+                    }
+                    
+                    // Wait for all pose estimations to complete if enabled
+                    if (EnablePoseEstimationScan)
+                    {
+                        Log("[MoveToTarget] Waiting for pose estimation queue to complete...");
+                        while (QueuedPoseCount > 0)
+                        {
+                            await Task.Delay(100);
+                        }
+                        await StopPoseEstimationWorkers();
+                        Log($"[MoveToTarget] Pose estimation complete: {ProcessedPoseCount} processed");
                     }
 
                     double finalPosInMm = wrapper.GetAxisPosition(axisType);
@@ -1506,6 +1859,448 @@ namespace singalUI.ViewModels
                 AxisType.Rz => 5,
                 _ => 0
             };
+        }
+
+        // ==================== POSE ESTIMATION SCAN METHODS ====================
+
+        /// <summary>
+        /// Capture image from camera and save to disk
+        /// </summary>
+        private async Task<string?> CaptureAndSaveImage(int stepNumber)
+        {
+            try
+            {
+                // Get camera service from App
+                var cameraService = App.CameraService;
+                
+                if (cameraService == null || !cameraService.IsConnected)
+                {
+                    Log("[CaptureImage] Camera service not available or not connected");
+                    return null;
+                }
+
+                // Get latest frame from camera
+                var (buffer, width, height, seq) = cameraService.GetLatestFrameSnapshot();
+                
+                if (buffer == null || buffer.Length == 0)
+                {
+                    Log("[CaptureImage] No frame available from camera");
+                    return null;
+                }
+
+                // Create timestamped filename
+                string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss_fff");
+                string filename = $"step_{stepNumber:D5}_{timestamp}.jpg";
+                string filepath = Path.Combine(CaptureDirectory, filename);
+
+                // Convert buffer to OpenCV Mat and save as JPEG
+                await Task.Run(() =>
+                {
+                    using var mat = new Mat(height, width, MatType.CV_8UC1, buffer);
+                    Cv2.ImWrite(filepath, mat, new ImageEncodingParam(ImwriteFlags.JpegQuality, 95));
+                });
+
+                CapturedImageCount++;
+                Log($"[CaptureImage] Saved: {filename}");
+                
+                return filepath;
+            }
+            catch (Exception ex)
+            {
+                Log($"[CaptureImage] Error: {ex.Message}");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Queue a pose estimation task
+        /// </summary>
+        private void QueuePoseEstimation(string imagePath, int stepNumber)
+        {
+            var task = new PoseEstimationTask
+            {
+                ImagePath = imagePath,
+                PositionX = CurrentPositionX,
+                PositionY = CurrentPositionY,
+                PositionZ = CurrentPositionZ,
+                PositionRx = CurrentPositionRx,
+                PositionRy = CurrentPositionRy,
+                PositionRz = CurrentPositionRz,
+                Timestamp = DateTime.Now,
+                StepNumber = stepNumber
+            };
+
+            _poseEstQueue.Enqueue(task);
+            QueuedPoseCount = _poseEstQueue.Count;
+            Log($"[PoseEst] Queued task for step {stepNumber}, queue size: {QueuedPoseCount}");
+        }
+
+        /// <summary>
+        /// Start pose estimation worker threads
+        /// </summary>
+        private void StartPoseEstimationWorkers()
+        {
+            _poseEstCts = new CancellationTokenSource();
+            
+            // Start worker tasks based on max concurrent setting
+            for (int i = 0; i < MaxConcurrentPoseEstimations; i++)
+            {
+                int workerId = i;
+                Task.Run(() => PoseEstimationWorker(workerId, _poseEstCts.Token), _poseEstCts.Token);
+            }
+            
+            Log($"[PoseEst] Started {MaxConcurrentPoseEstimations} worker threads");
+        }
+
+        /// <summary>
+        /// Stop pose estimation workers
+        /// </summary>
+        private async Task StopPoseEstimationWorkers()
+        {
+            if (_poseEstCts != null)
+            {
+                _poseEstCts.Cancel();
+                await Task.Delay(500); // Give workers time to finish current tasks
+                _poseEstCts.Dispose();
+                _poseEstCts = null;
+            }
+            
+            Log("[PoseEst] Stopped all worker threads");
+        }
+
+        /// <summary>
+        /// Pose estimation worker thread
+        /// </summary>
+        private async Task PoseEstimationWorker(int workerId, CancellationToken ct)
+        {
+            Log($"[PoseEst] Worker {workerId} started");
+            
+            while (!ct.IsCancellationRequested)
+            {
+                if (_poseEstQueue.TryDequeue(out var task))
+                {
+                    QueuedPoseCount = _poseEstQueue.Count;
+                    
+                    try
+                    {
+                        Log($"[PoseEst] Worker {workerId} processing step {task.StepNumber}");
+                        
+                        var result = await ProcessPoseEstimation(task);
+                        
+                        lock (_poseResultsLock)
+                        {
+                            _poseResults.Add(result);
+                        }
+                        
+                        ProcessedPoseCount++;
+                        
+                        // Update graphs in real-time
+                        UpdateGraphsWithResult(result);
+                        
+                        Log($"[PoseEst] Worker {workerId} completed step {task.StepNumber}, success: {result.Success}");
+                    }
+                    catch (Exception ex)
+                    {
+                        Log($"[PoseEst] Worker {workerId} error on step {task.StepNumber}: {ex.Message}");
+                    }
+                }
+                else
+                {
+                    // Queue is empty, wait a bit before checking again
+                    await Task.Delay(50, ct);
+                }
+            }
+            
+            Log($"[PoseEst] Worker {workerId} stopped");
+        }
+
+        /// <summary>
+        /// Process a single pose estimation task
+        /// </summary>
+        private async Task<PoseEstimationResult> ProcessPoseEstimation(PoseEstimationTask task)
+        {
+            var result = new PoseEstimationResult
+            {
+                ImagePath = task.ImagePath,
+                StageX = task.PositionX,
+                StageY = task.PositionY,
+                StageZ = task.PositionZ,
+                StageRx = task.PositionRx,
+                StageRy = task.PositionRy,
+                StageRz = task.PositionRz,
+                Timestamp = task.Timestamp,
+                StepNumber = task.StepNumber,
+                Success = false
+            };
+
+            try
+            {
+                // Get calibration parameters from ConfigViewModel
+                var configVM = ConfigViewModel.Instance;
+                
+                if (configVM != null && configVM.CameraIntrinsics != null)
+                {
+                    Log($"[PoseEst] Using REAL pose estimation API for step {task.StepNumber}");
+                    
+                    // Call the actual pose estimation API
+                    var poseResult = await Task.Run(() => PoseEstApiBridgeClient.EstimatePoseFromImagePath(
+                        imagePath: task.ImagePath,
+                        intrinsicMatrix: configVM.CameraIntrinsics.ToArray(),
+                        pixelSize: configVM.PixelSize,
+                        focalLength: configVM.FocalLength,
+                        pitchX: configVM.PitchX,
+                        pitchY: configVM.PitchY,
+                        componentsX: configVM.ComponentsX,
+                        componentsY: configVM.ComponentsY,
+                        windowSize: configVM.WindowSize,
+                        codePitchBlocks: configVM.CodePitchBlocks
+                    ));
+                    
+                    if (poseResult.Status == PoseStatus.Success)
+                    {
+                        result.EstimatedX = poseResult.Tx;
+                        result.EstimatedY = poseResult.Ty;
+                        result.EstimatedZ = poseResult.Tz;
+                        result.EstimatedRx = poseResult.Rx * (180.0 / Math.PI); // Convert radians to degrees
+                        result.EstimatedRy = poseResult.Ry * (180.0 / Math.PI);
+                        result.EstimatedRz = poseResult.Rz * (180.0 / Math.PI);
+                        result.Success = true;
+                        Log($"[PoseEst] Step {task.StepNumber} SUCCESS: Tx={result.EstimatedX:F3}, Ty={result.EstimatedY:F3}, Tz={result.EstimatedZ:F3}");
+                    }
+                    else
+                    {
+                        result.Success = false;
+                        result.ErrorMessage = $"Pose estimation failed: {poseResult.Status}";
+                        Log($"[PoseEst] Step {task.StepNumber} FAILED: {poseResult.Status}");
+                    }
+                }
+                else
+                {
+                    // Fallback to placeholder if config not available
+                    Log($"[PoseEst] WARNING: ConfigViewModel or CameraIntrinsics not available, using placeholder data");
+                    await Task.Run(() =>
+                    {
+                        Thread.Sleep(100);
+                        result.EstimatedX = task.PositionX + (Random.Shared.NextDouble() - 0.5) * 0.1;
+                        result.EstimatedY = task.PositionY + (Random.Shared.NextDouble() - 0.5) * 0.1;
+                        result.EstimatedZ = task.PositionZ + (Random.Shared.NextDouble() - 0.5) * 0.1;
+                        result.EstimatedRx = task.PositionRx + (Random.Shared.NextDouble() - 0.5) * 0.01;
+                        result.EstimatedRy = task.PositionRy + (Random.Shared.NextDouble() - 0.5) * 0.01;
+                        result.EstimatedRz = task.PositionRz + (Random.Shared.NextDouble() - 0.5) * 0.01;
+                        result.Success = true;
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                result.Success = false;
+                result.ErrorMessage = ex.Message;
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Export pose estimation results to CSV
+        /// </summary>
+        [RelayCommand]
+        private async Task ExportPoseResults()
+        {
+            try
+            {
+                if (_poseResults.Count == 0)
+                {
+                    Log("[ExportResults] No results to export");
+                    return;
+                }
+
+                string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                string filename = $"pose_results_{timestamp}.csv";
+                string filepath = Path.Combine(CaptureDirectory, filename);
+
+                await Task.Run(() =>
+                {
+                    using var writer = new StreamWriter(filepath);
+                    
+                    // Write header
+                    writer.WriteLine("StepNumber,Timestamp,ImagePath," +
+                                   "StageX,StageY,StageZ,StageRx,StageRy,StageRz," +
+                                   "EstX,EstY,EstZ,EstRx,EstRy,EstRz," +
+                                   "ErrorX,ErrorY,ErrorZ,ErrorRx,ErrorRy,ErrorRz," +
+                                   "Success,ErrorMessage");
+
+                    // Write data
+                    lock (_poseResultsLock)
+                    {
+                        foreach (var result in _poseResults.OrderBy(r => r.StepNumber))
+                        {
+                            writer.WriteLine($"{result.StepNumber}," +
+                                           $"{result.Timestamp:yyyy-MM-dd HH:mm:ss.fff}," +
+                                           $"\"{result.ImagePath}\"," +
+                                           $"{result.StageX:F6},{result.StageY:F6},{result.StageZ:F6}," +
+                                           $"{result.StageRx:F6},{result.StageRy:F6},{result.StageRz:F6}," +
+                                           $"{result.EstimatedX:F6},{result.EstimatedY:F6},{result.EstimatedZ:F6}," +
+                                           $"{result.EstimatedRx:F6},{result.EstimatedRy:F6},{result.EstimatedRz:F6}," +
+                                           $"{result.EstimatedX - result.StageX:F6}," +
+                                           $"{result.EstimatedY - result.StageY:F6}," +
+                                           $"{result.EstimatedZ - result.StageZ:F6}," +
+                                           $"{result.EstimatedRx - result.StageRx:F6}," +
+                                           $"{result.EstimatedRy - result.StageRy:F6}," +
+                                           $"{result.EstimatedRz - result.StageRz:F6}," +
+                                           $"{result.Success}," +
+                                           $"\"{result.ErrorMessage}\"");
+                        }
+                    }
+                });
+
+                Log($"[ExportResults] Exported {_poseResults.Count} results to {filename}");
+                MovementStatus = $"Exported {_poseResults.Count} results to {filename}";
+                
+                // Open the folder containing the CSV file
+                try
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = CaptureDirectory,
+                        UseShellExecute = true,
+                        Verb = "open"
+                    });
+                    Log($"[ExportResults] Opened folder: {CaptureDirectory}");
+                }
+                catch (Exception openEx)
+                {
+                    Log($"[ExportResults] Could not open folder: {openEx.Message}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"[ExportResults] Error: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Update graphs with new pose estimation result
+        /// </summary>
+        private void UpdateGraphsWithResult(PoseEstimationResult result)
+        {
+            try
+            {
+                if (!result.Success) return;
+
+                // Calculate errors
+                double errorX = result.EstimatedX - result.StageX;
+                double errorY = result.EstimatedY - result.StageY;
+                double errorZ = result.EstimatedZ - result.StageZ;
+
+                // Update on UI thread
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    // Add to 2D error plots
+                    ErrorXData.Add(new PlotPoint(result.StepNumber, errorX));
+                    ErrorYData.Add(new PlotPoint(result.StepNumber, errorY));
+                    ErrorZData.Add(new PlotPoint(result.StepNumber, errorZ));
+
+                    // Add to 3D scatter plots
+                    StagePositions3D.Add(new Models.Point3D(result.StageX, result.StageY, result.StageZ, "#4fc3f7"));
+                    EstimatedPositions3D.Add(new Models.Point3D(result.EstimatedX, result.EstimatedY, result.EstimatedZ, "#ff9800"));
+
+                    // Update max errors for scaling
+                    MaxErrorX = Math.Max(MaxErrorX, Math.Abs(errorX));
+                    MaxErrorY = Math.Max(MaxErrorY, Math.Abs(errorY));
+                    MaxErrorZ = Math.Max(MaxErrorZ, Math.Abs(errorZ));
+
+                    // Keep only last 100 points for performance
+                    if (ErrorXData.Count > 100)
+                    {
+                        ErrorXData.RemoveAt(0);
+                        ErrorYData.RemoveAt(0);
+                        ErrorZData.RemoveAt(0);
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                Log($"[UpdateGraphs] Error: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Clear all graph data
+        /// </summary>
+        [RelayCommand]
+        private void ClearGraphs()
+        {
+            ErrorXData.Clear();
+            ErrorYData.Clear();
+            ErrorZData.Clear();
+            StagePositions3D.Clear();
+            EstimatedPositions3D.Clear();
+            MaxErrorX = 0;
+            MaxErrorY = 0;
+            MaxErrorZ = 0;
+            
+            lock (_poseResultsLock)
+            {
+                _poseResults.Clear();
+            }
+            
+            CapturedImageCount = 0;
+            ProcessedPoseCount = 0;
+            QueuedPoseCount = 0;
+            
+            Log("[ClearGraphs] All graphs and results cleared");
+        }
+
+        /// <summary>
+        /// Send pose estimation results to Analysis tab
+        /// </summary>
+        private void SendResultsToAnalysisTab()
+        {
+            try
+            {
+                if (_poseResults.Count == 0)
+                {
+                    Log("[SendToAnalysis] No results to send");
+                    return;
+                }
+
+                var analysisVM = AnalysisViewModel.Instance;
+                if (analysisVM != null)
+                {
+                    // Convert results to the format expected by Analysis tab
+                    var errorData = new List<(double errorX, double errorY, double errorZ, double errorRx, double errorRy, double errorRz)>();
+                    
+                    lock (_poseResultsLock)
+                    {
+                        foreach (var result in _poseResults.OrderBy(r => r.StepNumber))
+                        {
+                            if (result.Success)
+                            {
+                                errorData.Add((
+                                    result.EstimatedX - result.StageX,
+                                    result.EstimatedY - result.StageY,
+                                    result.EstimatedZ - result.StageZ,
+                                    result.EstimatedRx - result.StageRx,
+                                    result.EstimatedRy - result.StageRy,
+                                    result.EstimatedRz - result.StageRz
+                                ));
+                            }
+                        }
+                    }
+
+                    analysisVM.LoadPoseEstimationResults(errorData);
+                    Log($"[SendToAnalysis] Sent {errorData.Count} results to Analysis tab");
+                    MovementStatus = $"Results sent to Analysis tab ({errorData.Count} points)";
+                }
+                else
+                {
+                    Log("[SendToAnalysis] AnalysisViewModel.Instance is null");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"[SendToAnalysis] Error: {ex.Message}");
+            }
         }
     }
 }

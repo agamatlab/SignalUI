@@ -568,6 +568,235 @@
                     </StackPanel>
                 </Border>
 
+                <!-- Pose Estimation Scan Configuration -->
+                <Border Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="12">
+                        <Grid ColumnDefinitions="Auto,*">
+                            <Border Grid.Column="0" Width="20" Height="20" CornerRadius="2">
+                                <Path Data="M21 6h-3.17L16 4h-6v2h5.12l1.83 2H21v12H5v-9H3v9c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zM8 14c0 2.76 2.24 5 5 5s5-2.24 5-5-2.24-5-5-5-5 2.24-5 5zm5-3c1.65 0 3 1.35 3 3s-1.35 3-3 3-3-1.35-3-3 1.35-3 3-3zM5 6h3V4H5V1H3v3H0v2h3v3h2V6z" Fill="#ff9800" Stretch="Uniform"/>
+                            </Border>
+                            <TextBlock Grid.Column="1" Text="Pose Estimation Scan" FontSize="16" FontWeight="SemiBold" Foreground="#ffffff" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                        </Grid>
+                        
+                        <CheckBox IsChecked="{Binding EnablePoseEstimationScan}" 
+                                  Content="Enable pose estimation during movement" 
+                                  FontSize="13" 
+                                  Foreground="#ffffff"/>
+                        
+                        <Border Background="#1a1a1a" BorderBrush="#303030" BorderThickness="1" CornerRadius="6" Padding="12">
+                            <StackPanel Spacing="10">
+                                <StackPanel Spacing="6">
+                                    <TextBlock Text="Pause Duration (ms):" FontSize="13" Foreground="#ffffff"/>
+                                    <NumericUpDown Value="{Binding StepPauseDurationMs}"
+                                                   Minimum="0"
+                                                   Maximum="10000"
+                                                   Increment="10"
+                                                   FormatString="F0"
+                                                   FontSize="13"
+                                                   HorizontalAlignment="Stretch"
+                                                   IsEnabled="{Binding EnablePoseEstimationScan}"/>
+                                    <TextBlock Text="Pause at each step before capturing image" 
+                                               FontSize="11" 
+                                               Foreground="#888888" 
+                                               TextWrapping="Wrap"/>
+                                </StackPanel>
+                                
+                                <StackPanel Spacing="6">
+                                    <TextBlock Text="Max Concurrent Threads:" FontSize="13" Foreground="#ffffff"/>
+                                    <NumericUpDown Value="{Binding MaxConcurrentPoseEstimations}"
+                                                   Minimum="1"
+                                                   Maximum="32"
+                                                   Increment="1"
+                                                   FormatString="F0"
+                                                   FontSize="13"
+                                                   HorizontalAlignment="Stretch"
+                                                   IsEnabled="{Binding EnablePoseEstimationScan}"/>
+                                    <TextBlock Text="Number of parallel pose estimation workers" 
+                                               FontSize="11" 
+                                               Foreground="#888888" 
+                                               TextWrapping="Wrap"/>
+                                </StackPanel>
+                                
+                                <StackPanel Spacing="6">
+                                    <TextBlock Text="Capture Directory:" FontSize="13" Foreground="#ffffff"/>
+                                    <TextBox Text="{Binding CaptureDirectory}"
+                                             FontSize="11"
+                                             Foreground="#ffffff"
+                                             IsReadOnly="True"
+                                             Background="#252525"
+                                             BorderBrush="#404040"
+                                             BorderThickness="1"
+                                             Padding="8,6"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                        
+                        <Border Background="#303030" BorderBrush="#505050" BorderThickness="1" CornerRadius="6" Padding="12">
+                            <Grid RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="Auto,*">
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Captured:" FontSize="13" Foreground="#ffffff" Margin="0,0,12,6"/>
+                                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding CapturedImageCount, StringFormat={}{0:N0}}" FontSize="13" FontWeight="SemiBold" Foreground="#4fc3f7" Margin="0,0,0,6"/>
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Queued:" FontSize="13" Foreground="#ffffff" Margin="0,0,12,6"/>
+                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding QueuedPoseCount, StringFormat={}{0:N0}}" FontSize="13" FontWeight="SemiBold" Foreground="#ff9800" Margin="0,0,0,6"/>
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Processed:" FontSize="13" Foreground="#ffffff" Margin="0,0,12,0"/>
+                                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding ProcessedPoseCount, StringFormat={}{0:N0}}" FontSize="13" FontWeight="SemiBold" Foreground="#81c784"/>
+                            </Grid>
+                        </Border>
+                        
+                        <Button Content="Export Results to CSV" 
+                                Command="{Binding ExportPoseResultsCommand}" 
+                                Padding="12,8" 
+                                FontSize="13" 
+                                Foreground="#ffffff" 
+                                HorizontalAlignment="Stretch"
+                                IsEnabled="{Binding HasPoseResults}"/>
+                        
+                        <Button Content="Clear Graphs" 
+                                Command="{Binding ClearGraphsCommand}" 
+                                Padding="12,8" 
+                                FontSize="13" 
+                                Foreground="#ffffff" 
+                                Background="#c62828"
+                                HorizontalAlignment="Stretch"
+                                IsEnabled="{Binding HasPoseResults}"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Pose Estimation Graphs -->
+                <Border Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="16"
+                        IsVisible="{Binding HasPoseResults}">
+                    <StackPanel Spacing="12">
+                        <Grid ColumnDefinitions="Auto,*">
+                            <Border Grid.Column="0" Width="20" Height="20" CornerRadius="2">
+                                <Path Data="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z" Fill="#ba68c8" Stretch="Uniform"/>
+                            </Border>
+                            <TextBlock Grid.Column="1" Text="Pose Estimation Results" FontSize="16" FontWeight="SemiBold" Foreground="#ffffff" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                        </Grid>
+                        
+                        <!-- 2D Error Graphs -->
+                        <Border Background="#1a1a1a" BorderBrush="#303030" BorderThickness="1" CornerRadius="6" Padding="12">
+                            <StackPanel Spacing="10">
+                                <TextBlock Text="Position Errors (Estimated - Stage)" FontSize="14" FontWeight="SemiBold" Foreground="#ffffff"/>
+                                
+                                <!-- X Error -->
+                                <StackPanel Spacing="4">
+                                    <Grid ColumnDefinitions="Auto,*,Auto">
+                                        <TextBlock Grid.Column="0" Text="X Error:" FontSize="12" Foreground="#4fc3f7" FontWeight="SemiBold"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding MaxErrorX, StringFormat='Max: {0:F4} µm'}" FontSize="11" Foreground="#888888"/>
+                                    </Grid>
+                                    <Border Background="#0a0a0a" Height="60" CornerRadius="4" Padding="8">
+                                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                                            <ItemsControl ItemsSource="{Binding ErrorXData}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <StackPanel Orientation="Horizontal" Spacing="2"/>
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <StackPanel Spacing="2">
+                                                            <TextBlock Text="{Binding Value, StringFormat='{}{0:F2}'}" 
+                                                                       FontSize="9" 
+                                                                       Foreground="#4fc3f7" 
+                                                                       HorizontalAlignment="Center"/>
+                                                            <Rectangle Width="2" Height="20" Fill="#4fc3f7"/>
+                                                            <TextBlock Text="{Binding StepNumber}" 
+                                                                       FontSize="8" 
+                                                                       Foreground="#666666" 
+                                                                       HorizontalAlignment="Center"/>
+                                                        </StackPanel>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </ScrollViewer>
+                                    </Border>
+                                </StackPanel>
+                                
+                                <!-- Y Error -->
+                                <StackPanel Spacing="4">
+                                    <Grid ColumnDefinitions="Auto,*,Auto">
+                                        <TextBlock Grid.Column="0" Text="Y Error:" FontSize="12" Foreground="#81c784" FontWeight="SemiBold"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding MaxErrorY, StringFormat='Max: {0:F4} µm'}" FontSize="11" Foreground="#888888"/>
+                                    </Grid>
+                                    <Border Background="#0a0a0a" Height="60" CornerRadius="4" Padding="8">
+                                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                                            <ItemsControl ItemsSource="{Binding ErrorYData}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <StackPanel Orientation="Horizontal" Spacing="2"/>
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <StackPanel Spacing="2">
+                                                            <TextBlock Text="{Binding Value, StringFormat='{}{0:F2}'}" 
+                                                                       FontSize="9" 
+                                                                       Foreground="#81c784" 
+                                                                       HorizontalAlignment="Center"/>
+                                                            <Rectangle Width="2" Height="20" Fill="#81c784"/>
+                                                            <TextBlock Text="{Binding StepNumber}" 
+                                                                       FontSize="8" 
+                                                                       Foreground="#666666" 
+                                                                       HorizontalAlignment="Center"/>
+                                                        </StackPanel>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </ScrollViewer>
+                                    </Border>
+                                </StackPanel>
+                                
+                                <!-- Z Error -->
+                                <StackPanel Spacing="4">
+                                    <Grid ColumnDefinitions="Auto,*,Auto">
+                                        <TextBlock Grid.Column="0" Text="Z Error:" FontSize="12" Foreground="#ff9800" FontWeight="SemiBold"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding MaxErrorZ, StringFormat='Max: {0:F4} µm'}" FontSize="11" Foreground="#888888"/>
+                                    </Grid>
+                                    <Border Background="#0a0a0a" Height="60" CornerRadius="4" Padding="8">
+                                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                                            <ItemsControl ItemsSource="{Binding ErrorZData}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <StackPanel Orientation="Horizontal" Spacing="2"/>
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <StackPanel Spacing="2">
+                                                            <TextBlock Text="{Binding Value, StringFormat='{}{0:F2}'}" 
+                                                                       FontSize="9" 
+                                                                       Foreground="#ff9800" 
+                                                                       HorizontalAlignment="Center"/>
+                                                            <Rectangle Width="2" Height="20" Fill="#ff9800"/>
+                                                            <TextBlock Text="{Binding StepNumber}" 
+                                                                       FontSize="8" 
+                                                                       Foreground="#666666" 
+                                                                       HorizontalAlignment="Center"/>
+                                                        </StackPanel>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </ScrollViewer>
+                                    </Border>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                        
+                        <!-- 3D Visualization Info -->
+                        <Border Background="#1a1a1a" BorderBrush="#303030" BorderThickness="1" CornerRadius="6" Padding="12">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="3D Position Comparison" FontSize="14" FontWeight="SemiBold" Foreground="#ffffff"/>
+                                <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,*">
+                                    <Ellipse Grid.Row="0" Grid.Column="0" Width="10" Height="10" Fill="#4fc3f7" Margin="0,0,8,4"/>
+                                    <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding StagePositions3D.Count, StringFormat='Stage Positions: {0}'}" FontSize="12" Foreground="#ffffff" Margin="0,0,0,4"/>
+                                    <Ellipse Grid.Row="1" Grid.Column="0" Width="10" Height="10" Fill="#ff9800" Margin="0,0,8,0"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding EstimatedPositions3D.Count, StringFormat='Estimated Positions: {0}'}" FontSize="12" Foreground="#ffffff"/>
+                                </Grid>
+                                <TextBlock Text="Export CSV for full 3D visualization in external tools" FontSize="11" Foreground="#888888" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Border>
+
                 <!-- Calibration Summary -->
                 <Border Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="16">
                     <StackPanel Spacing="12">

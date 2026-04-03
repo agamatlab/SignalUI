@@ -14,6 +14,9 @@ namespace singalUI.ViewModels
 {
     public partial class ConfigViewModel : ViewModelBase
     {
+        // Static instance for cross-ViewModel communication
+        public static ConfigViewModel? Instance { get; private set; }
+
         private const double DefaultFocalLengthMm = 28.0;
         private const double DefaultPixelSizeMm = 4.4e-3;
         private const int DefaultImageWidth = 640;
@@ -152,6 +155,7 @@ namespace singalUI.ViewModels
 
         public ConfigViewModel()
         {
+            Instance = this; // Set static instance for cross-ViewModel access
             LogToError("[ConfigViewModel] Constructor started");
             InitializeEstimator();
             _cameraResolutionTimer = new DispatcherTimer

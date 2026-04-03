@@ -354,7 +354,12 @@ namespace singalUI.ViewModels
 
             InitializeModularCollections();
             HookCameraParameters(CameraParameters);
+            
+            // Explicitly notify UI of initial camera parameter values
+            OnPropertyChanged(nameof(CameraParameters));
+            
             Log("Collections initialized");
+            Log($"Initial CameraParameters: Exposure={CameraParameters.Exposure}, Gain={CameraParameters.Gain}, Illumination={CameraParameters.Illumination}, FPS={CameraParameters.Fps}");
             Log($"Initial LivePosition: X={LivePosition.X}, Y={LivePosition.Y}, Z={LivePosition.Z}");
             Console.WriteLine("[CameraSetupViewModel] Constructor END");
             LogToError("CameraSetupViewModel initialized - Error log ready");
@@ -940,24 +945,27 @@ namespace singalUI.ViewModels
             try
             {
                 Log("[RefreshConnection] Refreshing connections...");
+                CameraStatus = "Reconnecting...";
 
                 var cameraService = App.CameraService;
                 if (cameraService != null)
                 {
-                    // Stop any ongoing acquisition
-                    cameraService.StopAcquisition();
-                    IsAcquiring = false;
-
-                    // Add a small delay to ensure cleanup completes
-                    await Task.Delay(200);
-
-                    // Re-initialize camera (this will call updateDeviceList)
-                    var success = await Task.Run(() => cameraService.Initialize());
+                    // Use the Reconnect method which properly cleans up and reinitializes
+                    var success = await Task.Run(() => cameraService.Reconnect());
+                    
                     CameraConnected = success;
                     CameraStatus = success ? "Connected" : "Failed to connect - Check camera power and connection";
                     Log($"[RefreshConnection] Camera: {(success ? "Connected" : "Failed")}");
                     
-                    if (!success)
+                    if (success)
+                    {
+                        // Start acquisition if reconnection was successful
+                        await Task.Delay(200);
+                        cameraService.StartAcquisition();
+                        IsAcquiring = true;
+                        Log("[RefreshConnection] Acquisition started");
+                    }
+                    else
                     {
                         Log("[RefreshConnection] Tip: Ensure camera is powered on and connected before clicking reconnect");
                     }
@@ -965,6 +973,7 @@ namespace singalUI.ViewModels
                 else
                 {
                     Log("[RefreshConnection] Camera service is null");
+                    CameraStatus = "Camera service not available";
                 }
 
             }

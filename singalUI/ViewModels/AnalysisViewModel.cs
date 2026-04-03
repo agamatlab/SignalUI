@@ -10,6 +10,9 @@ namespace singalUI.ViewModels
 {
     public partial class AnalysisViewModel : ViewModelBase
     {
+        // Static instance for cross-ViewModel communication
+        public static AnalysisViewModel? Instance { get; private set; }
+
         [ObservableProperty]
         private bool _showGrid = true;
 
@@ -91,6 +94,7 @@ namespace singalUI.ViewModels
 
         public AnalysisViewModel()
         {
+            Instance = this; // Set static instance for cross-ViewModel access
             SelectedPlotLayout = 0;
             Generate3DData();
             GenerateMockData();
@@ -346,6 +350,120 @@ namespace singalUI.ViewModels
         private void GenerateReport()
         {
             // TODO: Implement report generation
+        }
+
+        /// <summary>
+        /// Load pose estimation results into the Analysis tab
+        /// </summary>
+        public void LoadPoseEstimationResults(List<(double errorX, double errorY, double errorZ, double errorRx, double errorRy, double errorRz)> results)
+        {
+            if (results == null || results.Count == 0)
+            {
+                return;
+            }
+
+            ChartCards.Clear();
+
+            var axisConfigs = new[]
+            {
+                new
+                {
+                    Name = "X",
+                    Title = "X Position Error",
+                    Unit = "µm",
+                    Color = "#F44336",
+                    RowIndex = 0,
+                    ColumnIndex = 0,
+                    Data = results.Select(r => Math.Abs(r.errorX)).ToList()
+                },
+                new
+                {
+                    Name = "Y",
+                    Title = "Y Position Error",
+                    Unit = "µm",
+                    Color = "#4CAF50",
+                    RowIndex = 0,
+                    ColumnIndex = 2,
+                    Data = results.Select(r => Math.Abs(r.errorY)).ToList()
+                },
+                new
+                {
+                    Name = "Z",
+                    Title = "Z Position Error",
+                    Unit = "µm",
+                    Color = "#2196F3",
+                    RowIndex = 2,
+                    ColumnIndex = 0,
+                    Data = results.Select(r => Math.Abs(r.errorZ)).ToList()
+                },
+                new
+                {
+                    Name = "Rx",
+                    Title = "Rx Angle Error (Pitch)",
+                    Unit = "deg",
+                    Color = "#FF9800",
+                    RowIndex = 2,
+                    ColumnIndex = 2,
+                    Data = results.Select(r => Math.Abs(r.errorRx)).ToList()
+                },
+                new
+                {
+                    Name = "Ry",
+                    Title = "Ry Angle Error (Yaw)",
+                    Unit = "deg",
+                    Color = "#9C27B0",
+                    RowIndex = 4,
+                    ColumnIndex = 0,
+                    Data = results.Select(r => Math.Abs(r.errorRy)).ToList()
+                },
+                new
+                {
+                    Name = "Rz",
+                    Title = "Rz Angle Error (Roll)",
+                    Unit = "deg",
+                    Color = "#00BCD4",
+                    RowIndex = 4,
+                    ColumnIndex = 2,
+                    Data = results.Select(r => Math.Abs(r.errorRz)).ToList()
+                }
+            };
+
+            var allData = new List<double>();
+
+            foreach (var axis in axisConfigs)
+            {
+                var bars = CreateBars(axis.Data, 100, axis.Color);
+                var rms = CalculateRms(axis.Data);
+                var std = CalculateStd(axis.Data);
+
+                allData.AddRange(axis.Data);
+
+                ChartCards.Add(new ChartCardViewModel(
+                    axis.Title,
+                    rms,
+                    axis.Color,
+                    bars,
+                    $"{axis.Name} Error:",
+                    $"{rms:F3} +/- {std:F3} {axis.Unit}",
+                    axis.RowIndex,
+                    axis.ColumnIndex,
+                    axis.Unit,
+                    new ObservableCollection<double>(axis.Data)
+                ));
+            }
+
+            // Overall RMS (combined position errors)
+            double overallRms = CalculateRms(allData);
+            Overall_Rms = $"{overallRms:F3} µm RMS";
+
+            // TODO: Add 3D visualization of error vectors
+            // For now, regenerate the 3D data
+            Generate3DData();
+
+            if (ChartCards.Count > 0)
+            {
+                Selected2DChart = ChartCards[0];
+            }
         }
 
         [RelayCommand]
