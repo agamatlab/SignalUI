@@ -77,19 +77,77 @@
                 BorderThickness="2"
                 CornerRadius="0">
             <Grid>
-                <Border IsVisible="{Binding IsTwoDGridMode}"
-                        Padding="6">
+                <!-- Empty State (No data and no status message) -->
+                <Border IsVisible="{Binding !HasData}"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center">
+                    <StackPanel Spacing="16" HorizontalAlignment="Center">
+                        <!-- Show icon and default message when no status message -->
+                        <Border Width="80" Height="80" 
+                                Background="#2a2a2a"
+                                CornerRadius="40"
+                                HorizontalAlignment="Center"
+                                IsVisible="{Binding !HasStatusMessage}">
+                            <Path Data="M3 17h2v-4H3v4zm4 0h2V7H7v10zm4 0h2v-7h-2v7zm4 0h2V3h-2v14z"
+                                  Fill="#666666" 
+                                  Stretch="Uniform"
+                                  Width="40"
+                                  Height="40"/>
+                        </Border>
+                        <TextBlock Text="No Pose Estimation Data"
+                                   FontSize="18"
+                                   FontWeight="SemiBold"
+                                   Foreground="#999999"
+                                   HorizontalAlignment="Center"
+                                   IsVisible="{Binding !HasStatusMessage}"/>
+                        <TextBlock Text="Run a pose estimation scan from the Calibration Setup tab"
+                                   FontSize="14"
+                                   Foreground="#666666"
+                                   HorizontalAlignment="Center"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="400"
+                                   TextAlignment="Center"
+                                   IsVisible="{Binding !HasStatusMessage}"/>
+                        
+                        <!-- Show status message when available -->
+                        <Border Width="80" Height="80" 
+                                Background="#3a2a2a"
+                                CornerRadius="40"
+                                HorizontalAlignment="Center"
+                                IsVisible="{Binding HasStatusMessage}">
+                            <Path Data="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"
+                                  Fill="#ff6666" 
+                                  Stretch="Uniform"
+                                  Width="40"
+                                  Height="40"/>
+                        </Border>
+                        <TextBlock Text="{Binding StatusMessage}"
+                                   FontSize="14"
+                                   Foreground="#cccccc"
+                                   HorizontalAlignment="Center"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="500"
+                                   TextAlignment="Center"
+                                   IsVisible="{Binding HasStatusMessage}"/>
+                    </StackPanel>
+                </Border>
+                
+                <!-- Data Views -->
+                <ScrollViewer IsVisible="{Binding IsTwoDGridMode}"
+                              HorizontalScrollBarVisibility="Disabled"
+                              VerticalScrollBarVisibility="Auto">
                     <ItemsControl ItemsSource="{Binding ChartCards}"
+                                  Padding="6"
                                   HorizontalAlignment="Stretch"
                                   VerticalAlignment="Stretch">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
-                                <UniformGrid Columns="2" Rows="3"/>
+                                <UniformGrid Columns="2"/>
                             </ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <v:ChartCardView MinHeight="0"
+                                <v:ChartCardView MinHeight="200"
                                                  MinWidth="0"
                                                  Margin="2"
                                                  HorizontalAlignment="Stretch"
@@ -99,7 +157,7 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
-                </Border>
+                </ScrollViewer>
 
                 <v:ChartCardView DataContext="{Binding Selected2DChart}"
                                  IsVisible="{Binding $parent[UserControl].((vm:AnalysisViewModel)DataContext).IsSelected2DChartFullScreen}"

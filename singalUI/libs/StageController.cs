@@ -143,6 +143,18 @@ public class SigmakokiController : StageController {
 
                 // Initialize axes based on controller type
                 InitializeAxes();
+                
+                // CRITICAL: Set HIT mode for HSC-103 (required for proper operation)
+                try
+                {
+                    Log($"[Sigmakoki] Setting HIT mode with Z:1 command...");
+                    string response = SendCommand("Z:1");
+                    Log($"[Sigmakoki] HIT mode response: {response}");
+                }
+                catch (Exception ex)
+                {
+                    Log($"[Sigmakoki] Warning: Could not set HIT mode: {ex.Message}");
+                }
 
                 // Note: Speed setting may not work on all controllers
                 // The stage will use default speed if speed command fails
@@ -334,7 +346,7 @@ public class SigmakokiController : StageController {
         _isMoving = true;
         try
         {
-            // Use raw amount as steps (UI provides step count)
+            // Amount is already in steps (converted by StageWrapper)
             int steps = (int)Math.Round(amount);
 
             // Build command in HIT MODE format (HSC-103, Hit_MV, PGC-04):
@@ -349,7 +361,7 @@ public class SigmakokiController : StageController {
             string commaPrefix = new string(',', index);
             string cmd = $"M:{commaPrefix}{direction}{absValue}";
 
-            Log($"[Sigmakoki] MoveRelative axis {index + 1} by {amount} (steps={steps})");
+            Log($"[Sigmakoki] MoveRelative axis {index + 1} by {steps} steps");
 
             string response = SendCommand(cmd);
             if (!response.Contains("OK") && !response.Contains("ok"))

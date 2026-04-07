@@ -87,6 +87,22 @@ namespace singalUI.ViewModels
 
         #endregion
 
+        #region HMF File Paths
+
+        [ObservableProperty]
+        private string _hmfGPath = "";
+
+        [ObservableProperty]
+        private string _hmfXPath = "";
+
+        [ObservableProperty]
+        private string _hmfYPath = "";
+
+        [ObservableProperty]
+        private bool _useCustomHmfPaths = false;
+
+        #endregion
+
         #region Test Image Configuration
 
         [ObservableProperty]
@@ -571,6 +587,132 @@ namespace singalUI.ViewModels
                 LogToError($"[SaveConfiguration] Error: {ex.Message}");
             }
 
+        }
+
+        [RelayCommand]
+        private async Task BrowseHmfGFile()
+        {
+            try
+            {
+                var dialog = new Avalonia.Platform.Storage.FilePickerOpenOptions
+                {
+                    Title = "Select HMF G File (12+12_G.txt)",
+                    AllowMultiple = false,
+                    FileTypeFilter = new[]
+                    {
+                        new Avalonia.Platform.Storage.FilePickerFileType("Text Files")
+                        {
+                            Patterns = new[] { "*.txt" }
+                        },
+                        new Avalonia.Platform.Storage.FilePickerFileType("All Files")
+                        {
+                            Patterns = new[] { "*.*" }
+                        }
+                    }
+                };
+
+                var mainWindow = Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
+                    ? desktop.MainWindow
+                    : null;
+
+                if (mainWindow != null)
+                {
+                    var result = await mainWindow.StorageProvider.OpenFilePickerAsync(dialog);
+                    if (result.Count > 0)
+                    {
+                        HmfGPath = result[0].Path.LocalPath;
+                        LogToError($"[BrowseHmfGFile] Selected: {HmfGPath}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogToError($"[BrowseHmfGFile] Error: {ex.Message}");
+            }
+        }
+
+        [RelayCommand]
+        private async Task BrowseHmfXFile()
+        {
+            try
+            {
+                var dialog = new Avalonia.Platform.Storage.FilePickerOpenOptions
+                {
+                    Title = "Select HMF X File (12+12_X.txt)",
+                    AllowMultiple = false,
+                    FileTypeFilter = new[]
+                    {
+                        new Avalonia.Platform.Storage.FilePickerFileType("Text Files")
+                        {
+                            Patterns = new[] { "*.txt" }
+                        },
+                        new Avalonia.Platform.Storage.FilePickerFileType("All Files")
+                        {
+                            Patterns = new[] { "*.*" }
+                        }
+                    }
+                };
+
+                var mainWindow = Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
+                    ? desktop.MainWindow
+                    : null;
+
+                if (mainWindow != null)
+                {
+                    var result = await mainWindow.StorageProvider.OpenFilePickerAsync(dialog);
+                    if (result.Count > 0)
+                    {
+                        HmfXPath = result[0].Path.LocalPath;
+                        LogToError($"[BrowseHmfXFile] Selected: {HmfXPath}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogToError($"[BrowseHmfXFile] Error: {ex.Message}");
+            }
+        }
+
+        [RelayCommand]
+        private async Task BrowseHmfYFile()
+        {
+            try
+            {
+                var dialog = new Avalonia.Platform.Storage.FilePickerOpenOptions
+                {
+                    Title = "Select HMF Y File (12+12_Y.txt)",
+                    AllowMultiple = false,
+                    FileTypeFilter = new[]
+                    {
+                        new Avalonia.Platform.Storage.FilePickerFileType("Text Files")
+                        {
+                            Patterns = new[] { "*.txt" }
+                        },
+                        new Avalonia.Platform.Storage.FilePickerFileType("All Files")
+                        {
+                            Patterns = new[] { "*.*" }
+                        }
+                    }
+                };
+
+                var mainWindow = Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
+                    ? desktop.MainWindow
+                    : null;
+
+                if (mainWindow != null)
+                {
+                    var result = await mainWindow.StorageProvider.OpenFilePickerAsync(dialog);
+                    if (result.Count > 0)
+                    {
+                        HmfYPath = result[0].Path.LocalPath;
+                        LogToError($"[BrowseHmfYFile] Selected: {HmfYPath}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogToError($"[BrowseHmfYFile] Error: {ex.Message}");
+            }
         }
 
         #endregion
