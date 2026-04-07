@@ -5,15 +5,18 @@ using Avalonia.Platform.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using OpenCvSharp;
+using singalUI.libs;
 using singalUI.Models;
 using singalUI.Services;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Timers;
 using Avalonia.Threading;
@@ -26,6 +29,8 @@ namespace singalUI.ViewModels
     {
         private readonly DispatcherTimer _cameraFrameTimer;
         private readonly DispatcherTimer _liveCameraApplyTimer;
+        private readonly CancellationTokenSource _nanoMeasPreviewCts = new();
+        private Task? _nanoMeasPreviewTask;
         private readonly Random _random = new();
         private readonly string _logFile = Path.Combine(Path.GetTempPath(), "singalui_debug.log");
         private readonly string _cameraLogFile = Path.Combine(Path.GetTempPath(), "singalui_camera.log");
@@ -214,6 +219,19 @@ namespace singalUI.ViewModels
         [ObservableProperty]
         private string _errorLog = "";
 
+        /// <summary>Display strings for pose preview (numbers or "-" when last result had no pose).</summary>
+        [ObservableProperty] private string _posePreviewXText = "-";
+        [ObservableProperty] private string _posePreviewYText = "-";
+        [ObservableProperty] private string _posePreviewZText = "-";
+        [ObservableProperty] private string _posePreviewRxText = "-";
+        [ObservableProperty] private string _posePreviewRyText = "-";
+        [ObservableProperty] private string _posePreviewRzText = "-";
+
+        private const string NanoMeasPosePreviewPngFileName = "last_camera_frame.png";
+
+        private static string PosePreviewCaptureDirectory() =>
+            Path.Combine(AppContext.BaseDirectory, "storage", "temp_capture");
+
         // Camera Frame Display
         [ObservableProperty]
         private WriteableBitmap? _cameraFrame;
@@ -278,8 +296,229 @@ namespace singalUI.ViewModels
             HookCameraParameters(CameraParameters);
             Log("Collections initialized");
             Log($"Initial LivePosition: X={LivePosition.X}, Y={LivePosition.Y}, Z={LivePosition.Z}");
+            _nanoMeasPreviewTask = Task.Run(() => NanoMeasLivePreviewLoop(_nanoMeasPreviewCts.Token));
             Console.WriteLine("[CameraSetupViewModel] Constructor END");
             LogToError("CameraSetupViewModel initialized - Error log ready");
+        }
+
+        /// <summary>
+        /// One frame at a time: under <c>./storage/temp_capture</c>, remove previous PNG, save the frame used for this run, run NanoMeas on the same U8 buffer,
+        /// post pose to the UI, then repeat with a new frame. PNG on disk matches what was fed to the DLL for that cycle.
+        /// </summary>
+        private void NanoMeasLivePreviewLoop(CancellationToken ct)
+        {
+            IntPtr handle = IntPtr.Zero;
+            int lastW = 0, lastH = 0, lastWindowN = -1;
+            var poseBuf = new double[6];
+            var poseAbsBuf = new double[6];
+            Thread.Sleep(500);
+            while (!ct.IsCancellationRequested)
+            {
+                try
+                {
+                    NanoMeasSdkNative.EnsureNanoMeasNativeReady();
+                    var cfg = App.SharedConfigViewModel;
+
+                    var camSvc = App.CameraService;
+                    if (camSvc == null || !camSvc.IsConnected || !camSvc.IsAcquiring)
+                    {
+                        Thread.Sleep(400);
+                        continue;
+                    }
+
+                    var (buf, w, h, _) = camSvc.GetLatestFrameSnapshot();
+                    if (buf == null || w < 8 || h < 8 || buf.Length < w * h)
+                    {
+                        Thread.Sleep(50);
+                        continue;
+                    }
+
+                    int windowN = (int)Math.Round(cfg.WindowSize);
+                    if (windowN < 1)
+                    {
+                        Thread.Sleep(400);
+                        continue;
+                    }
+
+                    if (handle != IntPtr.Zero &&
+                        (w != lastW || h != lastH || windowN != lastWindowN))
+                    {
+                        NanoMeasSdkNative.NanoMeas_Destroy(handle);
+                        handle = IntPtr.Zero;
+                    }
+
+                    if (handle == IntPtr.Zero)
+                    {
+                        if (!NanoMeasSdkNative.TryLoadArchiveHmfSequences(windowN, out var seqX, out var seqY, out var hmfErr))
+                        {
+                            LogToError("[NanoMeas preview] " + (hmfErr ?? "HMF load failed."));
+                            Thread.Sleep(1200);
+                            continue;
+                        }
+
+                        handle = NanoMeasSdkNative.NanoMeas_Create();
+                        if (handle == IntPtr.Zero)
+                        {
+                            LogToError("[NanoMeas preview] NanoMeas_Create returned NULL.");
+                            Thread.Sleep(1000);
+                            continue;
+                        }
+
+                        var ip = new NanoMeasSdkNative.NanoMeasIpDFTConfigNative { win_order = 3 };
+                        int ini = NanoMeasSdkNative.NanoMeas_Initialize(handle, h, w, ref ip);
+                        if (ini != NanoMeasSdkNative.NanoMeasOk)
+                        {
+                            var e = NanoMeasSdkNative.MarshalUtf8String(NanoMeasSdkNative.NanoMeas_GetLastError(handle));
+                            NanoMeasSdkNative.NanoMeas_Destroy(handle);
+                            handle = IntPtr.Zero;
+                            LogToError($"[NanoMeas preview] Initialize failed ({ini}): {e}");
+                            Thread.Sleep(800);
+                            continue;
+                        }
+
+                        int sh = NanoMeasSdkNative.NanoMeas_SetHmfData(handle, seqX, seqX.Length, seqY, seqY.Length);
+                        if (sh != NanoMeasSdkNative.NanoMeasOk)
+                        {
+                            var e = NanoMeasSdkNative.MarshalUtf8String(NanoMeasSdkNative.NanoMeas_GetLastError(handle));
+                            NanoMeasSdkNative.NanoMeas_Destroy(handle);
+                            handle = IntPtr.Zero;
+                            LogToError($"[NanoMeas preview] SetHmfData failed ({sh}): {e}");
+                            Thread.Sleep(800);
+                            continue;
+                        }
+
+                        lastW = w;
+                        lastH = h;
+                        lastWindowN = windowN;
+                    }
+
+                    string captureDir = PosePreviewCaptureDirectory();
+                    Directory.CreateDirectory(captureDir);
+                    string pngPath = Path.Combine(captureDir, NanoMeasPosePreviewPngFileName);
+
+                    try
+                    {
+                        if (File.Exists(pngPath))
+                            File.Delete(pngPath);
+                    }
+                    catch (Exception ex)
+                    {
+                        LogToError("[NanoMeas preview] Could not delete prior PNG in storage/temp_capture: " + ex.Message);
+                    }
+
+                    var copy = new byte[w * h];
+                    Array.Copy(buf, 0, copy, 0, copy.Length);
+
+                    try
+                    {
+                        using (var imageMat = new Mat(h, w, MatType.CV_8UC1, copy))
+                            Cv2.ImWrite(pngPath, imageMat);
+                    }
+                    catch (Exception ex)
+                    {
+                        LogToError("[NanoMeas preview] ImWrite failed: " + ex.Message);
+                    }
+
+                    double cx = Math.Abs(cfg.Cx) < 1e-9 ? w * 0.5 : cfg.Cx;
+                    double cy = Math.Abs(cfg.Cy) < 1e-9 ? h * 0.5 : cfg.Cy;
+                    var cam = NanoMeasSdkNative.BuildCameraParams(
+                        cfg.Fx, cfg.Fy, cx, cy, cfg.PixelSize, cfg.PixelSize, cfg.FocalLength);
+                    int codeBlocks = (int)Math.Round(cfg.CodePitchBlocks);
+                    var grid = NanoMeasSdkNative.BuildGridParams(cfg.PitchX, cfg.PitchY, codeBlocks, windowN);
+
+                    var res = NanoMeasSdkNative.CreatePipelineResult();
+                    _ = NanoMeasSdkNative.NanoMeas_ProcessFrame_Track_U8(
+                        handle,
+                        copy,
+                        h,
+                        w,
+                        ref cam,
+                        ref grid,
+                        IntPtr.Zero,
+                        10,
+                        3.0,
+                        ref res);
+
+                    NanoMeasSdkNative.CopyPipelinePoseArrays(ref res, poseBuf, poseAbsBuf);
+                    double[] p = SelectPoseForDisplay(poseBuf, poseAbsBuf, res.decode_success);
+                    PostPosePreviewTexts(p);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch (DllNotFoundException ex)
+                {
+                    LogToError("[NanoMeas preview] DLL: " + ex.Message);
+                    Thread.Sleep(2000);
+                }
+                catch (Exception ex)
+                {
+                    LogToError("[NanoMeas preview] " + ex.Message);
+                    Thread.Sleep(600);
+                }
+            }
+
+            if (handle != IntPtr.Zero)
+            {
+                NanoMeasSdkNative.NanoMeas_Destroy(handle);
+                handle = IntPtr.Zero;
+            }
+        }
+
+        private static bool IsAllNearZero(double[]? a)
+        {
+            if (a == null || a.Length == 0)
+                return true;
+            for (int i = 0; i < a.Length; i++)
+            {
+                if (Math.Abs(a[i]) > 1e-15)
+                    return false;
+            }
+            return true;
+        }
+
+        private static double[] SelectPoseForDisplay(double[] pose, double[] poseAbs, int decodeSuccess)
+        {
+            if (!IsAllNearZero(pose))
+                return pose;
+            if (decodeSuccess != 0 && !IsAllNearZero(poseAbs))
+                return poseAbs;
+            return pose;
+        }
+
+        private void PostPosePreviewTexts(double[] p)
+        {
+            // Snapshot: worker thread reuses poseBuf; UI post runs later.
+            var snap = (double[])p.Clone();
+            const double radToDeg = 180.0 / Math.PI;
+            const string dash = "-";
+            IFormatProvider iv = CultureInfo.InvariantCulture;
+            bool noPose = IsAllNearZero(snap);
+            double rxDeg = snap[0] * radToDeg;
+            double ryDeg = snap[1] * radToDeg;
+            double rzDeg = snap[2] * radToDeg;
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (noPose)
+                {
+                    PosePreviewXText = dash;
+                    PosePreviewYText = dash;
+                    PosePreviewZText = dash;
+                    PosePreviewRxText = dash;
+                    PosePreviewRyText = dash;
+                    PosePreviewRzText = dash;
+                }
+                else
+                {
+                    PosePreviewXText = snap[3].ToString("F3", iv);
+                    PosePreviewYText = snap[4].ToString("F3", iv);
+                    PosePreviewZText = snap[5].ToString("F3", iv);
+                    PosePreviewRxText = rxDeg.ToString("F3", iv);
+                    PosePreviewRyText = ryDeg.ToString("F3", iv);
+                    PosePreviewRzText = rzDeg.ToString("F3", iv);
+                }
+            });
         }
 
         private void WireUpCameraService()
@@ -616,13 +855,13 @@ namespace singalUI.ViewModels
             try
             {
                 string logMessage = $"[{DateTime.Now:HH:mm:ss.fff}] {message}";
-                ErrorLog = logMessage + "\n" + ErrorLog;
+                ErrorLog = string.IsNullOrEmpty(ErrorLog) ? logMessage : $"{ErrorLog}\n{logMessage}";
 
                 // Keep only last MaxErrorLogLines lines
-                var lines = ErrorLog.Split('\n');
+                var lines = ErrorLog.Split('\n', StringSplitOptions.RemoveEmptyEntries);
                 if (lines.Length > MaxErrorLogLines)
                 {
-                    ErrorLog = string.Join("\n", lines.Take(MaxErrorLogLines));
+                    ErrorLog = string.Join("\n", lines.Skip(lines.Length - MaxErrorLogLines));
                 }
             }
             catch
@@ -890,36 +1129,6 @@ namespace singalUI.ViewModels
             catch (Exception ex)
             {
                 Log($"[ResetDefaults] Error: {ex.Message}");
-            }
-        }
-
-        [RelayCommand]
-        private void ApplySettings()
-        {
-            try
-            {
-                var cameraService = App.CameraService;
-                if (cameraService == null || !cameraService.IsConnected)
-                {
-                    Log("[ApplySettings] Camera not connected");
-                    CameraStatus = "Not connected";
-                    return;
-                }
-
-                Log($"[ApplySettings] Exposure={CameraParameters.Exposure}, Gain={CameraParameters.Gain}, FPS={CameraParameters.Fps}");
-
-                cameraService.SetExposure(CameraParameters.Exposure);
-                cameraService.SetGain(CameraParameters.Gain);
-                cameraService.SetFrameRate(CameraParameters.Fps);
-
-                CameraStatus = "Settings applied";
-                LogCameraConfigSnapshot("ApplySettings");
-                Log("[ApplySettings] Applied successfully");
-            }
-            catch (Exception ex)
-            {
-                Log($"[ApplySettings] Error: {ex.Message}");
-                CameraStatus = $"Error: {ex.Message}";
             }
         }
 
@@ -1389,6 +1598,14 @@ namespace singalUI.ViewModels
 
         public void Dispose()
         {
+            try
+            {
+                _nanoMeasPreviewCts.Cancel();
+                _nanoMeasPreviewTask?.Wait(TimeSpan.FromSeconds(3));
+            }
+            catch { }
+
+            _nanoMeasPreviewCts.Dispose();
             CameraParameters.PropertyChanged -= OnCameraParametersPropertyChanged;
             StagePositionService.PositionChanged -= OnSharedStagePositionChanged;
         }

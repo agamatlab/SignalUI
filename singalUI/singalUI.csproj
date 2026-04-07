@@ -1,7 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
+        <AssemblyName>NanoMeas</AssemblyName>
         <OutputType>WinExe</OutputType>
-        <TargetFramework>net8.0</TargetFramework>
+        <!-- net8.0-windows: ensures System.IO.Ports resolves the Windows COM implementation (avoids PlatformNotSupported on real Windows when portable net8.0 assets are wrong). -->
+        <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
         <Nullable>enable</Nullable>
         <ApplicationManifest>app.manifest</ApplicationManifest>
         <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
@@ -70,16 +72,30 @@
             <Link>libiomp5md.dll</Link>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
-        <None Include="..\..\PoseEstApi\PoseEstApi\Archive\12+12_G.txt">
+        <!-- Runtime: N+N → hmf_temp_{G,X,Y}.txt → mirror to 12+12_* (bridge DLL path). Source: PoseEstApi\code 10+10. -->
+        <!-- Ship 12+12_* and 10+10_* as named bundles; hmf_temp_* is created by the app when estimating pose. -->
+        <None Include="..\..\PoseEstApi\code\10+10_G.txt">
             <Link>Archive\12+12_G.txt</Link>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
-        <None Include="..\..\PoseEstApi\PoseEstApi\Archive\12+12_X.txt">
+        <None Include="..\..\PoseEstApi\code\10+10_X.txt">
             <Link>Archive\12+12_X.txt</Link>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
-        <None Include="..\..\PoseEstApi\PoseEstApi\Archive\12+12_Y.txt">
+        <None Include="..\..\PoseEstApi\code\10+10_Y.txt">
             <Link>Archive\12+12_Y.txt</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Include="..\..\PoseEstApi\code\10+10_G.txt">
+            <Link>Archive\10+10_G.txt</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Include="..\..\PoseEstApi\code\10+10_X.txt">
+            <Link>Archive\10+10_X.txt</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Include="..\..\PoseEstApi\code\10+10_Y.txt">
+            <Link>Archive\10+10_Y.txt</Link>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
         <!-- PI GCS2 DLL - 64-bit version for x64 builds -->
@@ -90,6 +106,10 @@
         <!-- PI GCS2 DLL - 32-bit version (backup) -->
         <None Include="libs\PI_GCS2_DLL.dll">
             <Link>PI_GCS2_DLL.dll</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <!-- HSC-103 rotation: Python + pyserial (see PythonStage/requirements.txt) -->
+        <None Include="PythonStage\**\*">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
     </ItemGroup>
@@ -109,6 +129,20 @@
               DestinationFolder="$(OutputPath)"
               SkipUnchangedFiles="true" />
     </Target>
+
+    <!-- NanoMeas SDK (rotation calib): copy when present; see PoseEstApi/NanoMeas_SDK_secret/README.md -->
+    <Target Name="CopyNanoMeasSdkNative" AfterTargets="Build">
+        <PropertyGroup>
+            <_NanoMeasSdkDir>..\..\PoseEstApi\NanoMeas_SDK_secret</_NanoMeasSdkDir>
+        </PropertyGroup>
+        <ItemGroup>
+            <_NanoMeasSdkFiles Include="$(_NanoMeasSdkDir)\NanoMeas.dll" Condition="Exists('$(_NanoMeasSdkDir)\NanoMeas.dll')" />
+            <_NanoMeasSdkFiles Include="$(_NanoMeasSdkDir)\fftw3.dll" Condition="Exists('$(_NanoMeasSdkDir)\fftw3.dll')" />
+        </ItemGroup>
+        <Copy SourceFiles="@(_NanoMeasSdkFiles)"
+              DestinationFolder="$(OutputPath)"
+              SkipUnchangedFiles="true" />
+    </Target>
     
     <ItemGroup>
         <!-- Matrix Vision local assemblies -->
@@ -120,10 +154,10 @@
 
     <ItemGroup>
         <!-- Copy Matrix Vision native DLLs to output -->
-        <None Include="C:\Program Files\MATRIX VISION\mvIMPACT Acquire\bin\**\mv*.dll" Link="MatrixVision\%(RecursiveDir)%(Filename)%(Extension)">
+        <None Include="C:\Program Files\MATRIX VISION\mvIMPACT Acquire\bin\x64\**\mv*.dll" Link="MatrixVision\%(RecursiveDir)%(Filename)%(Extension)">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
-        <None Include="C:\Program Files\MATRIX VISION\mvIMPACT Acquire\bin\mvGenTLProducer.cti">
+        <None Include="C:\Program Files\MATRIX VISION\mvIMPACT Acquire\bin\x64\mvGenTLProducer.cti">
             <Link>mvGenTLProducer.cti</Link>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
@@ -135,6 +169,9 @@
         <SubType>Code</SubType>
       </Compile>
       <Compile Update="libs\Sigmakoki.cs">
+        <DependentUpon>StageController.cs</DependentUpon>
+      </Compile>
+      <Compile Update="libs\Hsc103RotationStageController.cs">
         <DependentUpon>StageController.cs</DependentUpon>
       </Compile>
     </ItemGroup>

@@ -28,6 +28,18 @@ public partial class StageInstance : ObservableObject
     [ObservableProperty]
     private string[] _availableAxes = System.Array.Empty<string>();
 
+    /// <summary>Serial port for HSC-103 rotation stage (e.g. COM3).</summary>
+    [ObservableProperty]
+    private string _serialPortName = "COM3";
+
+    /// <summary>HSC-103 physical axis index 1–3 (see hsc103.py --axis).</summary>
+    [ObservableProperty]
+    private int _hsc103AxisNumber = 1;
+
+    /// <summary>Degrees per controller pulse (default matches hsc103.py).</summary>
+    [ObservableProperty]
+    private double _degreesPerPulse = 0.00001;
+
     /// <summary>
     /// Get the axes this stage controls based on its hardware type
     /// Automatically determined based on controller type
@@ -38,6 +50,7 @@ public partial class StageInstance : ObservableObject
         {
             StageHardwareType.PI => GetPIAxes(),
             StageHardwareType.Sigmakoki => GetSigmakokiAxes(),
+            StageHardwareType.SigmakokiRotationStage => new[] { AxisType.Rz },
             _ => System.Array.Empty<AxisType>()
         };
     }
@@ -90,6 +103,7 @@ public partial class StageInstance : ObservableObject
         {
             StageHardwareType.PI => "PI",
             StageHardwareType.Sigmakoki => $"Sigma Koki ({SigmakokiController.GetDisplayName()})",
+            StageHardwareType.SigmakokiRotationStage => "Sigma Koki rotation (HSC-103)",
             _ => "None"
         };
     }

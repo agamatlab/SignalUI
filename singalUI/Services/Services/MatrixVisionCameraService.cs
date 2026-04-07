@@ -38,9 +38,29 @@ namespace singalUI.Services
         public event Action<bool>? ConnectionChanged;
 
         public bool IsConnected { get; private set; }
+
+        /// <summary>True while <see cref="CaptureLoop"/> is expected to be running.</summary>
+        public bool IsAcquiring
+        {
+            get
+            {
+                lock (_lock)
+                    return _isAcquiring;
+            }
+        }
+
         public string CameraSerial { get; set; } = "";  // Empty = use first available camera
         public int ImageWidth { get; private set; }
         public int ImageHeight { get; private set; }
+
+        /// <summary>Last <see cref="Initialize"/> app base path (for packaged-exe / log diagnostics).</summary>
+        public string LastInitModuleBase { get; private set; } = "";
+
+        /// <summary>Whether <c>mvGenTLProducer.cti</c> was found in <see cref="LastInitModuleBase"/>.</summary>
+        public bool LastInitCtiFound { get; private set; }
+
+        /// <summary>Device count after last <see cref="DeviceManager.updateDeviceList"/> in <see cref="Initialize"/>; -1 if not reached.</summary>
+        public int LastInitDeviceCount { get; private set; } = -1;
 
         /// <summary>
         /// Get a snapshot of the latest frame buffer for UI rendering.
@@ -56,32 +76,75 @@ namespace singalUI.Services
         }
 
         /// <summary>
+        /// Directory containing the app assembly and deployed GenTL files (not <see cref="Environment.CurrentDirectory"/>,
+        /// which breaks shortcuts and IDE runs).
+        /// </summary>
+        private static string GetModuleBaseDirectory()
+        {
+            string baseDir = AppContext.BaseDirectory;
+            if (string.IsNullOrWhiteSpace(baseDir))
+                return Directory.GetCurrentDirectory();
+            return Path.GetFullPath(baseDir);
+        }
+
+        /// <summary>
         /// Initialize the camera service and connect to the camera
         /// </summary>
         public bool Initialize()
         {
+            LastInitDeviceCount = -1;
+            LastInitCtiFound = false;
             try
             {
                 StatusChanged?.Invoke("Initializing camera manager...");
-                Console.WriteLine("=== [MatrixVision] Working Directory: " + Environment.CurrentDirectory);
-                Console.WriteLine("=== [MatrixVision] Current Directory: " + Directory.GetCurrentDirectory());
+                string moduleBase = GetModuleBaseDirectory();
+                LastInitModuleBase = moduleBase;
+                Console.WriteLine("=== [MatrixVision] App base directory: " + moduleBase);
+                Console.WriteLine("=== [MatrixVision] Process current directory: " + Environment.CurrentDirectory);
 
-                // Check if mvGenTLProducer.cti exists in current directory
-                string ctiPath = Path.Combine(Environment.CurrentDirectory, "mvGenTLProducer.cti");
+                // Packaged / shortcut-safe: mvIMPACT uses install root; published apps keep CTI + natives next to the exe.
+                // Only override MVIMPACT_ACQUIRE when the publish folder looks like a full mvIMPACT deploy.
+                // In your current `out`, you have mvGenTLProducer.cti but not mvGenTLProducer.dll, so overriding
+                // MVIMPACT_ACQUIRE would make GenTL loading fail.
+                if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("MVIMPACT_ACQUIRE")))
+                {
+                    string producerDll = Path.Combine(moduleBase, "mvGenTLProducer.dll");
+                    if (File.Exists(producerDll))
+                    {
+                        Environment.SetEnvironmentVariable("MVIMPACT_ACQUIRE", moduleBase);
+                        Console.WriteLine("=== [MatrixVision] MVIMPACT_ACQUIRE set from packaged folder ===");
+                    }
+                    else
+                    {
+                        Console.WriteLine("=== [MatrixVision] MVIMPACT_ACQUIRE not set (missing mvGenTLProducer.dll) ===");
+                    }
+                }
+
+                string matrixVisionNative = Path.Combine(moduleBase, "MatrixVision");
+                if (Directory.Exists(matrixVisionNative))
+                {
+                    string path = Environment.GetEnvironmentVariable("PATH") ?? "";
+                    string prefix = matrixVisionNative + Path.PathSeparator + moduleBase + Path.PathSeparator;
+                    if (!path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                        Environment.SetEnvironmentVariable("PATH", prefix + path);
+                }
+
+                // Check if mvGenTLProducer.cti exists beside the executable / published root
+                string ctiPath = Path.Combine(moduleBase, "mvGenTLProducer.cti");
                 bool ctiExists = File.Exists(ctiPath);
+                LastInitCtiFound = ctiExists;
                 Console.WriteLine($"=== [MatrixVision] CTI file exists: {ctiExists} ({ctiPath}) ===");
 
-                // List all CTI files in current directory
-                string[] ctiFiles = Directory.GetFiles(Environment.CurrentDirectory, "*.cti");
-                Console.WriteLine($"=== [MatrixVision] CTI files in directory: {string.Join(", ", ctiFiles)} ===");
+                string[] ctiFiles = Directory.GetFiles(moduleBase, "*.cti");
+                Console.WriteLine($"=== [MatrixVision] CTI files in app directory: {string.Join(", ", ctiFiles)} ===");
 
-                // Log MVIMPACT_ACQUIRE environment variable
                 string? mvPath = Environment.GetEnvironmentVariable("MVIMPACT_ACQUIRE");
                 Console.WriteLine($"=== [MatrixVision] MVIMPACT_ACQUIRE: {mvPath ?? "NOT SET"}");
 
                 Console.WriteLine("=== [MatrixVision] Updating device list ===");
                 DeviceManager.updateDeviceList();
 
+                LastInitDeviceCount = DeviceManager.deviceCount;
                 Console.WriteLine($"=== [MatrixVision] Device count: {DeviceManager.deviceCount} ===");
                 if (DeviceManager.deviceCount == 0)
                 {
@@ -92,8 +155,9 @@ namespace singalUI.Services
                     Console.WriteLine("  2. Check Ethernet cable connection");
                     Console.WriteLine("  3. Run wxPropView.exe to verify camera detection");
                     Console.WriteLine("  4. Check network adapter configuration for GigE");
-                    Console.WriteLine("  5. Ensure mvGenTLProducer.cti is in the working directory");
-                    Console.WriteLine("  6. Check that Matrix Vision DLLs are accessible");
+                    Console.WriteLine("  5. Ensure mvGenTLProducer.cti is next to the exe (same folder as published app)");
+                    Console.WriteLine("  6. Check that Matrix Vision DLLs are accessible (MatrixVision\\*.dll + mv.impact.acquire.dll)");
+                    Console.WriteLine("  7. If still 0 devices, run wxPropView.exe on this PC/NIC — if it also sees nothing, fix subnet/firewall/driver");
                     return false;
                 }
 

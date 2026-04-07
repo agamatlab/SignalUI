@@ -12,7 +12,7 @@
         <vm:CameraSetupViewModel/>
     </Design.DataContext>
 
-    <Grid RowDefinitions="Auto,*,Auto" ColumnDefinitions="*,380">
+    <Grid RowDefinitions="Auto,*" ColumnDefinitions="*,380">
         <!-- Connection Status Bar -->
         <Border Grid.Row="0" Grid.ColumnSpan="2"
                 Background="#1c1c1c"
@@ -125,93 +125,94 @@
                     </Grid>
                 </Border>
 
-                <!-- Stage Position - MOVED TO BOTTOM OF CAMERA VIEW -->
+                <!-- NanoMeas pose preview (pose[0:2] rad → °, pose[3:5] mm); parameters from Configure tab -->
                 <Border Grid.Row="2"
                         Background="#0f0f0f"
                         BorderBrush="#333333"
                         BorderThickness="0,2,0,0"
                         Padding="12,10"
                         CornerRadius="0">
-                    <Grid ColumnDefinitions="*,*,*" RowDefinitions="Auto,Auto" ColumnSpacing="18" RowSpacing="8">
-                        <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="X:"
-                                       FontSize="15"
-                                       FontWeight="Bold"
-                                       Foreground="#aaaaaa"
-                                       FontFamily="Consolas,Courier New"/>
-                            <TextBlock Text="{Binding CurrentPosition.X, StringFormat={}{0:F3} mm}"
-                                       FontSize="15"
-                                       FontWeight="Medium"
-                                       Foreground="#dddddd"
-                                       FontFamily="Consolas,Courier New"/>
-                        </StackPanel>
-                        <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="Y:"
-                                       FontSize="15"
-                                       FontWeight="Bold"
-                                       Foreground="#aaaaaa"
-                                       FontFamily="Consolas,Courier New"/>
-                            <TextBlock Text="{Binding CurrentPosition.Y, StringFormat={}{0:F3} mm}"
-                                       FontSize="15"
-                                       FontWeight="Medium"
-                                       Foreground="#dddddd"
-                                       FontFamily="Consolas,Courier New"/>
-                        </StackPanel>
-                        <StackPanel Grid.Row="0" Grid.Column="2" Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="Z:"
-                                       FontSize="15"
-                                       FontWeight="Bold"
-                                       Foreground="#aaaaaa"
-                                       FontFamily="Consolas,Courier New"/>
-                            <TextBlock Text="{Binding CurrentPosition.Z, StringFormat={}{0:F3} mm}"
-                                       FontSize="15"
-                                       FontWeight="Medium"
-                                       Foreground="#dddddd"
-                                       FontFamily="Consolas,Courier New"/>
-                        </StackPanel>
-                        <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="Rx:"
-                                       FontSize="15"
-                                       FontWeight="Bold"
-                                       Foreground="#aaaaaa"
-                                       FontFamily="Consolas,Courier New"/>
-                            <TextBlock FontSize="15"
-                                       FontWeight="Medium"
-                                       Foreground="#dddddd"
-                                       FontFamily="Consolas,Courier New">
-                                <Run Text="{Binding CurrentPosition.Rx, StringFormat={}{0:F3}}"/>
-                                <Run Text="°"/>
-                            </TextBlock>
-                        </StackPanel>
-                        <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="Ry:"
-                                       FontSize="15"
-                                       FontWeight="Bold"
-                                       Foreground="#aaaaaa"
-                                       FontFamily="Consolas,Courier New"/>
-                            <TextBlock FontSize="15"
-                                       FontWeight="Medium"
-                                       Foreground="#dddddd"
-                                       FontFamily="Consolas,Courier New">
-                                <Run Text="{Binding CurrentPosition.Ry, StringFormat={}{0:F3}}"/>
-                                <Run Text="°"/>
-                            </TextBlock>
-                        </StackPanel>
-                        <StackPanel Grid.Row="1" Grid.Column="2" Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="Rz:"
-                                       FontSize="15"
-                                       FontWeight="Bold"
-                                       Foreground="#aaaaaa"
-                                       FontFamily="Consolas,Courier New"/>
-                            <TextBlock FontSize="15"
-                                       FontWeight="Medium"
-                                       Foreground="#dddddd"
-                                       FontFamily="Consolas,Courier New">
-                                <Run Text="{Binding CurrentPosition.Rz, StringFormat={}{0:F3}}"/>
-                                <Run Text="°"/>
-                            </TextBlock>
-                        </StackPanel>
-                    </Grid>
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Pose preview (NanoMeas.dll — last finished run; frame PNG: .\\storage\\temp_capture\\last_camera_frame.png; params from Configure)"
+                                   FontSize="12"
+                                   Foreground="#888888"
+                                   FontFamily="Segoe UI,Arial"
+                                   TextWrapping="Wrap"/>
+                        <Grid ColumnDefinitions="*,*,*" RowDefinitions="Auto,Auto" ColumnSpacing="18" RowSpacing="8">
+                            <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="X (mm):"
+                                           FontSize="18"
+                                           FontWeight="Bold"
+                                           Foreground="#aaaaaa"
+                                           FontFamily="Consolas,Courier New"/>
+                                <TextBlock Text="{Binding PosePreviewXText}"
+                                           FontSize="18"
+                                           FontWeight="Medium"
+                                           Foreground="#dddddd"
+                                           FontFamily="Consolas,Courier New"/>
+                            </StackPanel>
+                            <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="Y (mm):"
+                                           FontSize="18"
+                                           FontWeight="Bold"
+                                           Foreground="#aaaaaa"
+                                           FontFamily="Consolas,Courier New"/>
+                                <TextBlock Text="{Binding PosePreviewYText}"
+                                           FontSize="18"
+                                           FontWeight="Medium"
+                                           Foreground="#dddddd"
+                                           FontFamily="Consolas,Courier New"/>
+                            </StackPanel>
+                            <StackPanel Grid.Row="0" Grid.Column="2" Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="Z (mm):"
+                                           FontSize="18"
+                                           FontWeight="Bold"
+                                           Foreground="#aaaaaa"
+                                           FontFamily="Consolas,Courier New"/>
+                                <TextBlock Text="{Binding PosePreviewZText}"
+                                           FontSize="18"
+                                           FontWeight="Medium"
+                                           Foreground="#dddddd"
+                                           FontFamily="Consolas,Courier New"/>
+                            </StackPanel>
+                            <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="Rx (°):"
+                                           FontSize="18"
+                                           FontWeight="Bold"
+                                           Foreground="#aaaaaa"
+                                           FontFamily="Consolas,Courier New"/>
+                                <TextBlock Text="{Binding PosePreviewRxText}"
+                                           FontSize="18"
+                                           FontWeight="Medium"
+                                           Foreground="#dddddd"
+                                           FontFamily="Consolas,Courier New"/>
+                            </StackPanel>
+                            <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="Ry (°):"
+                                           FontSize="18"
+                                           FontWeight="Bold"
+                                           Foreground="#aaaaaa"
+                                           FontFamily="Consolas,Courier New"/>
+                                <TextBlock Text="{Binding PosePreviewRyText}"
+                                           FontSize="18"
+                                           FontWeight="Medium"
+                                           Foreground="#dddddd"
+                                           FontFamily="Consolas,Courier New"/>
+                            </StackPanel>
+                            <StackPanel Grid.Row="1" Grid.Column="2" Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="Rz (°):"
+                                           FontSize="18"
+                                           FontWeight="Bold"
+                                           Foreground="#aaaaaa"
+                                           FontFamily="Consolas,Courier New"/>
+                                <TextBlock Text="{Binding PosePreviewRzText}"
+                                           FontSize="18"
+                                           FontWeight="Medium"
+                                           Foreground="#dddddd"
+                                           FontFamily="Consolas,Courier New"/>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
                 </Border>
 
                 <Border Grid.Row="3"
@@ -648,19 +649,5 @@
 
             </StackPanel>
         </ScrollViewer>
-
-        <!-- Bottom Action Bar -->
-        <Border Grid.Row="2" Grid.ColumnSpan="2"
-                Background="#1c1c1c"
-                BorderBrush="#333333"
-                BorderThickness="0,2,0,0"
-                Padding="16,12">
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="12">
-                <Button Content="Apply Settings"
-                        Command="{Binding ApplySettingsCommand}"
-                        Padding="20,12"
-                        FontSize="14"/>
-            </StackPanel>
-        </Border>
     </Grid>
 </UserControl>

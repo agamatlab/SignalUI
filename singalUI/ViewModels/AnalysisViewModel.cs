@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using singalUI.libs;
 using singalUI.Models;
 using System;
 using System.Collections.Generic;
@@ -18,6 +19,10 @@ namespace singalUI.ViewModels
 
         [ObservableProperty]
         private bool _showMesh = false;
+
+        /// <summary>Extra polylines in <see cref="Visualization3DData.Lines"/> (rotation calib uses points only).</summary>
+        [ObservableProperty]
+        private bool _showLines3D = false;
 
         [ObservableProperty]
         private bool _showX = true;
@@ -75,60 +80,83 @@ namespace singalUI.ViewModels
 
         public AnalysisViewModel()
         {
-            Generate3DData();
+            InitializeEmptyVisualization3D();
             GenerateMockData();
             LogError("AnalysisViewModel initialized - Error log ready");
         }
 
-        private void Generate3DData()
+        /// <summary>Empty 3D scene (grid only) — no mock point cloud.</summary>
+        private void InitializeEmptyVisualization3D()
         {
-            var data = new Visualization3DData();
-            var random = new Random(42);
-            const int pointCount = 50;
+            var data = new Visualization3DData { Title = "3D Visualization" };
+            data.MinX = data.MinY = data.MinZ = -1;
+            data.MaxX = data.MaxY = data.MaxZ = 1;
+            data.GenerateGrid(0.5);
+            Visualization3DData = data;
+            ShowMesh = false;
+            ShowLines3D = false;
+        }
 
-            for (int i = 0; i < pointCount; i++)
+        /// <summary>
+        /// Replaces the 3D scene with rotation-calibration poses. Uses <paramref name="frames"/>[i].PoseAbs[3..5] as (x,y,z)
+        /// (same 1×6 layout as in the configure error log: Rx,Ry,Rz then x,y,z). Clears lines and mesh.
+        /// </summary>
+        public void ApplyRotationCalibrationPoses3D(IReadOnlyList<NanoMeasFrameTrackResult> frames)
+        {
+            if (frames == null || frames.Count == 0)
+                return;
+
+            var data = new Visualization3DData
             {
-                double t = i / (double)pointCount;
-                double angle = t * 4 * Math.PI;
-                double radius = 30 + t * 20;
+                Title = "Rotation calib — pose_abs xyz (indices 3–5 of 1×6)",
+            };
 
-                double x = radius * Math.Cos(angle) + (random.NextDouble() - 0.5) * 5;
-                double y = radius * Math.Sin(angle) + (random.NextDouble() - 0.5) * 5;
-                double z = t * 50 + (random.NextDouble() - 0.5) * 3;
+            string[] palette =
+            {
+                "#E91E63", "#9C27B0", "#673AB7", "#3F51B5", "#2196F3", "#00BCD4",
+                "#009688", "#4CAF50", "#8BC34A", "#CDDC39", "#FF9800", "#FF5722",
+            };
 
-                data.Points.Add(new Point3D(x, y, z, "#4CAF50", 4.0));
+            for (int i = 0; i < frames.Count; i++)
+            {
+                var f = frames[i];
+                if (f.PoseAbs == null || f.PoseAbs.Length < 6)
+                    continue;
 
-                double xError = (random.NextDouble() - 0.5) * 3;
-                data.Lines.Add(new Line3D(
-                    new Point3D(x, y, z),
-                    new Point3D(x + xError, y, z),
-                    "#FF5252", 1.5));
-
-                double yError = (random.NextDouble() - 0.5) * 3;
-                data.Lines.Add(new Line3D(
-                    new Point3D(x, y, z),
-                    new Point3D(x, y + yError, z),
-                    "#4CAF50", 1.5));
-
-                double zError = (random.NextDouble() - 0.5) * 2;
-                data.Lines.Add(new Line3D(
-                    new Point3D(x, y, z),
-                    new Point3D(x, y, z + zError),
-                    "#2196F3", 1.5));
+                double x = f.PoseAbs[3];
+                double y = f.PoseAbs[4];
+                double z = f.PoseAbs[5];
+                string color = palette[i % palette.Length];
+                data.Points.Add(new Point3D(x, y, z, color, 9.0) { Label = (i + 1).ToString() });
             }
 
-            for (int i = 0; i < pointCount - 1; i++)
-            {
-                data.Lines.Add(new Line3D(
-                    data.Points[i],
-                    data.Points[i + 1],
-                    "#FF9800", 2.0));
-            }
+            if (data.Points.Count == 0)
+                return;
 
             data.CalculateBounds();
-            data.GenerateGrid(10);
-            data.GenerateMeshFromScatteredPoints();
+            double span = Math.Max(
+                data.MaxX - data.MinX,
+                Math.Max(data.MaxY - data.MinY, data.MaxZ - data.MinZ));
+            double pad = span > 1e-15 ? span * 0.2 : 0.001;
+            data.MinX -= pad;
+            data.MaxX += pad;
+            data.MinY -= pad;
+            data.MaxY += pad;
+            data.MinZ -= pad;
+            data.MaxZ += pad;
+
+            double spacing = span > 1e-15
+                ? Math.Clamp(span / 6.0, 1e-6, Math.Max(span, 1e-6))
+                : 0.001;
+            data.GenerateGrid(spacing);
+
             Visualization3DData = data;
+            ShowMesh = false;
+            ShowLines3D = false;
+            ShowPoints = true;
+            ShowGrid = true;
+
+            LogError($"Analysis 3D: {data.Points.Count} rotation-calibration points (x,y,z = pose_abs[3..5], same as configure log). Open Analysis tab to view.");
         }
 
         private void GenerateMockData()
@@ -307,8 +335,8 @@ namespace singalUI.ViewModels
         [RelayCommand]
         private void ResetView()
         {
-            Generate3DData();
-            LogError("3D view reset");
+            InitializeEmptyVisualization3D();
+            LogError("3D view cleared (grid only)");
         }
 
         [RelayCommand]
@@ -334,14 +362,13 @@ namespace singalUI.ViewModels
                 string timestamp = DateTime.Now.ToString("HH:mm:ss.fff");
                 string logMessage = $"[{timestamp}] {message}";
 
-                // Prepend to error log string
-                ErrorLog = logMessage + "\n" + ErrorLog;
+                ErrorLog = string.IsNullOrEmpty(ErrorLog) ? logMessage : $"{ErrorLog}\n{logMessage}";
 
                 // Keep only last MaxErrorLogLines lines
-                var lines = ErrorLog.Split('\n');
+                var lines = ErrorLog.Split('\n', StringSplitOptions.RemoveEmptyEntries);
                 if (lines.Length > MaxErrorLogLines)
                 {
-                    ErrorLog = string.Join("\n", lines.Take(MaxErrorLogLines));
+                    ErrorLog = string.Join("\n", lines.Skip(lines.Length - MaxErrorLogLines));
                 }
 
                 Console.WriteLine($"[ErrorLog] {logMessage}");

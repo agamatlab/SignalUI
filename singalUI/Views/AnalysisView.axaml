@@ -10,7 +10,7 @@
         <vm:AnalysisViewModel/>
     </Design.DataContext>
 
-    <Grid RowDefinitions="Auto,*,Auto" ColumnDefinitions="*,280">
+    <Grid RowDefinitions="Auto,*" ColumnDefinitions="*,280">
         <!-- Chart Controls Toolbar -->
         <Border Grid.Row="0" Grid.ColumnSpan="2"
                 Background="#2a2a2a"
@@ -73,7 +73,7 @@
                 ShowGrid="{Binding ShowGrid}"
                 ShowPoints="{Binding ShowPoints}"
                 ShowMesh="{Binding ShowMesh}"
-                ShowLines="True"/>
+                ShowLines="{Binding ShowLines3D}"/>
         </Border>
 
         <!-- Right Panel - Scrollable -->
@@ -237,10 +237,5 @@
         </Grid>
         </ScrollViewer>
 
-        <Border Grid.Row="2" Grid.ColumnSpan="2" Background="#2a2a2a" BorderBrush="#404040" BorderThickness="0,1,0,0" Padding="16,12">
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="12">
-                <Button Content="Generate Report" Command="{Binding GenerateReportCommand}" Padding="20,12" FontSize="14"/>
-            </StackPanel>
-        </Border>
     </Grid>
 </UserControl>

@@ -5,6 +5,7 @@ using singalUI.Services;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Linq;
 using Avalonia.Controls;
@@ -12,7 +13,6 @@ using System.IO;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
-using singalUI.libs;
 
 namespace singalUI.ViewModels
 {
@@ -186,6 +186,23 @@ namespace singalUI.ViewModels
         [ObservableProperty]
         private double _currentPositionRz = 0.0;
 
+        [ObservableProperty]
+        private bool _displayStagePositionAsRaw = true;
+
+        private double _rawStageX, _rawStageY, _rawStageZ, _rawStageRx, _rawStageRy, _rawStageRz;
+        private double _zeroStageX, _zeroStageY, _zeroStageZ, _zeroStageRx, _zeroStageRy, _zeroStageRz;
+
+        partial void OnDisplayStagePositionAsRawChanged(bool value)
+        {
+            if (!value)
+            {
+                CaptureStageZeroBaseline();
+            }
+            ApplyDisplayedStagePosition();
+        }
+
+        public ConfigViewModel RotationCalibVm => App.SharedConfigViewModel;
+
         // Position polling timer
         private Timer? _positionPollTimer;
 
@@ -197,11 +214,51 @@ namespace singalUI.ViewModels
             // THEN subscribe to wrapper property changes
             InitializeMotionRows();
 
+            IsRotationCalibrationMode = App.CalibrationAppMode == CalibrationAppMode.RotationStage;
+            App.CalibrationAppModeChanged += OnGlobalCalibrationAppModeChanged;
+
+            MotionRows.CollectionChanged += OnMotionRowsCollectionChanged;
+
             CalculateTotals();
             StartConnectionPolling();
             StartPositionPolling();
             Log("CalibrationSetupViewModel initialized");
         }
+
+        [ObservableProperty]
+        private bool _isRotationCalibrationMode;
+
+        private void OnGlobalCalibrationAppModeChanged(object? sender, EventArgs e)
+        {
+            IsRotationCalibrationMode = App.CalibrationAppMode == CalibrationAppMode.RotationStage;
+        }
+
+        partial void OnIsRotationCalibrationModeChanged(bool value)
+        {
+            OnPropertyChanged(nameof(UseFullMotionTable));
+            OnPropertyChanged(nameof(ShowRotationCompactMotion));
+            OnPropertyChanged(nameof(StartSequenceButtonText));
+        }
+
+        /// <summary>Setup primary action label (rotation mode saves raw PNGs + optional background decode).</summary>
+        public string StartSequenceButtonText =>
+            IsRotationCalibrationMode
+                ? "Start rotation capture (.\\storage, Rz→0° then ≥12 steps)"
+                : "Start Sequence";
+
+        private void OnMotionRowsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        {
+            OnPropertyChanged(nameof(RotationMotionRow));
+            OnPropertyChanged(nameof(ShowRotationCompactMotion));
+        }
+
+        /// <summary>When false, Setup shows compact single-DOF motion card (rotation calibration mode).</summary>
+        public bool UseFullMotionTable => !IsRotationCalibrationMode;
+
+        public bool ShowRotationCompactMotion => IsRotationCalibrationMode && MotionRows.Count > 0;
+
+        /// <summary>First motion row for compact rotation UI (typically θ / Rz only).</summary>
+        public MotionConfiguration? RotationMotionRow => MotionRows.Count > 0 ? MotionRows[0] : null;
 
         // Expose static StageManager.Wrappers as a property for UI binding
         public ObservableCollection<StageWrapper> StageWrappers => StageManager.Wrappers;
@@ -288,12 +345,13 @@ namespace singalUI.ViewModels
                 // Update UI on main thread (Avalonia requires this)
                 Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                 {
-                    CurrentPositionX = x;
-                    CurrentPositionY = y;
-                    CurrentPositionZ = z;
-                    CurrentPositionRx = rx;
-                    CurrentPositionRy = ry;
-                    CurrentPositionRz = rz;
+                    _rawStageX = x;
+                    _rawStageY = y;
+                    _rawStageZ = z;
+                    _rawStageRx = rx;
+                    _rawStageRy = ry;
+                    _rawStageRz = rz;
+                    ApplyDisplayedStagePosition();
 
                     // Also update positions in MotionRows for calculated end position
                     foreach (var row in MotionRows)
@@ -362,18 +420,50 @@ namespace singalUI.ViewModels
             try
             {
                 string logMessage = $"[{DateTime.Now:HH:mm:ss.fff}] {message}";
-                ErrorLog = logMessage + "\n" + ErrorLog;
+                ErrorLog = string.IsNullOrEmpty(ErrorLog) ? logMessage : $"{ErrorLog}\n{logMessage}";
 
                 // Keep only last MaxErrorLogLines lines
-                var lines = ErrorLog.Split('\n');
+                var lines = ErrorLog.Split('\n', StringSplitOptions.RemoveEmptyEntries);
                 if (lines.Length > MaxErrorLogLines)
                 {
-                    ErrorLog = string.Join("\n", lines.Take(MaxErrorLogLines));
+                    ErrorLog = string.Join("\n", lines.Skip(lines.Length - MaxErrorLogLines));
                 }
             }
             catch
             {
                 // Ignore logging errors
+            }
+        }
+
+        private void CaptureStageZeroBaseline()
+        {
+            _zeroStageX = _rawStageX;
+            _zeroStageY = _rawStageY;
+            _zeroStageZ = _rawStageZ;
+            _zeroStageRx = _rawStageRx;
+            _zeroStageRy = _rawStageRy;
+            _zeroStageRz = _rawStageRz;
+        }
+
+        private void ApplyDisplayedStagePosition()
+        {
+            if (DisplayStagePositionAsRaw)
+            {
+                CurrentPositionX = _rawStageX;
+                CurrentPositionY = _rawStageY;
+                CurrentPositionZ = _rawStageZ;
+                CurrentPositionRx = _rawStageRx;
+                CurrentPositionRy = _rawStageRy;
+                CurrentPositionRz = _rawStageRz;
+            }
+            else
+            {
+                CurrentPositionX = _rawStageX - _zeroStageX;
+                CurrentPositionY = _rawStageY - _zeroStageY;
+                CurrentPositionZ = _rawStageZ - _zeroStageZ;
+                CurrentPositionRx = _rawStageRx - _zeroStageRx;
+                CurrentPositionRy = _rawStageRy - _zeroStageRy;
+                CurrentPositionRz = _rawStageRz - _zeroStageRz;
             }
         }
 
@@ -428,16 +518,17 @@ namespace singalUI.ViewModels
                 for (int i = 0; i < axes.Length && i < availableAxes.Length; i++)
                 {
                     var axis = axes[i];
+                    bool rot = IsRotationalAxis(axis);
                     var config = new MotionConfiguration
                     {
                         Axis = axis,
                         Label = $"{axis} ({availableAxes[i]})",
                         Unit = GetAxisUnit(axis),
                         IsEnabled = true,
-                        Range = 1000,     // 1000 µm = 1 mm range
-                        StepSize = 100,   // 100 µm per step (0.1 mm)
-                        NumSteps = 10,    // 10 steps default
-                        TargetPosition = 0  // Default target
+                        Range = rot ? 90 : 1000,
+                        StepSize = rot ? 1 : 100,
+                        NumSteps = 10,
+                        TargetPosition = 0
                     };
                     MotionRows.Add(config);
                     Log($"[UpdateAxis] Added axis: {config.Label}, Unit={config.Unit}, StepSize={config.StepSize}");
@@ -497,6 +588,8 @@ namespace singalUI.ViewModels
         /// </summary>
         public void Cleanup()
         {
+            MotionRows.CollectionChanged -= OnMotionRowsCollectionChanged;
+            App.CalibrationAppModeChanged -= OnGlobalCalibrationAppModeChanged;
             foreach (var wrapper in StageWrappers)
             {
                 wrapper.PropertyChanged -= OnWrapperPropertyChanged;
@@ -579,6 +672,8 @@ namespace singalUI.ViewModels
             EstimatedTime = TotalPlannedPoints * (SamplingMode == SamplingMode.Timed ? TimedInterval : 1);
         }
 
+        private const int MinRotationCalibRzSteps = 12;
+
         [RelayCommand]
         private async Task StartSequence()
         {
@@ -590,14 +685,49 @@ namespace singalUI.ViewModels
                 return;
             }
 
+            if (IsRotationCalibrationMode)
+            {
+                var rotationRow = enabledAxes.FirstOrDefault(r => r.Axis == AxisType.Rz);
+                if (rotationRow == null)
+                {
+                    MovementStatus = "Rotation capture: enable the Rz (θ) motion row.";
+                    Log("[StartSequence] Rotation mode: no enabled Rz row");
+                    return;
+                }
+
+                if (rotationRow.NumSteps < MinRotationCalibRzSteps)
+                {
+                    MovementStatus = $"Set Points to at least {MinRotationCalibRzSteps} on the Rz row.";
+                    Log($"[StartSequence] Rotation mode: NumSteps={rotationRow.NumSteps} < {MinRotationCalibRzSteps}");
+                    return;
+                }
+            }
+
             IsSequenceRunning = true;
             int totalAxes = enabledAxes.Count;
             int currentAxis = 0;
+            string? rotationCaptureSessionDir = null;
+            if (IsRotationCalibrationMode)
+            {
+                rotationCaptureSessionDir = RotationCalibVm.CreateRotationCaptureSessionDirectory();
+                Log($"[StartSequence] Rotation capture session: {rotationCaptureSessionDir}");
+                MovementStatus = $"Saving frames to: {rotationCaptureSessionDir}";
+            }
 
             try
             {
                 Log($"========== StartSequence {(MovementModeAbsolute ? "ABSOLUTE" : "RELATIVE")} ==========");
                 Log($"[StartSequence] Total axes: {totalAxes}");
+
+                if (IsRotationCalibrationMode && rotationCaptureSessionDir != null)
+                {
+                    await MoveRzToZeroBeforeRotationCaptureAsync(enabledAxes);
+                    if (!IsSequenceRunning)
+                    {
+                        MovementStatus = "Sequence aborted";
+                        return;
+                    }
+                }
 
                 foreach (var axisConfig in enabledAxes)
                 {
@@ -612,25 +742,22 @@ namespace singalUI.ViewModels
                         continue;
                     }
 
-                    // Get current position
-                    double currentPosInMm = wrapper.GetAxisPosition(axisType);
-                    double currentPosInUm = currentPosInMm * 1000.0;
-                    // Sync UI model with live current position so AutoStepSize matches what UI shows.
-                    axisConfig.CurrentPosition = currentPosInUm;
+                    double currentDisplay = GetCurrentDisplayPosition(wrapper, axisType);
+                    string u = DisplayUnitForAxis(axisType);
+                    axisConfig.CurrentPosition = currentDisplay;
 
                     if (MovementModeAbsolute)
                     {
-                        // ABSOLUTE MODE
-                        double stepSizeInUm = axisConfig.AutoStepSize;
-                        double stepAmount = GetStepAmountForController(wrapper, stepSizeInUm);
+                        double stepSizeUi = axisConfig.AutoStepSize;
+                        double stepAmount = GetStepAmountForController(wrapper, stepSizeUi, axisType);
                         int stepCount = axisConfig.NumSteps > 0 ? axisConfig.NumSteps : 1;
-                        double totalMoveUm = stepSizeInUm * stepCount;
+                        double totalMoveUi = stepSizeUi * stepCount;
 
                         Log($"[StartSequence] Axis {currentAxis}/{totalAxes}: {axisConfig.Label} ABSOLUTE");
-                        Log($"[StartSequence] StepSize(UI)={stepSizeInUm}, StepAmount(sent)={stepAmount}");
-                        Log($"  Current: {currentPosInUm:F2} µm");
-                        Log($"  StepSize: {stepSizeInUm:F2} µm, Steps: {stepCount}, Total: {totalMoveUm:F2} µm");
-                        MovementStatus = $"{axisConfig.Label}: Moving {totalMoveUm:F0} µm...";
+                        Log($"[StartSequence] StepSize(UI)={stepSizeUi}, StepAmount(sent)={stepAmount}");
+                        Log($"  Current: {currentDisplay:F2} {u}");
+                        Log($"  StepSize: {stepSizeUi:F2} {u}, Steps: {stepCount}, Total: {totalMoveUi:F2} {u}");
+                        MovementStatus = $"{axisConfig.Label}: Moving {totalMoveUi:F0} {u}...";
 
                         for (int step = 0; step < stepCount; step++)
                         {
@@ -643,31 +770,47 @@ namespace singalUI.ViewModels
 
                             await Task.Run(() => wrapper.MoveAxis(axisType, stepAmount));
 
-                            // Update position display immediately
                             RefreshPositionsNow();
 
                             MovementStatus = $"{axisConfig.Label}: Step {step + 1}/{stepCount}";
-                            Log($"  Step {step + 1}/{stepCount} +{stepSizeInUm:F2} µm");
-                            await Task.Delay(50);
+                            Log($"  Step {step + 1}/{stepCount} +{stepSizeUi:F2} {u}");
+                            int settleMs = IsRotationCalibrationMode && axisType == AxisType.Rz ? 400 : 50;
+                            await Task.Delay(settleMs);
+
+                            if (IsRotationCalibrationMode && axisType == AxisType.Rz &&
+                                rotationCaptureSessionDir != null)
+                            {
+                                MovementStatus = $"{axisConfig.Label}: Save frame {step + 1}/{stepCount}…";
+                                var save = RotationCalibVm.TrySaveRotationCaptureFrame(
+                                    rotationCaptureSessionDir,
+                                    step + 1);
+                                if (save.ok)
+                                    Log($"[StartSequence] Saved {save.savedPath}");
+                                else
+                                {
+                                    Log($"[StartSequence] Frame {step + 1} save failed (continuing): {save.message}");
+                                    MovementStatus =
+                                        $"{axisConfig.Label}: Frame {step + 1} save failed — continuing";
+                                }
+                            }
                         }
 
-                        double finalPosInMm = wrapper.GetAxisPosition(axisType);
-                        double actualMoveUm = (finalPosInMm - currentPosInMm) * 1000.0;
-                        Log($"  Done: now at {finalPosInMm*1000:F2} µm (moved {actualMoveUm:F2} µm)");
+                        double finalDisplay = GetCurrentDisplayPosition(wrapper, axisType);
+                        double actualMoveUi = finalDisplay - currentDisplay;
+                        Log($"  Done: now at {finalDisplay:F2} {u} (moved {actualMoveUi:F2} {u})");
                     }
                     else
                     {
-                        // RELATIVE MODE
-                        double stepSizeInUm = axisConfig.StepSize;
-                        double stepAmount = GetStepAmountForController(wrapper, stepSizeInUm);
+                        double stepSizeUi = axisConfig.StepSize;
+                        double stepAmount = GetStepAmountForController(wrapper, stepSizeUi, axisType);
                         int stepCount = axisConfig.NumSteps > 0 ? axisConfig.NumSteps : 1;
-                        double totalMoveUm = stepSizeInUm * stepCount;
+                        double totalMoveUi = stepSizeUi * stepCount;
 
                         Log($"[StartSequence] Axis {currentAxis}/{totalAxes}: {axisConfig.Label} RELATIVE");
-                        Log($"[StartSequence] StepSize(UI)={stepSizeInUm}, StepAmount(sent)={stepAmount}");
-                        Log($"  Current: {currentPosInUm:F2} µm");
-                        Log($"  StepSize: {stepSizeInUm:F2} µm, Steps: {stepCount}, Total: {totalMoveUm:F2} µm");
-                        MovementStatus = $"{axisConfig.Label}: Moving {totalMoveUm:F0} µm...";
+                        Log($"[StartSequence] StepSize(UI)={stepSizeUi}, StepAmount(sent)={stepAmount}");
+                        Log($"  Current: {currentDisplay:F2} {u}");
+                        Log($"  StepSize: {stepSizeUi:F2} {u}, Steps: {stepCount}, Total: {totalMoveUi:F2} {u}");
+                        MovementStatus = $"{axisConfig.Label}: Moving {totalMoveUi:F0} {u}...";
 
                         for (int step = 0; step < stepCount; step++)
                         {
@@ -680,21 +823,40 @@ namespace singalUI.ViewModels
 
                             await Task.Run(() => wrapper.MoveAxis(axisType, stepAmount));
 
-                            // Update position display immediately
                             RefreshPositionsNow();
 
                             MovementStatus = $"{axisConfig.Label}: Step {step + 1}/{stepCount}";
-                            Log($"  Step {step + 1}/{stepCount} +{stepSizeInUm:F2} µm");
-                            await Task.Delay(50);
+                            Log($"  Step {step + 1}/{stepCount} +{stepSizeUi:F2} {u}");
+                            int settleMsRel = IsRotationCalibrationMode && axisType == AxisType.Rz ? 400 : 50;
+                            await Task.Delay(settleMsRel);
+
+                            if (IsRotationCalibrationMode && axisType == AxisType.Rz &&
+                                rotationCaptureSessionDir != null)
+                            {
+                                MovementStatus = $"{axisConfig.Label}: Save frame {step + 1}/{stepCount}…";
+                                var save = RotationCalibVm.TrySaveRotationCaptureFrame(
+                                    rotationCaptureSessionDir,
+                                    step + 1);
+                                if (save.ok)
+                                    Log($"[StartSequence] Saved {save.savedPath}");
+                                else
+                                {
+                                    Log($"[StartSequence] Frame {step + 1} save failed (continuing): {save.message}");
+                                    MovementStatus =
+                                        $"{axisConfig.Label}: Frame {step + 1} save failed — continuing";
+                                }
+                            }
                         }
 
-                        double finalPosInMm = wrapper.GetAxisPosition(axisType);
-                        double actualMoveUm = (finalPosInMm - currentPosInMm) * 1000.0;
-                        Log($"  Done: now at {finalPosInMm*1000:F2} µm (moved {actualMoveUm:F2} µm)");
+                        double finalDisplay = GetCurrentDisplayPosition(wrapper, axisType);
+                        double actualMoveUi = finalDisplay - currentDisplay;
+                        Log($"  Done: now at {finalDisplay:F2} {u} (moved {actualMoveUi:F2} {u})");
                     }
                 }
 
-                MovementStatus = $"Sequence completed ({totalAxes} axes)";
+                MovementStatus = rotationCaptureSessionDir != null
+                    ? $"Rotation capture done. Folder: {rotationCaptureSessionDir}"
+                    : $"Sequence completed ({totalAxes} axes)";
                 Log($"[StartSequence] === COMPLETED ===");
             }
             catch (Exception ex)
@@ -722,6 +884,42 @@ namespace singalUI.ViewModels
         [RelayCommand]
         private void SamplePoint()
         {
+        }
+
+        /// <summary>Absolute Rz → 0° before rotation capture so the stepped sweep starts from a known angle.</summary>
+        private async Task MoveRzToZeroBeforeRotationCaptureAsync(List<MotionConfiguration> enabledAxes)
+        {
+            var rzRow = enabledAxes.FirstOrDefault(r => r.Axis == AxisType.Rz);
+            if (rzRow == null)
+                return;
+
+            var axisId = GetAxisId(rzRow.Axis);
+            var wrapper = GetStageWrapper(axisId);
+            if (wrapper == null || !wrapper.IsConnected || !wrapper.ControlsAxis(AxisType.Rz))
+            {
+                Log("[StartSequence] Rz→0° skipped: no connected stage with Rz");
+                return;
+            }
+
+            try
+            {
+                MovementStatus = "Rotation: moving Rz to 0° before capture…";
+                Log("[StartSequence] Rz absolute move to 0° before rotation capture sweep");
+                await Task.Run(() => wrapper.MoveAxisAbsolute(AxisType.Rz, 0));
+                if (!IsSequenceRunning)
+                    return;
+                RefreshPositionsNow();
+                await Task.Delay(600);
+                if (!IsSequenceRunning)
+                    return;
+                rzRow.CurrentPosition = GetCurrentDisplayPosition(wrapper, AxisType.Rz);
+                Log($"[StartSequence] Rz homing done, display ≈ {rzRow.CurrentPosition:F3}°");
+            }
+            catch (Exception ex)
+            {
+                Log($"[StartSequence] Rz homing failed: {ex.Message} (continuing with sequence)");
+                MovementStatus = $"Rz homing failed — continuing: {ex.Message}";
+            }
         }
 
         // Helper methods for StageManager integration (replaces gRPC)
@@ -760,13 +958,14 @@ namespace singalUI.ViewModels
             }
 
             var axisType = AxisIdToAxisType(axisId);
-            Log($"[MoveAxis] Moving axis {axisId} ({axisType}) by {distance:F4} µm using Stage {wrapper.Id}");
+            bool rot = IsRotationalAxis(axisType);
+            string u = DisplayUnitForAxis(axisType);
+            Log($"[MoveAxis] Moving axis {axisId} ({axisType}) by {distance:F4} {u} using Stage {wrapper.Id}");
 
-            // Convert micrometers to millimeters for PI controller (1 mm = 1000 µm)
-            double distanceInMm = distance / 1000.0;
-            Log($"[MoveAxis] Converted to {distanceInMm:F6} mm for controller");
+            double moveAmount = rot ? distance : distance / 1000.0;
+            Log($"[MoveAxis] Controller delta: {moveAmount:F6} {(rot ? "deg" : "mm")}");
 
-            await Task.Run(() => wrapper.MoveAxis(axisType, distanceInMm));
+            await Task.Run(() => wrapper.MoveAxis(axisType, moveAmount));
         }
 
         // Stage Movement Commands
@@ -791,8 +990,9 @@ namespace singalUI.ViewModels
                 double distance = axisConfig.StepSize * axisConfig.NumSteps;
                 await MoveAxisAsync(axisId, distance);
 
-                MovementStatus = $"Success: Moved {distance:F3}";
-                Log($"[MoveSingle] Success: Moved axis {axisConfig.Label} by {distance:F3}");
+                string u = DisplayUnitForAxis(axisConfig.Axis);
+                MovementStatus = $"Success: Moved {distance:F3} {u}";
+                Log($"[MoveSingle] Success: Moved axis {axisConfig.Label} by {distance:F3} {u}");
             }
             catch (Exception ex)
             {
@@ -825,101 +1025,90 @@ namespace singalUI.ViewModels
                     return;
                 }
 
-                // Get current position BEFORE any move
-                double currentPosInMm = wrapper.GetAxisPosition(axisType);
-                double currentPosInUm = currentPosInMm * 1000.0;
+                double currentDisplay = GetCurrentDisplayPosition(wrapper, axisType);
+                string u = DisplayUnitForAxis(axisType);
 
                 if (MovementModeAbsolute)
                 {
-                    // Absolute mode uses UI StepSize/NumSteps directly (relative stepping)
-                    double stepSizeInUm = axisConfig.AutoStepSize;
-                    double stepAmount = GetStepAmountForController(wrapper, stepSizeInUm);
+                    double stepSizeUi = axisConfig.AutoStepSize;
+                    double stepAmount = GetStepAmountForController(wrapper, stepSizeUi, axisType);
                     int stepCount = axisConfig.NumSteps > 0 ? axisConfig.NumSteps : 1;
-                    double totalMoveUm = stepSizeInUm * stepCount;
+                    double totalMoveUi = stepSizeUi * stepCount;
 
                     Log($"========== ABSOLUTE MOVE DEBUG ==========");
                     Log($"[MoveToTarget] Mode: ABSOLUTE");
                     Log($"[MoveToTarget] Axis: {axisConfig.Label} ({axisType})");
-                    Log($"[MoveToTarget] StepSize(UI)={stepSizeInUm}, StepAmount(sent)={stepAmount}");
-                    Log($"[MoveToTarget] Current Position: {currentPosInUm:F4} µm ({currentPosInMm:F6} mm)");
-                    Log($"[MoveToTarget] Step Size: {stepSizeInUm:F4} µm");
+                    Log($"[MoveToTarget] StepSize(UI)={stepSizeUi}, StepAmount(sent)={stepAmount}");
+                    Log($"[MoveToTarget] Current Position: {currentDisplay:F4} {u}");
+                    Log($"[MoveToTarget] Step Size: {stepSizeUi:F4} {u}");
                     Log($"[MoveToTarget] Step Count: {stepCount}");
-                    Log($"[MoveToTarget] Total Move: {totalMoveUm:F4} µm");
+                    Log($"[MoveToTarget] Total Move: {totalMoveUi:F4} {u}");
                     Log($"==========================================");
 
-                    MovementStatus = $"Moving by {stepSizeInUm:F3} µm × {stepCount} steps...";
+                    MovementStatus = $"Moving by {stepSizeUi:F3} {u} × {stepCount} steps...";
 
                     for (int i = 0; i < stepCount; i++)
                     {
-                        double posBeforeStepMm = wrapper.GetAxisPosition(axisType);
-                        double posBeforeStepUm = posBeforeStepMm * 1000.0;
+                        double posBefore = GetCurrentDisplayPosition(wrapper, axisType);
 
-                        Log($"[MoveToTarget] Step {i + 1}/{stepCount}: At {posBeforeStepUm:F4} µm, moving by {stepSizeInUm:F4} µm");
+                        Log($"[MoveToTarget] Step {i + 1}/{stepCount}: At {posBefore:F4} {u}, moving by {stepSizeUi:F4} {u}");
 
                         await Task.Run(() => wrapper.MoveAxis(axisType, stepAmount));
 
-                        double posAfterStepMm = wrapper.GetAxisPosition(axisType);
-                        double posAfterStepUm = posAfterStepMm * 1000.0;
-                        double actualMoveUm = posAfterStepUm - posBeforeStepUm;
+                        double posAfter = GetCurrentDisplayPosition(wrapper, axisType);
+                        double actualMoveUi = posAfter - posBefore;
 
-                        Log($"[MoveToTarget] Step {i + 1} completed: Actually moved {actualMoveUm:F4} µm, now at {posAfterStepUm:F4} µm");
+                        Log($"[MoveToTarget] Step {i + 1} completed: Actually moved {actualMoveUi:F4} {u}, now at {posAfter:F4} {u}");
                     }
 
-                    double finalPosInMm = wrapper.GetAxisPosition(axisType);
-                    double finalPosInUm = finalPosInMm * 1000.0;
-                    double actualTotalMoveUm = finalPosInUm - currentPosInUm;
+                    double finalDisplay = GetCurrentDisplayPosition(wrapper, axisType);
+                    double actualTotalMoveUi = finalDisplay - currentDisplay;
 
-                    Log($"[MoveToTarget] FINAL: Position {finalPosInUm:F4} µm, Total moved: {actualTotalMoveUm:F4} µm");
-                    MovementStatus = $"Success: Moved {actualTotalMoveUm:F3} µm (now {finalPosInUm:F3} µm)";
+                    Log($"[MoveToTarget] FINAL: Position {finalDisplay:F4} {u}, Total moved: {actualTotalMoveUi:F4} {u}");
+                    MovementStatus = $"Success: Moved {actualTotalMoveUi:F3} {u} (now {finalDisplay:F3} {u})";
 
-                    // Update calculated position display
                     OnPropertyChanged(nameof(CalculatedEndPosition));
                 }
                 else
                 {
-                    // Relative move - use StepSize and NumSteps from axis config
-                    double distanceInUm = axisConfig.StepSize;  // StepSize is in µm
-                    double distanceAmount = GetStepAmountForController(wrapper, distanceInUm);
+                    double distanceUi = axisConfig.StepSize;
+                    double distanceAmount = GetStepAmountForController(wrapper, distanceUi, axisType);
                     int stepCount = axisConfig.NumSteps > 0 ? axisConfig.NumSteps : 1;
-                    double totalMoveUm = distanceInUm * stepCount;
+                    double totalMoveUi = distanceUi * stepCount;
 
                     Log($"========== RELATIVE MOVE DEBUG ==========");
                     Log($"[MoveToTarget] Mode: RELATIVE");
                     Log($"[MoveToTarget] Axis: {axisConfig.Label} ({axisType})");
-                    Log($"[MoveToTarget] StepSize(UI)={distanceInUm}, StepAmount(sent)={distanceAmount}");
-                    Log($"[MoveToTarget] Current Position: {currentPosInUm:F4} µm ({currentPosInMm:F6} mm)");
-                    Log($"[MoveToTarget] Distance per step: {distanceInUm:F4} µm");
+                    Log($"[MoveToTarget] StepSize(UI)={distanceUi}, StepAmount(sent)={distanceAmount}");
+                    Log($"[MoveToTarget] Current Position: {currentDisplay:F4} {u}");
+                    Log($"[MoveToTarget] Distance per step: {distanceUi:F4} {u}");
                     Log($"[MoveToTarget] Step Count: {stepCount}");
-                    Log($"[MoveToTarget] Total Expected Move: {totalMoveUm:F4} µm");
+                    Log($"[MoveToTarget] Total Expected Move: {totalMoveUi:F4} {u}");
                     Log($"==========================================");
 
-                    MovementStatus = $"Moving by {distanceInUm:F3} µm × {stepCount} steps...";
+                    MovementStatus = $"Moving by {distanceUi:F3} {u} × {stepCount} steps...";
 
                     for (int i = 0; i < stepCount; i++)
                     {
-                        double posBeforeStepMm = wrapper.GetAxisPosition(axisType);
-                        double posBeforeStepUm = posBeforeStepMm * 1000.0;
+                        double posBefore = GetCurrentDisplayPosition(wrapper, axisType);
 
-                        Log($"[MoveToTarget] Step {i + 1}/{stepCount}: At {posBeforeStepUm:F4} µm, moving by {distanceInUm:F4} µm");
+                        Log($"[MoveToTarget] Step {i + 1}/{stepCount}: At {posBefore:F4} {u}, moving by {distanceUi:F4} {u}");
 
                         await Task.Run(() => wrapper.MoveAxis(axisType, distanceAmount));
 
-                        double posAfterStepMm = wrapper.GetAxisPosition(axisType);
-                        double posAfterStepUm = posAfterStepMm * 1000.0;
-                        double actualMoveUm = posAfterStepUm - posBeforeStepUm;
+                        double posAfter = GetCurrentDisplayPosition(wrapper, axisType);
+                        double actualMoveUi = posAfter - posBefore;
 
-                        Log($"[MoveToTarget] Step {i + 1} completed: Actually moved {actualMoveUm:F4} µm, now at {posAfterStepUm:F4} µm");
+                        Log($"[MoveToTarget] Step {i + 1} completed: Actually moved {actualMoveUi:F4} {u}, now at {posAfter:F4} {u}");
                         await Task.Delay(50);
                     }
 
-                    double finalPosInMm = wrapper.GetAxisPosition(axisType);
-                    double finalPosInUm = finalPosInMm * 1000.0;
-                    double actualTotalMoveUm = finalPosInUm - currentPosInUm;
+                    double finalDisplay = GetCurrentDisplayPosition(wrapper, axisType);
+                    double actualTotalMoveUi = finalDisplay - currentDisplay;
 
-                    Log($"[MoveToTarget] FINAL: Position {finalPosInUm:F4} µm, Total moved: {actualTotalMoveUm:F4} µm");
-                    MovementStatus = $"Success: At {finalPosInUm:F3} µm (moved {actualTotalMoveUm:F3} µm)";
+                    Log($"[MoveToTarget] FINAL: Position {finalDisplay:F4} {u}, Total moved: {actualTotalMoveUi:F4} {u}");
+                    MovementStatus = $"Success: At {finalDisplay:F3} {u} (moved {actualTotalMoveUi:F3} {u})";
 
-                    // Update calculated position display
                     OnPropertyChanged(nameof(CalculatedEndPosition));
                 }
             }
@@ -930,14 +1119,28 @@ namespace singalUI.ViewModels
             }
         }
 
-        private static double GetStepAmountForController(StageWrapper wrapper, double stepSizeUm)
+        private static bool IsRotationalAxis(AxisType axis) =>
+            axis is AxisType.Rx or AxisType.Ry or AxisType.Rz;
+
+        private static double GetCurrentDisplayPosition(StageWrapper wrapper, AxisType axisType)
         {
-            // SigmaKoki expects raw steps from UI; other controllers use mm
+            double controllerUnits = wrapper.GetAxisPosition(axisType);
+            return IsRotationalAxis(axisType) ? controllerUnits : controllerUnits * 1000.0;
+        }
+
+        private static string DisplayUnitForAxis(AxisType axisType) =>
+            IsRotationalAxis(axisType) ? "deg" : "µm";
+
+        /// <summary>Convert UI step (µm linear or deg rotational) to units expected by <see cref="StageWrapper.MoveAxis"/>.</summary>
+        private static double GetStepAmountForController(StageWrapper wrapper, double uiStepDisplayUnits, AxisType axisType)
+        {
+            if (wrapper.Controller is Hsc103RotationStageController)
+                return uiStepDisplayUnits;
             if (wrapper.Controller is SigmakokiController)
-            {
-                return stepSizeUm;
-            }
-            return stepSizeUm / 1000.0;
+                return uiStepDisplayUnits;
+            if (IsRotationalAxis(axisType))
+                return uiStepDisplayUnits;
+            return uiStepDisplayUnits / 1000.0;
         }
 
         [RelayCommand]
@@ -1226,103 +1429,95 @@ namespace singalUI.ViewModels
 
             try
             {
-                // Get current position
-                double currentPosInMm = wrapper.GetAxisPosition(axisConfig.Axis);
-                double currentPosInUm = currentPosInMm * 1000.0;
+                var axisType = axisConfig.Axis;
+                double currentDisplay = GetCurrentDisplayPosition(wrapper, axisType);
+                string u = DisplayUnitForAxis(axisType);
 
                 if (MovementModeAbsolute)
                 {
-                    // ABSOLUTE MODE
-                    double stepSizeInUm = axisConfig.AutoStepSize;
-                    Log($"[Step Size in UM = {stepSizeInUm}]");
-                    double stepAmount = GetStepAmountForController(wrapper, stepSizeInUm);
+                    double stepSizeUi = axisConfig.AutoStepSize;
+                    Log($"[Step Size UI = {stepSizeUi} {u}]");
+                    double stepAmount = GetStepAmountForController(wrapper, stepSizeUi, axisType);
                     int stepCount = axisConfig.NumSteps > 0 ? axisConfig.NumSteps : 1;
-                    double totalMoveUm = stepSizeInUm * stepCount;
+                    double totalMoveUi = stepSizeUi * stepCount;
 
                     Log($"========== MoveAxisLocal ABSOLUTE ==========");
                     Log($"[MoveAxisLocal] Axis: {axisConfig.Label}");
                     Log($"[MoveAxisLocal] StepAmount(sent): {stepAmount}");
-                    Log($"[MoveAxisLocal] axisConfig.TargetPosition: {axisConfig.TargetPosition} µm");
+                    Log($"[MoveAxisLocal] axisConfig.TargetPosition: {axisConfig.TargetPosition} {u}");
                     Log($"[MoveAxisLocal] axisConfig.NumSteps: {axisConfig.NumSteps}");
-                    Log($"[MoveAxisLocal] Current Position: {currentPosInUm:F4} µm ({currentPosInMm:F6} mm)");
-                    Log($"[MoveAxisLocal] Step Size: {stepSizeInUm:F4} µm");
+                    Log($"[MoveAxisLocal] Current Position: {currentDisplay:F4} {u}");
+                    Log($"[MoveAxisLocal] Step Size: {stepSizeUi:F4} {u}");
                     Log($"[MoveAxisLocal] Step Count: {stepCount}");
-                    Log($"[MoveAxisLocal] Total Move: {totalMoveUm:F4} µm");
+                    Log($"[MoveAxisLocal] Total Move: {totalMoveUi:F4} {u}");
                     Log($"=============================================");
 
-                    MovementStatus = $"Moving {axisConfig.Label} by {totalMoveUm:F1} µm...";
+                    MovementStatus = $"Moving {axisConfig.Label} by {totalMoveUi:F1} {u}...";
 
                     for (int step = 0; step < stepCount; step++)
                     {
-                        Log($"[MoveAxisLocal] Step {step + 1}/{stepCount}: Moving by {stepSizeInUm:F4} µm");
+                        Log($"[MoveAxisLocal] Step {step + 1}/{stepCount}: Moving by {stepSizeUi:F4} {u}");
 
-                        double posBeforeMm = wrapper.GetAxisPosition(axisConfig.Axis);
-                        await Task.Run(() => wrapper.MoveAxis(axisConfig.Axis, stepAmount));
-                        double posAfterMm = wrapper.GetAxisPosition(axisConfig.Axis);
-                        double actualMoveUm = (posAfterMm - posBeforeMm) * 1000.0;
+                        double posBefore = GetCurrentDisplayPosition(wrapper, axisType);
+                        await Task.Run(() => wrapper.MoveAxis(axisType, stepAmount));
+                        double posAfter = GetCurrentDisplayPosition(wrapper, axisType);
+                        double actualMoveUi = posAfter - posBefore;
 
-                        // Update position display immediately
                         RefreshPositionsNow();
 
-                        Log($"[MoveAxisLocal] Step {step + 1} done: moved {actualMoveUm:F4} µm, now at {posAfterMm*1000:F4} µm");
+                        Log($"[MoveAxisLocal] Step {step + 1} done: moved {actualMoveUi:F4} {u}, now at {posAfter:F4} {u}");
 
                         MovementStatus = $"{axisConfig.Label}: Step {step + 1}/{stepCount}";
                         await Task.Delay(50);
                     }
 
-                    double finalPosInMm = wrapper.GetAxisPosition(axisConfig.Axis);
-                    double finalPosInUm = finalPosInMm * 1000.0;
-                    Log($"[MoveAxisLocal] FINAL: {finalPosInUm:F4} µm");
-                    MovementStatus = $"Done: {axisConfig.Label} at {finalPosInUm:F1} µm";
+                    double finalDisplay = GetCurrentDisplayPosition(wrapper, axisType);
+                    Log($"[MoveAxisLocal] FINAL: {finalDisplay:F4} {u}");
+                    MovementStatus = $"Done: {axisConfig.Label} at {finalDisplay:F1} {u}";
                 }
                 else
                 {
-                    // RELATIVE MODE
-                    double stepSizeInUm = axisConfig.StepSize;
-                    double stepAmount = GetStepAmountForController(wrapper, stepSizeInUm);
+                    double stepSizeUi = axisConfig.StepSize;
+                    double stepAmount = GetStepAmountForController(wrapper, stepSizeUi, axisType);
                     int stepCount = axisConfig.NumSteps > 0 ? axisConfig.NumSteps : 1;
-                    double totalMoveUm = stepSizeInUm * stepCount;
+                    double totalMoveUi = stepSizeUi * stepCount;
 
                     Log($"========== MoveAxisLocal RELATIVE ==========");
                     Log($"[MoveAxisLocal] Axis: {axisConfig.Label}");
                     Log($"[MoveAxisLocal] StepAmount(sent): {stepAmount}");
-                    Log($"[MoveAxisLocal] axisConfig.StepSize: {axisConfig.StepSize} µm");
+                    Log($"[MoveAxisLocal] axisConfig.StepSize: {axisConfig.StepSize} {u}");
                     Log($"[MoveAxisLocal] axisConfig.NumSteps: {axisConfig.NumSteps}");
-                    Log($"[MoveAxisLocal] Current Position: {currentPosInUm:F4} µm ({currentPosInMm:F6} mm)");
-                    Log($"[MoveAxisLocal] Step Size: {stepSizeInUm:F4} µm");
+                    Log($"[MoveAxisLocal] Current Position: {currentDisplay:F4} {u}");
+                    Log($"[MoveAxisLocal] Step Size: {stepSizeUi:F4} {u}");
                     Log($"[MoveAxisLocal] Step Count: {stepCount}");
-                    Log($"[MoveAxisLocal] Total Move: {totalMoveUm:F4} µm");
+                    Log($"[MoveAxisLocal] Total Move: {totalMoveUi:F4} {u}");
                     Log($"=============================================");
 
-                    MovementStatus = $"Moving {axisConfig.Label} by {totalMoveUm:F1} µm...";
+                    MovementStatus = $"Moving {axisConfig.Label} by {totalMoveUi:F1} {u}...";
 
                     for (int step = 0; step < stepCount; step++)
                     {
-                        double posBeforeMm = wrapper.GetAxisPosition(axisConfig.Axis);
-                        double posBeforeUm = posBeforeMm * 1000.0;
+                        double posBefore = GetCurrentDisplayPosition(wrapper, axisType);
 
-                        Log($"[MoveAxisLocal] Step {step + 1}/{stepCount}: At {posBeforeUm:F4} µm, moving by {stepSizeInUm:F4} µm");
+                        Log($"[MoveAxisLocal] Step {step + 1}/{stepCount}: At {posBefore:F4} {u}, moving by {stepSizeUi:F4} {u}");
 
-                        await Task.Run(() => wrapper.MoveAxis(axisConfig.Axis, stepAmount));
+                        await Task.Run(() => wrapper.MoveAxis(axisType, stepAmount));
 
-                        double posAfterMm = wrapper.GetAxisPosition(axisConfig.Axis);
-                        double posAfterUm = posAfterMm * 1000.0;
-                        double actualMoveUm = posAfterUm - posBeforeUm;
+                        double posAfter = GetCurrentDisplayPosition(wrapper, axisType);
+                        double actualMoveUi = posAfter - posBefore;
 
-                        // Update position display immediately
                         RefreshPositionsNow();
 
-                        Log($"[MoveAxisLocal] Step {step + 1} done: actually moved {actualMoveUm:F4} µm, now at {posAfterUm:F4} µm");
+                        Log($"[MoveAxisLocal] Step {step + 1} done: actually moved {actualMoveUi:F4} {u}, now at {posAfter:F4} {u}");
 
                         MovementStatus = $"{axisConfig.Label}: Step {step + 1}/{stepCount}";
                         await Task.Delay(50);
                     }
 
-                    double finalPosInMm = wrapper.GetAxisPosition(axisConfig.Axis);
-                    double finalPosInUm = finalPosInMm * 1000.0;
-                    double actualTotalUm = finalPosInUm - currentPosInUm;
-                    Log($"[MoveAxisLocal] FINAL: {finalPosInUm:F4} µm (moved {actualTotalUm:F4} µm)");
-                    MovementStatus = $"Done: {axisConfig.Label} moved {actualTotalUm:F1} µm";
+                    double finalDisplay = GetCurrentDisplayPosition(wrapper, axisType);
+                    double actualTotalUi = finalDisplay - currentDisplay;
+                    Log($"[MoveAxisLocal] FINAL: {finalDisplay:F4} {u} (moved {actualTotalUi:F4} {u})");
+                    MovementStatus = $"Done: {axisConfig.Label} moved {actualTotalUi:F1} {u}";
                 }
 
                 // Update calculated position display
@@ -1382,21 +1577,20 @@ namespace singalUI.ViewModels
                         continue;
                     }
 
-                    // Get current position
-                    double currentPosInMm = wrapper.GetAxisPosition(axisConfig.Axis);
-                    double currentPosInUm = currentPosInMm * 1000.0;
+                    var axisType = axisConfig.Axis;
+                    double currentDisplay = GetCurrentDisplayPosition(wrapper, axisType);
+                    string u = DisplayUnitForAxis(axisType);
 
                     if (MovementModeAbsolute)
                     {
-                        // ABSOLUTE MODE
-                        double stepSizeInUm = axisConfig.AutoStepSize;
-                        double stepAmount = GetStepAmountForController(wrapper, stepSizeInUm);
+                        double stepSizeUi = axisConfig.AutoStepSize;
+                        double stepAmount = GetStepAmountForController(wrapper, stepSizeUi, axisType);
                         int stepCount = axisConfig.NumSteps > 0 ? axisConfig.NumSteps : 1;
-                        double totalMoveUm = stepSizeInUm * stepCount;
+                        double totalMoveUi = stepSizeUi * stepCount;
 
                         Log($"[MoveAllAxesLocal] Axis {currentAxis}/{totalAxes}: {axisConfig.Label} ABSOLUTE");
-                        Log($"  Current: {currentPosInUm:F4} µm");
-                        Log($"  StepSize: {stepSizeInUm:F4} µm, Steps: {stepCount}, Total: {totalMoveUm:F4} µm");
+                        Log($"  Current: {currentDisplay:F4} {u}");
+                        Log($"  StepSize: {stepSizeUi:F4} {u}, Steps: {stepCount}, Total: {totalMoveUi:F4} {u}");
 
                         for (int step = 0; step < stepCount; step++)
                         {
@@ -1407,30 +1601,28 @@ namespace singalUI.ViewModels
                                 return;
                             }
 
-                            await Task.Run(() => wrapper.MoveAxis(axisConfig.Axis, stepAmount));
+                            await Task.Run(() => wrapper.MoveAxis(axisType, stepAmount));
 
-                            // Update position display immediately
                             RefreshPositionsNow();
 
                             MovementStatus = $"Axis {currentAxis}/{totalAxes}: {axisConfig.Label} step {step + 1}/{stepCount}";
                             await Task.Delay(50);
                         }
 
-                        double finalPosInMm = wrapper.GetAxisPosition(axisConfig.Axis);
-                        double actualMoveUm = (finalPosInMm - currentPosInMm) * 1000.0;
-                        Log($"  Done: now at {finalPosInMm*1000:F4} µm (moved {actualMoveUm:F4} µm)");
+                        double finalDisplay = GetCurrentDisplayPosition(wrapper, axisType);
+                        double actualMoveUi = finalDisplay - currentDisplay;
+                        Log($"  Done: now at {finalDisplay:F4} {u} (moved {actualMoveUi:F4} {u})");
                     }
                     else
                     {
-                        // RELATIVE MODE
-                        double stepSizeInUm = axisConfig.StepSize;
-                        double stepAmount = GetStepAmountForController(wrapper, stepSizeInUm);
+                        double stepSizeUi = axisConfig.StepSize;
+                        double stepAmount = GetStepAmountForController(wrapper, stepSizeUi, axisType);
                         int stepCount = axisConfig.NumSteps > 0 ? axisConfig.NumSteps : 1;
-                        double totalMoveUm = stepSizeInUm * stepCount;
+                        double totalMoveUi = stepSizeUi * stepCount;
 
                         Log($"[MoveAllAxesLocal] Axis {currentAxis}/{totalAxes}: {axisConfig.Label} RELATIVE");
-                        Log($"  Current: {currentPosInUm:F4} µm");
-                        Log($"  StepSize: {stepSizeInUm:F4} µm, Steps: {stepCount}, Total: {totalMoveUm:F4} µm");
+                        Log($"  Current: {currentDisplay:F4} {u}");
+                        Log($"  StepSize: {stepSizeUi:F4} {u}, Steps: {stepCount}, Total: {totalMoveUi:F4} {u}");
 
                         for (int step = 0; step < stepCount; step++)
                         {
@@ -1441,18 +1633,17 @@ namespace singalUI.ViewModels
                                 return;
                             }
 
-                            await Task.Run(() => wrapper.MoveAxis(axisConfig.Axis, stepAmount));
+                            await Task.Run(() => wrapper.MoveAxis(axisType, stepAmount));
 
-                            // Update position display immediately
                             RefreshPositionsNow();
 
                             MovementStatus = $"Axis {currentAxis}/{totalAxes}: {axisConfig.Label} step {step + 1}/{stepCount}";
                             await Task.Delay(50);
                         }
 
-                        double finalPosInMm = wrapper.GetAxisPosition(axisConfig.Axis);
-                        double actualMoveUm = (finalPosInMm - currentPosInMm) * 1000.0;
-                        Log($"  Done: now at {finalPosInMm*1000:F4} µm (moved {actualMoveUm:F4} µm)");
+                        double finalDisplay = GetCurrentDisplayPosition(wrapper, axisType);
+                        double actualMoveUi = finalDisplay - currentDisplay;
+                        Log($"  Done: now at {finalDisplay:F4} {u} (moved {actualMoveUi:F4} {u})");
                     }
                 }
 

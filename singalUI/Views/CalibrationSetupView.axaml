@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:singalUI.ViewModels"
+             xmlns:m="using:singalUI.Models"
              xmlns:s="using:singalUI.Services"
              x:Class="singalUI.Views.CalibrationSetupView"
              x:DataType="vm:CalibrationSetupViewModel"
@@ -10,7 +11,7 @@
         <vm:CalibrationSetupViewModel/>
     </Design.DataContext>
 
-    <Grid RowDefinitions="Auto,*,Auto" ColumnDefinitions="*,300">
+    <Grid RowDefinitions="Auto,*" ColumnDefinitions="*,300">
         <!-- Sampling Mode Selector -->
         <Border Grid.Row="0" Grid.ColumnSpan="2"
                 Background="#2a2a2a"
@@ -120,12 +121,13 @@
             </Grid>
         </Border>
 
+        <Panel Grid.Row="1" Grid.Column="0" Margin="16,16,8,16">
+        <Panel IsVisible="{Binding UseFullMotionTable}">
         <!-- Motion Configuration Table - 7 Columns (Control mode OFF) -->
-        <Border Grid.Row="1" Grid.Column="0"
-                Background="#252525"
+        <Border Background="#252525"
                 BorderBrush="#404040"
                 BorderThickness="1"
-                Margin="16,16,8,16"
+                Margin="0"
                 CornerRadius="8"
                 Padding="0"
                 IsVisible="{Binding SamplingMode, Converter={StaticResource ControlModeVisibleConverter}, ConverterParameter=Invert}">
@@ -290,11 +292,10 @@
         </Border>
 
         <!-- Motion Configuration Table - 8 Columns (Control mode ON) -->
-        <Border Grid.Row="1" Grid.Column="0"
-                Background="#252525"
+        <Border Background="#252525"
                 BorderBrush="#404040"
                 BorderThickness="1"
-                Margin="16,16,8,16"
+                Margin="0"
                 CornerRadius="8"
                 Padding="0"
                 IsVisible="{Binding SamplingMode, Converter={StaticResource ControlModeVisibleConverter}}">
@@ -476,6 +477,52 @@
                 </ItemsControl>
             </Grid>
         </Border>
+        </Panel>
+
+        <!-- Rotation calibration: compact single-DOF motion (first row) -->
+        <Border Background="#252525"
+                BorderBrush="#404040"
+                BorderThickness="1"
+                CornerRadius="8"
+                Padding="0"
+                IsVisible="{Binding ShowRotationCompactMotion}">
+            <Grid RowDefinitions="Auto,Auto,Auto">
+                <Border Grid.Row="0" Background="#2a2a2a" BorderBrush="#404040" BorderThickness="0,0,0,1" Padding="16,10">
+                    <StackPanel Orientation="Horizontal" Spacing="20">
+                        <TextBlock Text="Movement Mode:" FontSize="14" FontWeight="SemiBold" Foreground="#ffffff" VerticalAlignment="Center"/>
+                        <RadioButton Content="Absolute" GroupName="AxisMovementModeRot" IsChecked="{Binding MovementModeAbsolute}" FontSize="13" Foreground="#ffffff" VerticalAlignment="Center"/>
+                        <RadioButton Content="Relative" GroupName="AxisMovementModeRot" IsChecked="{Binding MovementModeAbsolute, Converter={StaticResource InverseBoolConverter}}" FontSize="13" Foreground="#ffffff" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+                <Border Grid.Row="1" Padding="16,12" DataContext="{Binding RotationMotionRow}">
+                    <Grid ColumnDefinitions="Auto,56,Auto,1*,Auto,1*" RowDefinitions="Auto,Auto" ColumnSpacing="10" RowSpacing="8">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="6" Text="Rotation θ (Rz)" FontSize="15" FontWeight="SemiBold" Foreground="#e0e0e0"/>
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Unit" FontSize="12" Foreground="#aaaaaa" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Unit}" FontSize="14" Foreground="#ffffff" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Row="1" Grid.Column="2" Text="Position" FontSize="12" Foreground="#aaaaaa" VerticalAlignment="Center"/>
+                        <NumericUpDown Grid.Row="1" Grid.Column="3" Value="{Binding TargetPosition, Mode=TwoWay}" Minimum="-360" Maximum="360" Increment="0.1" FormatString="F3" FontSize="13"
+                                       IsVisible="{Binding $parent[UserControl].((vm:CalibrationSetupViewModel)DataContext).MovementModeAbsolute}"/>
+                        <Border Grid.Row="1" Grid.Column="3" Background="#1a1a1a" BorderBrush="#505050" BorderThickness="1" CornerRadius="4" Padding="8,6"
+                                IsVisible="{Binding $parent[UserControl].((vm:CalibrationSetupViewModel)DataContext).MovementModeAbsolute, Converter={StaticResource InverseBoolConverter}}">
+                            <TextBlock Text="{Binding CalculatedEndPosition, StringFormat={}{0:F3}}" FontSize="13" Foreground="#ffffff" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <TextBlock Grid.Row="1" Grid.Column="4" Text="Step (deg)" FontSize="12" Foreground="#aaaaaa" VerticalAlignment="Center"/>
+                        <Border Grid.Row="1" Grid.Column="5" Background="#1a1a1a" BorderBrush="#505050" BorderThickness="1" CornerRadius="4" Padding="8,6"
+                                IsVisible="{Binding $parent[UserControl].((vm:CalibrationSetupViewModel)DataContext).MovementModeAbsolute}">
+                            <TextBlock Text="{Binding AutoStepSize, StringFormat={}{0:F3}}" FontSize="13" Foreground="#ffffff" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <NumericUpDown Grid.Row="1" Grid.Column="5" Value="{Binding StepSize, Mode=TwoWay}" Minimum="0.001" Maximum="360" Increment="0.1" FormatString="F3" FontSize="13"
+                                       IsVisible="{Binding $parent[UserControl].((vm:CalibrationSetupViewModel)DataContext).MovementModeAbsolute, Converter={StaticResource InverseBoolConverter}}"/>
+                    </Grid>
+                </Border>
+                <Grid Grid.Row="2" Margin="16,0,16,14" ColumnDefinitions="Auto,*" ColumnSpacing="12" DataContext="{Binding RotationMotionRow}">
+                    <TextBlock Grid.Column="0" Text="Points" FontSize="12" Foreground="#aaaaaa" VerticalAlignment="Center"/>
+                    <NumericUpDown Grid.Column="1" Value="{Binding NumSteps, Mode=TwoWay}" Minimum="1" Maximum="10000" Increment="1" FormatString="F0" FontSize="13" HorizontalAlignment="Left" Width="120"/>
+                </Grid>
+            </Grid>
+        </Border>
+
+        </Panel>
 
         <!-- Right Panel - Scrollable -->
         <ScrollViewer Grid.Row="1" Grid.Column="1" Margin="8,16,16,16">
@@ -509,7 +556,19 @@
                                                     <ComboBoxItem Content="None"/>
                                                     <ComboBoxItem Content="PI"/>
                                                     <ComboBoxItem Content="Sigma Koki"/>
+                                                    <ComboBoxItem Content="Sigma Koki rotation (HSC-103)"/>
                                                 </ComboBox>
+                                                <StackPanel Spacing="8" IsVisible="{Binding HardwareType, Converter={StaticResource SigmakokiRotationVisibleConverter}}">
+                                                    <TextBox Text="{Binding SerialPortName}" Watermark="COM port (e.g. COM3)" FontSize="12"/>
+                                                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                                                        <TextBlock Grid.Column="0" Text="HSC-103 axis (1–3)" FontSize="12" Foreground="#cccccc" VerticalAlignment="Center"/>
+                                                        <NumericUpDown Grid.Column="1" Value="{Binding Hsc103AxisNumber}" Minimum="1" Maximum="3" Increment="1" FormatString="F0" FontSize="12"/>
+                                                    </Grid>
+                                                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                                                        <TextBlock Grid.Column="0" Text="Degrees / pulse" FontSize="12" Foreground="#cccccc" VerticalAlignment="Center"/>
+                                                        <NumericUpDown Grid.Column="1" Value="{Binding DegreesPerPulse}" Minimum="0.000001" Maximum="1" Increment="0.00001" FormatString="G9" FontSize="12"/>
+                                                    </Grid>
+                                                </StackPanel>
                                                 <ComboBox SelectedIndex="{Binding SigmakokiController, Converter={StaticResource SigmakokiControllerToIndexConverter}}" PlaceholderText="Select Sigma Koki Model..." FontSize="12" Foreground="#ffffff" HorizontalAlignment="Stretch" IsVisible="{Binding HardwareType, Converter={StaticResource SigmakokiVisibleConverter}}">
                                                     <ComboBoxItem Content="GIP-101B (1 axis)"/>
                                                     <ComboBoxItem Content="GSC-01 (1 axis)"/>
@@ -558,6 +617,35 @@
                                 <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding CurrentPositionRz, StringFormat={}{0:F3} deg}" FontSize="13" Foreground="#ffffff" Margin="0,4,0,4"/>
                             </Grid>
                         </Border>
+                        <Border Background="#1a1a1a"
+                                BorderBrush="#303030"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="10">
+                            <StackPanel Spacing="6">
+                                <StackPanel Orientation="Horizontal"
+                                            VerticalAlignment="Center"
+                                            Spacing="12"
+                                            FlowDirection="LeftToRight">
+                                    <TextBlock Text="Set zero"
+                                               VerticalAlignment="Center"
+                                               Foreground="#bbbbbb"
+                                               FontSize="12"/>
+                                    <ToggleSwitch IsChecked="{Binding DisplayStagePositionAsRaw, Mode=TwoWay}"
+                                                  OnContent=""
+                                                  OffContent=""
+                                                  VerticalAlignment="Center"/>
+                                    <TextBlock Text="Display raw"
+                                               VerticalAlignment="Center"
+                                               Foreground="#bbbbbb"
+                                               FontSize="12"/>
+                                </StackPanel>
+                                <TextBlock Text="Showing relative stage pose at the frame when the switch is turned off."
+                                           FontSize="11"
+                                           Foreground="#9e9e9e"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
                 </Border>
 
@@ -589,10 +677,73 @@
 
                 <!-- Action Buttons -->
                 <StackPanel Spacing="8">
-                    <Button Content="Start Sequence" Command="{Binding StartSequenceCommand}" Padding="18,14" FontSize="14" Foreground="#ffffff" Background="#2e7d32" HorizontalAlignment="Stretch" IsEnabled="{Binding IsSequenceRunning, Converter={StaticResource InverseBoolConverter}}"/>
+                    <Button Content="{Binding StartSequenceButtonText}" Command="{Binding StartSequenceCommand}" Padding="18,14" FontSize="14" Foreground="#ffffff" Background="#2e7d32" HorizontalAlignment="Stretch" IsEnabled="{Binding IsSequenceRunning, Converter={StaticResource InverseBoolConverter}}"/>
                     <Button Content="Move All Axes (Local)" Command="{Binding MoveAllAxesLocalCommand}" Foreground="#ffffff" Padding="18,14" FontSize="14" HorizontalAlignment="Stretch" IsEnabled="{Binding IsSequenceRunning, Converter={StaticResource InverseBoolConverter}}"/>
                     <Button Content="Abort Sequence" Command="{Binding AbortSequenceCommand}" Foreground="#ffffff" Background="#c62828" Padding="18,14" FontSize="14" HorizontalAlignment="Stretch" IsEnabled="{Binding IsSequenceRunning}"/>
                 </StackPanel>
+
+                <!-- Rotation calibration (batch) -->
+                <Border IsVisible="{Binding RotationCalibVm.ShowRotationCalibPanel}"
+                        Background="#252525"
+                        BorderBrush="#404040"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="16">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="Rotation calibration (NanoMeas.dll)"
+                                   FontSize="15"
+                                   FontWeight="SemiBold"
+                                   Foreground="#ffffff"/>
+                        <TextBlock Text="{Binding RotationCalibVm.RotationDatasetHint}"
+                                   FontSize="11"
+                                   Foreground="#cccccc"
+                                   TextWrapping="Wrap"/>
+                        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto">
+                            <TextBlock Grid.Column="0"
+                                       Text="Manual θ (deg) if no Rz axis:"
+                                       VerticalAlignment="Center"
+                                       Foreground="#ffffff"
+                                       FontSize="12"
+                                       Margin="0,0,12,0"/>
+                            <NumericUpDown Grid.Column="1"
+                                           Value="{Binding RotationCalibVm.ManualThetaDegrees}"
+                                           Minimum="-360"
+                                           Maximum="360"
+                                           Increment="0.1"
+                                           FormatString="F3"
+                                           HorizontalAlignment="Stretch"/>
+                        </Grid>
+                        <TextBlock Text="Green button: Rz goes to 0° first, then each step saves frame_NNN.png + manifest.csv under .\storage\session_*. Configure → Run rotation calibration runs NanoMeas.dll on the newest session (≥12 frames)."
+                                   FontSize="11"
+                                   Foreground="#9e9e9e"
+                                   TextWrapping="Wrap"/>
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                            <Button Grid.Column="0"
+                                    Content="Clear sample list"
+                                    Command="{Binding RotationCalibVm.ClearRotationSamplesCommand}"
+                                    Padding="12,10"
+                                    FontSize="13"
+                                    HorizontalAlignment="Stretch"/>
+                            <Button Grid.Column="1"
+                                    Content="Import samples CSV"
+                                    Command="{Binding RotationCalibVm.ImportRotationSamplesCsvCommand}"
+                                    Padding="12,10"
+                                    FontSize="13"
+                                    HorizontalAlignment="Stretch"/>
+                        </Grid>
+                        <ListBox ItemsSource="{Binding RotationCalibVm.RotationSamples}"
+                                 MinHeight="90"
+                                 MaxHeight="190"
+                                 Background="#1a1a1a"
+                                 Foreground="#e0e0e0">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="m:RotationCalibrationSample">
+                                    <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" FontSize="11"/>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </StackPanel>
+                </Border>
 
                 <!-- Error Log -->
                 <Border Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="16">
@@ -612,18 +763,5 @@
             </StackPanel>
         </ScrollViewer>
 
-        <!-- Bottom Action Bar -->
-        <Border Grid.Row="2" Grid.ColumnSpan="2"
-                Background="#2a2a2a"
-                BorderBrush="#404040"
-                BorderThickness="0,1,0,0"
-                Padding="16,12">
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="12">
-                <Button Content="Save and Continue"
-                        Foreground="#ffffff"
-                        Padding="20,12"
-                        FontSize="14"/>
-            </StackPanel>
-        </Border>
     </Grid>
 </UserControl>

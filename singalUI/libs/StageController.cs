@@ -42,6 +42,20 @@ using PI;
     public abstract bool AreAxesReferenced();
   }
 
+/// <summary>
+/// Serial stages use <see cref="System.IO.Ports.SerialPort"/>; on macOS/Linux the runtime throws
+/// <see cref="PlatformNotSupportedException"/> ("only supported on Windows"). Fail fast with a clear message.
+/// </summary>
+internal static class StageSerialPortPlatform
+{
+    public static void RequireWindowsForComPort(string hardwareDisplayName)
+    {
+        if (!OperatingSystem.IsWindows())
+            throw new PlatformNotSupportedException(
+                $"{hardwareDisplayName} requires Windows: COM/RS-232 uses System.IO.Ports, which is only supported on Windows in this build. Run the published app on a Windows PC to connect this stage.");
+    }
+}
+
 public class SigmakokiController : StageController {
 
     private string[] axes = Array.Empty<string>();
@@ -118,6 +132,7 @@ public class SigmakokiController : StageController {
         {
             try
             {
+                StageSerialPortPlatform.RequireWindowsForComPort("Sigma Koki (serial)");
                 _serialPort = new System.IO.Ports.SerialPort();
                 _serialPort.PortName = _portName;
                 _serialPort.BaudRate = 38400;  // HSC-103 requires 38400!

@@ -18,6 +18,7 @@ public class StageHardwareDisplayNameConverter : IValueConverter
             {
                 StageHardwareType.PI => "PI",
                 StageHardwareType.Sigmakoki => "Sigma Koki",
+                StageHardwareType.SigmakokiRotationStage => "Sigma Koki rotation (HSC-103)",
                 _ => "None"
             };
         }

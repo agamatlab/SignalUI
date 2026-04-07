@@ -17,6 +17,9 @@ public partial class App : Application
 {
     // Using StageManager instead of GrpcStageService for direct USB/serial stage control
     public static MatrixVisionCameraService CameraService { get; } = new();
+    public static ConfigViewModel SharedConfigViewModel { get; } = new();
+
+    public static AnalysisViewModel SharedAnalysisViewModel { get; } = new();
 
     private static CalibrationAppMode _calibrationAppMode = CalibrationAppMode.SixDofStage;
 
@@ -52,7 +55,11 @@ public partial class App : Application
             File.WriteAllText(logPath, $"=== Camera Log Started {DateTime.Now:O} ===\n");
 
             bool connected = CameraService.Initialize();
-            File.AppendAllText(logPath, $"Camera connected: {connected}\n");
+            File.AppendAllText(logPath,
+                $"Camera connected: {connected}\n" +
+                $"moduleBase: {CameraService.LastInitModuleBase}\n" +
+                $"mvGenTLProducer.cti found: {CameraService.LastInitCtiFound}\n" +
+                $"deviceCount (after updateDeviceList): {CameraService.LastInitDeviceCount}\n");
 
             if (connected)
             {

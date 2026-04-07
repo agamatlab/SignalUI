@@ -12,7 +12,7 @@ public partial class ConfigView : UserControl
         {
             Console.WriteLine("[ConfigView] Constructor START");
             InitializeComponent();
-            DataContext = new ConfigViewModel();
+            DataContext = App.SharedConfigViewModel;
             Console.WriteLine("[ConfigView] Constructor END");
         }
         catch (Exception ex)

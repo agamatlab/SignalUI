@@ -5,19 +5,18 @@ using singalUI.Models;
 
 namespace singalUI.Converters;
 
-public class StageHardwareToIndexConverter : IValueConverter
+/// <summary>Visible when hardware is Sigma Koki HSC-103 rotation (COM) stage.</summary>
+public class SigmakokiRotationVisibleConverter : IValueConverter
 {
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         if (value is StageHardwareType hardware)
-            return (int)hardware;
-        return 0;
+            return hardware == StageHardwareType.SigmakokiRotationStage;
+        return false;
     }
 
     public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
-        if (value is int index && index >= 0 && index <= 3)
-            return (StageHardwareType)index;
-        return StageHardwareType.None;
+        throw new NotSupportedException();
     }
 }

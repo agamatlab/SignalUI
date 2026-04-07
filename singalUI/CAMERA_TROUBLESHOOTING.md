@@ -85,6 +85,32 @@ If camera preview is not working:
 
 ---
 
+## Published exe (`SignalUI/out`) and GigE (RJ45)
+
+The app resolves `mvGenTLProducer.cti` from **`AppContext.BaseDirectory`** (the folder containing the published app), not from the process “Start in” folder, so shortcuts no longer need a special working directory for the CTI.
+
+**Build / copy checklist (full folder deploy):**
+
+| Item | Expected location |
+|------|-------------------|
+| `*.exe` | Publish root |
+| `mvGenTLProducer.cti` | Publish root |
+| `mv.impact.acquire.dll` | Publish root |
+| `MatrixVision\**\mv*.dll` | Copied from your Matrix Vision install at build time |
+
+Build requires mvIMPACT Acquire at `C:\Program Files\MATRIX VISION\mvIMPACT Acquire\` (see `singalUI.csproj`). Publish:
+
+```powershell
+dotnet publish singalUI\singalUI.csproj -c Release -o ..\out
+.\tools\VerifyPublishManifest.ps1 -OutDir ..\out
+```
+
+**Runtime log:** `%LocalAppData%\singalUI\camera_log.txt` includes `moduleBase`, `mvGenTLProducer.cti found`, and `deviceCount` after `updateDeviceList`.
+
+**wxPropView comparison (same PC, same Ethernet NIC):** Run `wxPropView.exe` under `C:\Program Files\MATRIX VISION\mvIMPACT Acquire\bin\`. If the device list is empty there too, fix subnet, Windows Firewall, or the GigE adapter before debugging the Avalonia app.
+
+---
+
 ## Related Files
 
 - `singalUI/Services/Services/MatrixVisionCameraService.cs` - Camera service implementation

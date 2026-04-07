@@ -70,8 +70,11 @@ namespace singalUI.Views
             _projection.RotationY = 0.5;
             _projection.Scale = 3.0;
 
-            // Wire up property changes
-            DataProperty.Changed.AddClassHandler<Simple3DView>((x, e) => x.InvalidateVisual());
+            DataProperty.Changed.AddClassHandler<Simple3DView>((x, e) =>
+            {
+                x.SyncRotationPivotFromData();
+                x.InvalidateVisual();
+            });
             ShowGridProperty.Changed.AddClassHandler<Simple3DView>((x, e) => x.InvalidateVisual());
             ShowPointsProperty.Changed.AddClassHandler<Simple3DView>((x, e) => x.InvalidateVisual());
             ShowLinesProperty.Changed.AddClassHandler<Simple3DView>((x, e) => x.InvalidateVisual());
@@ -90,12 +93,25 @@ namespace singalUI.Views
             ClipToBounds = true;
         }
 
+        private void SyncRotationPivotFromData()
+        {
+            if (Data?.Points.Count > 0)
+            {
+                var p0 = Data.Points[0];
+                _projection.RotationPivot = new Point3D(p0.X, p0.Y, p0.Z);
+            }
+            else
+                _projection.RotationPivot = new Point3D(0, 0, 0);
+        }
+
         public override void Render(DrawingContext context)
         {
             base.Render(context);
 
             if (Data == null || Bounds.Width == 0 || Bounds.Height == 0)
                 return;
+
+            SyncRotationPivotFromData();
 
             var width = Bounds.Width;
             var height = Bounds.Height;
@@ -336,7 +352,19 @@ namespace singalUI.Views
         private void OnPointerWheelChanged(object? sender, PointerWheelEventArgs e)
         {
             double zoomDelta = e.Delta.Y > 0 ? 1.1 : 0.9;
-            _projection.Scale = Math.Clamp(_projection.Scale * zoomDelta, 0.5, 10.0);
+            double oldScale = _projection.Scale;
+            double newScale = Math.Clamp(oldScale * zoomDelta, 0.5, 1000.0);
+
+            if (Data?.Points.Count > 0 && Math.Abs(newScale - oldScale) > 1e-12)
+            {
+                var pivot = Data.Points[0];
+                _projection.Scale = newScale;
+                _projection.ZoomAboutWorldPoint(pivot, oldScale, newScale, Bounds.Width);
+            }
+            else
+            {
+                _projection.Scale = newScale;
+            }
 
             InvalidateVisual();
             e.Handled = true;
@@ -344,6 +372,7 @@ namespace singalUI.Views
 
         public void ResetView()
         {
+            SyncRotationPivotFromData();
             _projection.RotationX = 0.5;
             _projection.RotationY = 0.5;
             _projection.RotationZ = 0;

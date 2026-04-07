@@ -14,6 +14,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Threading;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Platform.Storage;
 using OpenCvSharp;
@@ -24,15 +25,18 @@ namespace singalUI.ViewModels
     {
         private const double DefaultFocalLengthMm = 28.0;
         private const double DefaultPixelSizeMm = 4.4e-3;
-        private const int DefaultImageWidth = 640;
-        private const int DefaultImageHeight = 480;
+        private const int DefaultImageWidth = 1600;
+        private const int DefaultImageHeight = 1200;
 
         private PoseEstimateResult? _lastResult;
-        private RotationCalibrationNativeResult? _lastRotationCalibResult;
         private const int PoseEstimateTimeoutMs = 180000;
         private const int RotationCalibTimeoutMs = 600000;
+        private const int RotationNanoMeasMinFrames = 12;
         private int _poseRunSequence = 0;
         private int _poseEstimationRunning = 0;
+        private readonly object _rotationCaptureFileLock = new();
+        private IReadOnlyList<NanoMeasFrameTrackResult>? _lastNanoMeasRotationFrames;
+        private string? _lastNanoMeasRotationSessionDir;
         private readonly string _errorLogFile = System.IO.Path.Combine(
             System.IO.Path.GetTempPath(), "pose_estimation_errors.log");
 
@@ -50,6 +54,9 @@ namespace singalUI.ViewModels
 
         #region Pattern Analysis Properties
 
+        /// <summary>Archive stem is <c>round(WindowSize)+round(WindowSize)</c> (e.g. 10+10); bridge copies to <c>hmf_temp_*</c> then <c>12+12_*</c>. Components X/Y do not select matrix files.</summary>
+        public const double HmfBundledComponents = 206.0;
+
         [ObservableProperty]
         private int _selectedPatternType = 0; // 0 = CheckerBoard, 1 = HMF Coded Target
 
@@ -64,6 +71,16 @@ namespace singalUI.ViewModels
 
         [ObservableProperty]
         private double _componentsY = 11.0;
+
+        partial void OnSelectedPatternTypeChanged(int value)
+        {
+            if (value == 1)
+            {
+                ComponentsX = HmfBundledComponents;
+                ComponentsY = HmfBundledComponents;
+                LogToError($"[Pattern] HMF: set Components X/Y to {HmfBundledComponents} (10+10 code bundle).");
+            }
+        }
 
         #endregion
 
@@ -92,7 +109,7 @@ namespace singalUI.ViewModels
         #region Algorithm Parameters
 
         [ObservableProperty]
-        private double _windowSize = 12.0;
+        private double _windowSize = 10.0;
 
         [ObservableProperty]
         private double _codePitchBlocks = 6.0;
@@ -192,7 +209,7 @@ namespace singalUI.ViewModels
 
         [ObservableProperty]
         private string _rotationDatasetHint =
-            "Add samples: uses live camera pose (PoseEst) + stage Rz (deg→rad) or manual θ. Need ≥12 points; ~360 recommended. CSV columns: theta_rad,rx,ry,rz,tx,ty,tz";
+            "Start rotation capture saves frames under .\\storage\\session_* (manifest.csv + frame_###.png). Rz moves to 0° first, then steps. Run rotation calibration runs NanoMeas.dll (ProcessFrame_Track_U8) on the newest session with ≥12 frames; results go to the error log.";
 
         #endregion
 
@@ -264,14 +281,13 @@ namespace singalUI.ViewModels
                 string timestamp = DateTime.Now.ToString("HH:mm:ss.fff");
                 string logEntry = $"[{timestamp}] {message}";
 
-                // Prepend to error log string
-                ErrorLog = logEntry + "\n" + ErrorLog;
+                ErrorLog = string.IsNullOrEmpty(ErrorLog) ? logEntry : $"{ErrorLog}\n{logEntry}";
 
                 // Keep only last MaxErrorLogLines lines
-                var lines = ErrorLog.Split('\n');
+                var lines = ErrorLog.Split('\n', StringSplitOptions.RemoveEmptyEntries);
                 if (lines.Length > MaxErrorLogLines)
                 {
-                    ErrorLog = string.Join("\n", lines.Take(MaxErrorLogLines));
+                    ErrorLog = string.Join("\n", lines.Skip(lines.Length - MaxErrorLogLines));
                 }
 
                 Console.WriteLine($"[ErrorLog] {logEntry}");
@@ -331,7 +347,8 @@ namespace singalUI.ViewModels
                 stopwatch.Stop();
 
                 _lastResult = result;
-                _lastRotationCalibResult = null;
+                _lastNanoMeasRotationFrames = null;
+                _lastNanoMeasRotationSessionDir = null;
 
                 UpdateResults(_lastResult);
                 LastEstimationTime = $"Last run: {DateTime.Now:HH:mm:ss}";
@@ -370,39 +387,81 @@ namespace singalUI.ViewModels
                 return;
             }
 
-            LogToError($"[RunRotationCalib#{runId}] Starting rotation calibration...");
+            LogToError($"[RunRotationCalib#{runId}] Starting NanoMeas.dll on newest rotation session...");
             try
             {
                 IsPoseEstimationRunning = true;
-                ResultStatusMessage = "Rotation calibration running (NanoMeasCalib)...";
+                ResultStatusMessage = "Rotation calibration running (NanoMeas.dll)...";
                 ResultStatusColor = "#ff9800";
+                HasResults = false;
+                _lastResult = null;
 
-                if (RotationSamples.Count < 12)
+                string? sessionDir = FindNewestRotationSessionDirectory(RotationNanoMeasMinFrames);
+                if (string.IsNullOrEmpty(sessionDir))
                 {
-                    ResultStatusMessage = $"Need at least 12 samples (have {RotationSamples.Count}).";
+                    ResultStatusMessage =
+                        $"No session under .\\storage\\session_* with ≥{RotationNanoMeasMinFrames} frames in manifest.csv.";
                     ResultStatusColor = "#f44336";
-                    HasResults = false;
+                    LogToError($"[RunRotationCalib#{runId}] {ResultStatusMessage}");
                     return;
                 }
 
-                var ordered = RotationSamples.OrderBy(s => s.ThetaRad).ToList();
-                int n = ordered.Count;
-                var theta = new double[n];
-                var meas = new double[6 * n];
-                for (int i = 0; i < n; i++)
+                if (!TryBuildNanoMeasHmfSequences(out var seqX, out var seqY, out string? hmfErr))
                 {
-                    theta[i] = ordered[i].ThetaRad;
-                    meas[6 * i + 0] = ordered[i].Rx;
-                    meas[6 * i + 1] = ordered[i].Ry;
-                    meas[6 * i + 2] = ordered[i].Rz;
-                    meas[6 * i + 3] = ordered[i].Tx;
-                    meas[6 * i + 4] = ordered[i].Ty;
-                    meas[6 * i + 5] = ordered[i].Tz;
+                    ResultStatusMessage = hmfErr ?? "Failed to load HMF sequences.";
+                    ResultStatusColor = "#f44336";
+                    LogToError($"[RunRotationCalib#{runId}] {ResultStatusMessage}");
+                    return;
+                }
+
+                int windowRounded = (int)Math.Round(WindowSize);
+                LogToError(
+                    $"[RunRotationCalib#{runId}] HMF Archive\\{windowRounded}+{windowRounded}_{{X,Y}}.txt " +
+                    $"(seq len_x={seqX.Length} len_y={seqY.Length}), grid.window_size={windowRounded}");
+
+                if (!TryLoadRotationSessionFramesForNanoMeas(sessionDir, RotationNanoMeasMinFrames, out var frames, out string? loadErr))
+                {
+                    ResultStatusMessage = loadErr ?? "Failed to load session PNGs.";
+                    ResultStatusColor = "#f44336";
+                    LogToError($"[RunRotationCalib#{runId}] {ResultStatusMessage}");
+                    return;
+                }
+
+                var cam = NanoMeasSdkNative.BuildCameraParams(Fx, Fy, Cx, Cy, PixelSize, PixelSize, FocalLength);
+                var grid = NanoMeasSdkNative.BuildGridParams(
+                    PitchX,
+                    PitchY,
+                    (int)Math.Round(CodePitchBlocks),
+                    (int)Math.Round(WindowSize));
+
+                try
+                {
+                    NanoMeasSdkNative.EnsureNanoMeasNativeReady();
+                    LogToError($"[RunRotationCalib#{runId}] NanoMeas.dll loaded from: {NanoMeasSdkNative.GetLoadedNanoMeasDllPath()}");
+                }
+                catch (Exception loadEx)
+                {
+                    ResultStatusMessage = loadEx.Message;
+                    ResultStatusColor = "#f44336";
+                    LogToError($"[RunRotationCalib#{runId}] {loadEx}");
+                    return;
                 }
 
                 var stopwatch = Stopwatch.StartNew();
-                var calibTask = Task.Factory.StartNew(() => NanoMeasCalibNative.RunRotationCalibration(theta, meas, n),
-                    CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+                string? ver = null;
+                var calibTask = Task.Factory.StartNew(() =>
+                {
+                    ver = NanoMeasSdkNative.MarshalUtf8String(NanoMeasSdkNative.NanoMeas_GetVersion());
+                    return NanoMeasSdkNative.RunProcessFrameTrackU8Sequence(
+                        frames,
+                        seqX,
+                        seqY,
+                        cam,
+                        grid,
+                        winOrder: 3,
+                        refreshPeriod: 10,
+                        residualThreshold: 3.0);
+                }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
 
                 var completed = await Task.WhenAny(calibTask, Task.Delay(RotationCalibTimeoutMs));
                 if (completed != calibTask)
@@ -410,39 +469,44 @@ namespace singalUI.ViewModels
                     stopwatch.Stop();
                     ResultStatusMessage = $"Rotation calibration timed out after {RotationCalibTimeoutMs} ms";
                     ResultStatusColor = "#f44336";
-                    HasResults = false;
                     LogToError($"[RunRotationCalib#{runId}] TIMEOUT after {stopwatch.ElapsedMilliseconds}ms");
                     return;
                 }
 
-                _lastRotationCalibResult = await calibTask;
-                _lastResult = null;
+                var results = await calibTask;
                 stopwatch.Stop();
 
-                if (_lastRotationCalibResult.IsSuccess)
+                _lastNanoMeasRotationFrames = results;
+                _lastNanoMeasRotationSessionDir = sessionDir;
+
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                    singalUI.App.SharedAnalysisViewModel.ApplyRotationCalibrationPoses3D(results));
+
+                LogToError($"[RunRotationCalib#{runId}] Session={sessionDir}");
+                LogToError($"[RunRotationCalib#{runId}] {ver ?? "NanoMeas_GetVersion: (null)"}");
+                foreach (var r in results)
                 {
-                    ApplyDisplayFromTcWEuler(_lastRotationCalibResult.T_CW_Euler, _lastRotationCalibResult.Status);
-                    ResultStatusMessage =
-                        $"Rotation calib OK — showing T_CW (camera→world, rad/mm internal → deg/mm UI). {NanoMeasCalibNative.StatusMessage(_lastRotationCalibResult.Status)}";
-                    ResultStatusColor = "#4caf50";
-                    LogToError($"[RunRotationCalib#{runId}] OK in {stopwatch.ElapsedMilliseconds}ms");
-                }
-                else
-                {
-                    HasResults = false;
-                    ResultStatusMessage =
-                        $"Rotation calib failed: {NanoMeasCalibNative.StatusMessage(_lastRotationCalibResult.Status)} (code {_lastRotationCalibResult.Status})";
-                    ResultStatusColor = "#f44336";
-                    LogToError($"[RunRotationCalib#{runId}] Failed status={_lastRotationCalibResult.Status}");
+                    string poseStr = FormatPose6(r.Pose);
+                    string poseAbsStr = FormatPose6(r.PoseAbs);
+                    LogToError(
+                        $"[RunRotationCalib#{runId}] {r.FileName} status={r.Status} decode={r.DecodeSuccess} " +
+                        $"pose=[{poseStr}] pose_abs=[{poseAbsStr}] refine_ms={r.RefineMs:G5} err={(r.LastError ?? "").Trim()}");
                 }
 
+                int okCount = results.Count(r => r.Status == NanoMeasSdkNative.NanoMeasOk);
+                ResultStatusMessage =
+                    okCount == results.Count
+                        ? $"NanoMeas OK — {results.Count} frames in {stopwatch.ElapsedMilliseconds} ms (see error log)."
+                        : $"NanoMeas finished — {okCount}/{results.Count} frames OK (see error log).";
+                ResultStatusColor = okCount == results.Count ? "#4caf50" : "#ff9800";
                 LastEstimationTime = $"Last run: {DateTime.Now:HH:mm:ss}";
+                LogToError($"[RunRotationCalib#{runId}] Done in {stopwatch.ElapsedMilliseconds}ms");
             }
             catch (DllNotFoundException ex)
             {
                 HasResults = false;
                 ResultStatusMessage =
-                    "RotCalibBridge.dll / NanoMeasCalib.dll not found. Build native/RotCalibBridge (VS) and place NanoMeasCalib.lib/.dll under PoseEstApi/RotPoseEstApi/lib.";
+                    "NanoMeas.dll not found (or fftw3/MKL deps). Copy the SDK bundle next to the executable; see PoseEstApi/NanoMeas_SDK_secret/README.md.";
                 ResultStatusColor = "#f44336";
                 LogToError($"[RunRotationCalib] {ex.Message}");
             }
@@ -460,9 +524,226 @@ namespace singalUI.ViewModels
             }
         }
 
-        /// <summary>Runs PoseEst bridge on current live frame; throws on timeout or pipeline errors.</summary>
-        private async Task<(PoseEstimateResult result, string imagePath)> EstimatePoseFromLiveFrameAsync(int runId)
+        private static string FormatPose6(IReadOnlyList<double> pose)
         {
+            if (pose == null || pose.Count < 6)
+                return "";
+            return string.Join(
+                ", ",
+                pose.Take(6).Select(v => v.ToString("G9", CultureInfo.InvariantCulture)));
+        }
+
+        /// <summary>Chooses the session folder with the most recently updated manifest that lists at least <paramref name="minFrames"/> existing PNGs.</summary>
+        private static string? FindNewestRotationSessionDirectory(int minFrames)
+        {
+            var root = Path.Combine(AppContext.BaseDirectory, "storage");
+            if (!Directory.Exists(root))
+                return null;
+
+            string? best = null;
+            var bestUtc = DateTime.MinValue;
+
+            foreach (var dir in Directory.EnumerateDirectories(root, "session_*"))
+            {
+                var manifest = Path.Combine(dir, "manifest.csv");
+                if (!File.Exists(manifest))
+                    continue;
+                if (!TryCountManifestRowsWithExistingFiles(dir, minFrames, out int okRows) || okRows < minFrames)
+                    continue;
+
+                var t = File.GetLastWriteTimeUtc(manifest);
+                if (t >= bestUtc)
+                {
+                    bestUtc = t;
+                    best = dir;
+                }
+            }
+
+            return best;
+        }
+
+        private static bool TryCountManifestRowsWithExistingFiles(string sessionDir, int minNeeded, out int count)
+        {
+            count = 0;
+            if (!TryReadManifestRows(sessionDir, out var rows, out _))
+                return false;
+
+            int ok = rows.Count(t =>
+            {
+                var p = Path.Combine(sessionDir, t.file);
+                return File.Exists(p);
+            });
+            count = ok;
+            return ok >= minNeeded;
+        }
+
+        private static bool TryReadManifestRows(string sessionDir, out List<(int index, string file)> rows, out string? error)
+        {
+            rows = new List<(int, string)>();
+            error = null;
+            var path = Path.Combine(sessionDir, "manifest.csv");
+            if (!File.Exists(path))
+            {
+                error = "manifest.csv missing.";
+                return false;
+            }
+
+            try
+            {
+                var lines = File.ReadAllLines(path);
+                foreach (var raw in lines)
+                {
+                    var line = raw.Trim();
+                    if (line.Length == 0)
+                        continue;
+                    if (line.StartsWith("index", StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    var parts = line.Split(',');
+                    if (parts.Length < 2)
+                        continue;
+                    if (!int.TryParse(parts[0].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int idx))
+                        continue;
+                    string file = parts[^1].Trim();
+                    if (file.Length == 0)
+                        continue;
+                    rows.Add((idx, file));
+                }
+
+                rows.Sort((a, b) => a.index.CompareTo(b.index));
+                return rows.Count > 0;
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                return false;
+            }
+        }
+
+        private static bool TryLoadRotationSessionFramesForNanoMeas(
+            string sessionDir,
+            int frameCount,
+            out List<NanoMeasFrameInput> frames,
+            out string? error)
+        {
+            frames = new List<NanoMeasFrameInput>();
+            error = null;
+
+            if (!TryReadManifestRows(sessionDir, out var rows, out error))
+                return false;
+
+            var ordered = rows.Where(t => File.Exists(Path.Combine(sessionDir, t.file))).OrderBy(t => t.index).ToList();
+            if (ordered.Count < frameCount)
+            {
+                error = $"Manifest lists only {ordered.Count} existing PNG(s); need {frameCount}.";
+                return false;
+            }
+
+            for (int i = 0; i < frameCount; i++)
+            {
+                var (idx, fn) = ordered[i];
+                var full = Path.Combine(sessionDir, fn);
+                try
+                {
+                    using var mat = Cv2.ImRead(full, ImreadModes.Grayscale);
+                    if (mat.Empty() || mat.Type() != MatType.CV_8UC1)
+                    {
+                        error = $"{fn}: not a grayscale 8-bit image.";
+                        return false;
+                    }
+
+                    int h = mat.Height;
+                    int w = mat.Width;
+                    if (!mat.GetArray(out byte[]? pixels) || pixels == null || pixels.Length != h * w)
+                    {
+                        error = $"{fn}: could not read pixel buffer.";
+                        return false;
+                    }
+
+                    frames.Add(new NanoMeasFrameInput(idx, fn, pixels, h, w));
+                }
+                catch (Exception ex)
+                {
+                    error = $"{fn}: {ex.Message}";
+                    return false;
+                }
+            }
+
+            int h0 = frames[0].Height;
+            int w0 = frames[0].Width;
+            if (frames.Any(f => f.Height != h0 || f.Width != w0))
+            {
+                error = "Frames have inconsistent image size.";
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Loads comma-separated 0/1 HMF lines from <c>Archive\{n}+{n}_Y.txt</c> / <c>_X.txt</c> where
+        /// <c>n = round(WindowSize)</c> (e.g. 12 → 12+12_*.txt, 10 → 10+10_*.txt). Per nanomeas_api.h:
+        /// seq_x = physical-Y file; seq_y = physical-X file.
+        /// </summary>
+        private bool TryBuildNanoMeasHmfSequences(out int[] seqX, out int[] seqY, out string? error)
+        {
+            seqX = Array.Empty<int>();
+            seqY = Array.Empty<int>();
+            error = null;
+            int n = (int)Math.Round(WindowSize);
+            if (n < 1)
+            {
+                error = "Window size must round to a positive integer for HMF file selection.";
+                return false;
+            }
+
+            string stem = $"{n}+{n}";
+            var baseDir = AppContext.BaseDirectory;
+            var pathY = Path.Combine(baseDir, "Archive", $"{stem}_Y.txt");
+            var pathX = Path.Combine(baseDir, "Archive", $"{stem}_X.txt");
+
+            if (!File.Exists(pathY) || !File.Exists(pathX))
+            {
+                error =
+                    $"HMF text not found for window size {WindowSize} (stem {stem}). " +
+                    $"Expected next to the executable: Archive\\{stem}_Y.txt and Archive\\{stem}_X.txt.";
+                return false;
+            }
+
+            try
+            {
+                seqX = ParseCommaSeparatedBinaryInts(pathY);
+                seqY = ParseCommaSeparatedBinaryInts(pathX);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                return false;
+            }
+        }
+
+        private static int[] ParseCommaSeparatedBinaryInts(string path)
+        {
+            var text = File.ReadAllText(path).Replace("\r", "").Replace("\n", "");
+            var parts = text.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            var arr = new int[parts.Length];
+            for (int i = 0; i < parts.Length; i++)
+            {
+                if (!int.TryParse(parts[i], NumberStyles.Integer, CultureInfo.InvariantCulture, out int v) || v is not (0 or 1))
+                    throw new InvalidDataException($"{path}: expected 0/1 comma list at token {i}: '{parts[i]}'");
+                arr[i] = v;
+            }
+
+            return arr;
+        }
+
+        /// <summary>Runs PoseEst bridge on an existing grayscale PNG (does not touch live camera or pose mutex).</summary>
+        private async Task<(PoseEstimateResult result, string imagePath)> EstimatePoseFromImagePathAsync(int runId, string imagePath)
+        {
+            if (string.IsNullOrWhiteSpace(imagePath) || !File.Exists(imagePath))
+                throw new FileNotFoundException("Pose image not found.", imagePath);
+
             var intrinsics = new CameraIntrinsics
             {
                 Fx = Fx,
@@ -471,10 +752,7 @@ namespace singalUI.ViewModels
                 Cy = Cy
             };
 
-            var (imageData, imageRows, imageCols, frameSeq) = GetLatestCameraImageData();
-            var imagePath = SaveFrameForPoseEstimation(imageData, imageRows, imageCols, frameSeq);
-
-            LogToError($"[PoseFrame#{runId}] Image={imageCols}x{imageRows}, seq={frameSeq}, path={imagePath}");
+            LogToError($"[PoseFrame#{runId}] File={imagePath}");
 
             var poseTask = Task.Factory.StartNew(() => PoseEstApiBridgeClient.EstimatePoseFromImagePath(
                 imagePath: imagePath,
@@ -500,6 +778,151 @@ namespace singalUI.ViewModels
             return (result, imagePath);
         }
 
+        /// <summary>Runs PoseEst bridge on current live frame; throws on timeout or pipeline errors.</summary>
+        private async Task<(PoseEstimateResult result, string imagePath)> EstimatePoseFromLiveFrameAsync(int runId)
+        {
+            var (imageData, imageRows, imageCols, frameSeq) = GetLatestCameraImageData();
+            var imagePath = SaveFrameForPoseEstimation(imageData, imageRows, imageCols, frameSeq);
+            LogToError($"[PoseFrame#{runId}] Image={imageCols}x{imageRows}, seq={frameSeq}, path={imagePath}");
+            return await EstimatePoseFromImagePathAsync(runId, imagePath);
+        }
+
+        /// <summary>Creates <c>storage/session_*</c> under the app base directory (next to the executable when published).</summary>
+        public string CreateRotationCaptureSessionDirectory()
+        {
+            var root = Path.Combine(AppContext.BaseDirectory, "storage");
+            Directory.CreateDirectory(root);
+            var session = Path.Combine(root, $"session_{DateTime.Now:yyyyMMdd_HHmmss_fff}");
+            Directory.CreateDirectory(session);
+            File.WriteAllText(
+                Path.Combine(session, "README.txt"),
+                "Raw frames from Setup → Start rotation capture.\r\n" +
+                "Location: .\\storage\\session_* (app base directory).\r\n" +
+                "- manifest.csv: index, theta (stage Rz or manual), filename\r\n" +
+                "- frame_NNN.png: grayscale captures\r\n" +
+                "Run rotation calibration (Configure tab) runs NanoMeas.dll on the newest session with ≥12 frames.\r\n");
+            LogToError($"[RotationCapture] Session folder: {session}");
+            return session;
+        }
+
+        /// <summary>Saves current live frame into the session folder; never calls PoseEst.</summary>
+        public (bool ok, string savedPath, string message) TrySaveRotationCaptureFrame(string sessionDirectory, int oneBasedIndex)
+        {
+            try
+            {
+                var (imageData, rows, cols, frameSeq) = GetLatestCameraImageData();
+                if (imageData.Length != rows * cols)
+                    return (false, "", $"Image size mismatch {imageData.Length} vs {rows * cols}");
+
+                var fileName = $"frame_{oneBasedIndex:000}.png";
+                var savedPath = Path.Combine(sessionDirectory, fileName);
+
+                var imageBytes = new byte[imageData.Length];
+                for (var i = 0; i < imageData.Length; i++)
+                    imageBytes[i] = (byte)Math.Clamp((int)Math.Round(imageData[i]), 0, 255);
+
+                using (var imageMat = new Mat(rows, cols, MatType.CV_8UC1, imageBytes))
+                    Cv2.ImWrite(savedPath, imageMat);
+
+                double thetaRad = TryGetStageRotationThetaRad();
+                lock (_rotationCaptureFileLock)
+                {
+                    var manifestPath = Path.Combine(sessionDirectory, "manifest.csv");
+                    if (!File.Exists(manifestPath))
+                        File.WriteAllText(manifestPath, "index,theta_deg,theta_rad,file\n");
+
+                    double thetaDeg = double.IsNaN(thetaRad) ? ManualThetaDegrees : thetaRad * 180.0 / Math.PI;
+                    double thetaRadOut = double.IsNaN(thetaRad) ? ManualThetaDegrees * Math.PI / 180.0 : thetaRad;
+                    File.AppendAllText(
+                        manifestPath,
+                        string.Format(
+                            CultureInfo.InvariantCulture,
+                            "{0},{1:F6},{2:F8},{3}\n",
+                            oneBasedIndex,
+                            thetaDeg,
+                            thetaRadOut,
+                            fileName));
+                }
+
+                LogToError($"[RotationCapture] Saved {fileName} seq={frameSeq}");
+                return (true, savedPath, "ok");
+            }
+            catch (Exception ex)
+            {
+                LogToError($"[RotationCapture] frame {oneBasedIndex} save failed: {ex.Message}");
+                return (false, "", ex.Message);
+            }
+        }
+
+        private async Task<(bool ok, string message)> AddRotationSampleCoreAsync(int runId)
+        {
+            double thetaRad = TryGetStageRotationThetaRad();
+            if (double.IsNaN(thetaRad))
+                thetaRad = ManualThetaDegrees * Math.PI / 180.0;
+
+            var (result, _) = await EstimatePoseFromLiveFrameAsync(runId);
+            if (result.Status != libs.PoseStatus.Success)
+            {
+                string m = $"Pose status {result.Status}: {result.StatusMessage}";
+                LogToError($"[AddRotationSample#{runId}] Pose failed: {result.StatusMessage}");
+                return (false, m);
+            }
+
+            RotationSamples.Add(new RotationCalibrationSample
+            {
+                ThetaRad = thetaRad,
+                Rx = result.Rx,
+                Ry = result.Ry,
+                Rz = result.Rz,
+                Tx = result.Tx,
+                Ty = result.Ty,
+                Tz = result.Tz,
+            });
+
+            string okMsg = $"Added sample #{RotationSamples.Count} at θ={thetaRad * 180 / Math.PI:F3}°";
+            return (true, okMsg);
+        }
+
+        /// <summary>Called from Setup rotation sequence after each Rz step (same semantics as Add sample).</summary>
+        public async Task<(bool ok, string message)> TryAddRotationSampleForSequenceAsync()
+        {
+            int runId = Interlocked.Increment(ref _poseRunSequence);
+            if (Interlocked.CompareExchange(ref _poseEstimationRunning, 1, 0) != 0)
+                return (false, "Another pose operation is in progress.");
+
+            try
+            {
+                IsPoseEstimationRunning = true;
+                var (ok, msg) = await AddRotationSampleCoreAsync(runId);
+                if (ok)
+                {
+                    ResultStatusMessage = msg;
+                    ResultStatusColor = "#4caf50";
+                    LogToError($"[RotationSeqCapture#{runId}] {msg}");
+                }
+                else
+                {
+                    ResultStatusMessage = $"Capture failed: {msg}";
+                    ResultStatusColor = "#ff9800";
+                    LogToError($"[RotationSeqCapture#{runId}] {msg}");
+                }
+
+                return (ok, msg);
+            }
+            catch (Exception ex)
+            {
+                ResultStatusMessage = $"Capture failed: {ex.Message}";
+                ResultStatusColor = "#f44336";
+                LogToError($"[RotationSeqCapture#{runId}] {ex.Message}");
+                return (false, ex.Message);
+            }
+            finally
+            {
+                IsPoseEstimationRunning = false;
+                Interlocked.Exchange(ref _poseEstimationRunning, 0);
+            }
+        }
+
         [RelayCommand]
         private async Task AddRotationSample()
         {
@@ -516,31 +939,15 @@ namespace singalUI.ViewModels
                 ResultStatusMessage = "Capturing pose for rotation sample...";
                 ResultStatusColor = "#ff9800";
 
-                double thetaRad = TryGetStageRotationThetaRad();
-                if (double.IsNaN(thetaRad))
-                    thetaRad = ManualThetaDegrees * Math.PI / 180.0;
-
-                var (result, _) = await EstimatePoseFromLiveFrameAsync(runId);
-                if (result.Status != libs.PoseStatus.Success)
+                var (ok, msg) = await AddRotationSampleCoreAsync(runId);
+                if (!ok)
                 {
-                    ResultStatusMessage = $"Sample not added — pose status {result.Status}: {result.StatusMessage}";
+                    ResultStatusMessage = $"Sample not added — {msg}";
                     ResultStatusColor = "#ff9800";
-                    LogToError($"[AddRotationSample#{runId}] Pose failed: {result.StatusMessage}");
                     return;
                 }
 
-                RotationSamples.Add(new RotationCalibrationSample
-                {
-                    ThetaRad = thetaRad,
-                    Rx = result.Rx,
-                    Ry = result.Ry,
-                    Rz = result.Rz,
-                    Tx = result.Tx,
-                    Ty = result.Ty,
-                    Tz = result.Tz,
-                });
-
-                ResultStatusMessage = $"Added sample #{RotationSamples.Count} at θ={thetaRad * 180 / Math.PI:F3}°";
+                ResultStatusMessage = msg;
                 ResultStatusColor = "#4caf50";
                 LogToError($"[AddRotationSample#{runId}] Added, N={RotationSamples.Count}");
             }
@@ -561,7 +968,8 @@ namespace singalUI.ViewModels
         private void ClearRotationSamples()
         {
             RotationSamples.Clear();
-            _lastRotationCalibResult = null;
+            _lastNanoMeasRotationFrames = null;
+            _lastNanoMeasRotationSessionDir = null;
             LogToError("[RotationSamples] Cleared");
             ResultStatusMessage = "Rotation sample list cleared";
             ResultStatusColor = "#707070";
@@ -654,20 +1062,29 @@ namespace singalUI.ViewModels
         {
             LogToError("[GetError] Fetching error information...");
 
-            if (_lastResult == null && _lastRotationCalibResult == null)
+            bool hasNanoRot = _lastNanoMeasRotationFrames is { Count: > 0 };
+            if (_lastResult == null && !hasNanoRot)
             {
-                ErrorLog = $"[{DateTime.Now:HH:mm:ss}] No estimation has been run yet.\n" +
-                    $"Please run 'Run Pose Estimation' or rotation calibration first.\n\n" + ErrorLog;
+                var noRunMessage = $"[{DateTime.Now:HH:mm:ss}] No estimation has been run yet.\n" +
+                    "Please run 'Run Pose Estimation' or rotation calibration first.";
+                ErrorLog = string.IsNullOrEmpty(ErrorLog) ? noRunMessage : $"{ErrorLog}\n\n{noRunMessage}";
             }
-            else if (_lastRotationCalibResult != null)
+            else if (hasNanoRot)
             {
                 var errorInfo = new System.Text.StringBuilder();
-                errorInfo.AppendLine("=== Last rotation calibration ===");
+                errorInfo.AppendLine("=== Last rotation calibration (NanoMeas.dll) ===");
                 errorInfo.AppendLine($"Timestamp: {DateTime.Now:O}");
-                errorInfo.AppendLine($"Native status: {_lastRotationCalibResult.Status} — {NanoMeasCalibNative.StatusMessage(_lastRotationCalibResult.Status)}");
-                errorInfo.AppendLine($"Return code: {_lastRotationCalibResult.ReturnCode}");
-                ErrorLog = errorInfo.ToString() + "\n\n" + ErrorLog;
-                LogToError("[GetError] Rotation calibration info appended");
+                errorInfo.AppendLine($"Session: {_lastNanoMeasRotationSessionDir ?? "(unknown)"}");
+                foreach (var r in _lastNanoMeasRotationFrames!)
+                {
+                    errorInfo.AppendLine(
+                        $"{r.FileName}  status={r.Status}  decode={r.DecodeSuccess}  " +
+                        $"pose=[{FormatPose6(r.Pose)}]  pose_abs=[{FormatPose6(r.PoseAbs)}]");
+                }
+
+                var rotationInfo = errorInfo.ToString().TrimEnd();
+                ErrorLog = string.IsNullOrEmpty(ErrorLog) ? rotationInfo : $"{ErrorLog}\n\n{rotationInfo}";
+                LogToError("[GetError] NanoMeas rotation summary appended");
             }
             else
             {
@@ -705,8 +1122,9 @@ namespace singalUI.ViewModels
                     }
                     else if (_lastResult.Status == libs.PoseStatus.DecodeFail)
                     {
-                        errorInfo.AppendLine($"  Verify HMF pattern configuration matches target.");
-                        errorInfo.AppendLine($"  Check camera calibration (intrinsics).");
+                        errorInfo.AppendLine($"  HMF: Archive stem = round(WindowSize)+round(WindowSize) (e.g. 10+10, 12+12); bridge uses hmf_temp_*.");
+                        errorInfo.AppendLine($"  For that bundle, Components X/Y should be {HmfBundledComponents} (auto-set when you pick Dot Grid).");
+                        errorInfo.AppendLine($"  Verify pitch/window/code blocks and intrinsics match the physical target.");
                     }
                 }
                 else
@@ -714,7 +1132,8 @@ namespace singalUI.ViewModels
                     errorInfo.AppendLine($"No errors - estimation was successful!");
                 }
 
-                ErrorLog = errorInfo.ToString() + "\n\n" + ErrorLog;
+                var details = errorInfo.ToString().TrimEnd();
+                ErrorLog = string.IsNullOrEmpty(ErrorLog) ? details : $"{ErrorLog}\n\n{details}";
                 LogToError("[GetError] Error information generated");
             }
 
@@ -741,7 +1160,7 @@ namespace singalUI.ViewModels
             Cy = 0.0;
 
             // Algorithm defaults
-            WindowSize = 12.0;
+            WindowSize = 10.0;
             CodePitchBlocks = 6.0;
 
             // Test image defaults
@@ -759,7 +1178,8 @@ namespace singalUI.ViewModels
 
             HasResults = false;
             _lastResult = null;
-            _lastRotationCalibResult = null;
+            _lastNanoMeasRotationFrames = null;
+            _lastNanoMeasRotationSessionDir = null;
             ResultStatusMessage = "Results cleared";
             ResultStatusColor = "#707070";
             _rawRxDeg = _rawRyDeg = _rawRzDeg = _rawTxMm = _rawTyMm = _rawTzMm = 0;
@@ -842,12 +1262,14 @@ namespace singalUI.ViewModels
 
                 await System.IO.File.WriteAllTextAsync(configPath, config.ToString());
 
-                ErrorLog = $"[SaveConfiguration] Configuration saved to:\n{configPath}\n\n" + ErrorLog;
+                var savedMsg = $"[SaveConfiguration] Configuration saved to:\n{configPath}";
+                ErrorLog = string.IsNullOrEmpty(ErrorLog) ? savedMsg : $"{ErrorLog}\n\n{savedMsg}";
                 LogToError($"[SaveConfiguration] Saved to {configPath}");
             }
             catch (Exception ex)
             {
-                ErrorLog = $"[SaveConfiguration] Error saving configuration: {ex.Message}\n\n" + ErrorLog;
+                var saveErr = $"[SaveConfiguration] Error saving configuration: {ex.Message}";
+                ErrorLog = string.IsNullOrEmpty(ErrorLog) ? saveErr : $"{ErrorLog}\n\n{saveErr}";
                 LogToError($"[SaveConfiguration] Error: {ex.Message}");
             }
 
@@ -856,27 +1278,6 @@ namespace singalUI.ViewModels
         #endregion
 
         #region Helper Methods
-
-        /// <summary>Maps T_CW_euler [Rx,Ry,Rz rad; tx,ty,tz mm] into the same result fields as pose estimation.</summary>
-        private void ApplyDisplayFromTcWEuler(double[] tCwEuler, int nativeStatus)
-        {
-            if (tCwEuler == null || tCwEuler.Length < 6)
-            {
-                HasResults = false;
-                return;
-            }
-
-            HasResults = nativeStatus == 0;
-            StoreRawPoseSix(
-                tCwEuler[0] * 180 / Math.PI,
-                tCwEuler[1] * 180 / Math.PI,
-                tCwEuler[2] * 180 / Math.PI,
-                tCwEuler[3],
-                tCwEuler[4],
-                tCwEuler[5]);
-            RawPoseData =
-                $"T_CW euler [rad,mm]: [{string.Join(", ", tCwEuler.Select(v => v.ToString("F6")))}] | native status {nativeStatus}";
-        }
 
         private void UpdateResults(PoseEstimateResult result)
         {
@@ -1056,7 +1457,7 @@ namespace singalUI.ViewModels
             try
             {
                 string logMessage = $"[{DateTime.Now:HH:mm:ss.fff}] {message}";
-                ErrorLog = logMessage + "\n" + ErrorLog;
+                ErrorLog = string.IsNullOrEmpty(ErrorLog) ? logMessage : $"{ErrorLog}\n{logMessage}";
 
                 // Also write to file
                 System.IO.File.AppendAllText(_errorLogFile, logMessage + "\n");
