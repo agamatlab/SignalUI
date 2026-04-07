@@ -19,6 +19,7 @@ public partial class SharedConfigParameters : ObservableObject
     [ObservableProperty] private double _codePitchBlocks = 4.0;
     [ObservableProperty] private int _imageWidth = 640;
     [ObservableProperty] private int _imageHeight = 480;
+    [ObservableProperty] private string _sessionName = "session";
 
     public string PatternTypeLabel => SelectedPatternType switch
     {

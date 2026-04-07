@@ -10,6 +10,9 @@ namespace singalUI.ViewModels
 {
     public partial class AnalysisViewModel : ViewModelBase
     {
+        // Static instance for cross-ViewModel communication
+        public static AnalysisViewModel? Instance { get; private set; }
+
         [ObservableProperty]
         private bool _showGrid = true;
 
@@ -37,6 +40,9 @@ namespace singalUI.ViewModels
         [ObservableProperty]
         private bool _showRz = true;
 
+        [ObservableProperty]
+        private int _selectedPlotLayout;
+
         // Modular Chart Cards Collection
         [ObservableProperty]
         private ObservableCollection<ChartCardViewModel> _chartCards = new();
@@ -50,6 +56,9 @@ namespace singalUI.ViewModels
         // Full Screen Mode
         [ObservableProperty]
         private bool _isFullScreen = false;
+
+        [ObservableProperty]
+        private ChartCardViewModel? _selected2DChart;
 
         // Preview Mode
         [ObservableProperty]
@@ -72,12 +81,70 @@ namespace singalUI.ViewModels
 
         [ObservableProperty]
         private string _errorLog = "";
+        
+        [ObservableProperty]
+        private bool _hasData = false;
+        
+        [ObservableProperty]
+        private string _statusMessage = "";
+        
+        [ObservableProperty]
+        private bool _hasStatusMessage = false;
+        
+        [ObservableProperty]
+        private string _currentSessionPath = "";
+        
+        [ObservableProperty]
+        private string _currentSessionName = "";
+        
+        [ObservableProperty]
+        private int _currentSessionResultCount = 0;
+        
+        // Store current session data
+        private Models.PoseEstimationSession? _currentSession = null;
+
+        public bool IsSix2DMode => SelectedPlotLayout == 0;
+
+        public bool IsSingle3DMode => SelectedPlotLayout == 1;
+
+        public bool IsTwoDGridMode => IsSix2DMode && (!IsFullScreen || Selected2DChart == null);
+
+        public bool IsSelected2DChartFullScreen => IsSix2DMode && IsFullScreen && Selected2DChart != null;
+
+        public string FullScreenButtonLabel => IsFullScreen ? "Minimize" : "Full Screen";
 
         public AnalysisViewModel()
         {
-            Generate3DData();
-            GenerateMockData();
-            LogError("AnalysisViewModel initialized - Error log ready");
+            Instance = this; // Set static instance for cross-ViewModel access
+            SelectedPlotLayout = 0;
+            // Don't generate mock data - wait for real pose estimation results
+            LogError("AnalysisViewModel initialized - Waiting for pose estimation data");
+        }
+
+        partial void OnSelectedPlotLayoutChanged(int value)
+        {
+            OnPropertyChanged(nameof(IsSix2DMode));
+            OnPropertyChanged(nameof(IsSingle3DMode));
+            OnPropertyChanged(nameof(IsTwoDGridMode));
+            OnPropertyChanged(nameof(IsSelected2DChartFullScreen));
+        }
+
+        partial void OnIsFullScreenChanged(bool value)
+        {
+            OnPropertyChanged(nameof(IsTwoDGridMode));
+            OnPropertyChanged(nameof(IsSelected2DChartFullScreen));
+            OnPropertyChanged(nameof(FullScreenButtonLabel));
+        }
+
+        partial void OnSelected2DChartChanged(ChartCardViewModel? value)
+        {
+            foreach (var card in ChartCards)
+            {
+                card.IsSelected = ReferenceEquals(card, value);
+            }
+
+            OnPropertyChanged(nameof(IsTwoDGridMode));
+            OnPropertyChanged(nameof(IsSelected2DChartFullScreen));
         }
 
         private void Generate3DData()
@@ -222,13 +289,20 @@ namespace singalUI.ViewModels
                     $"{axis.Name} Error:",
                     $"{rms:F3} +/- {std:F3} {axis.Unit}",
                     axis.RowIndex,
-                    axis.ColumnIndex
+                    axis.ColumnIndex,
+                    axis.Unit,
+                    new ObservableCollection<double>(data)
                 ));
             }
 
             // Overall RMS (combined position errors)
             double overallRms = CalculateRms(allData);
             Overall_Rms = $"{overallRms:F3} mm RMS";
+
+            if (ChartCards.Count > 0)
+            {
+                Selected2DChart = ChartCards[0];
+            }
         }
 
         private List<double> GenerateData(int count, double min, double max, Random random)
@@ -298,6 +372,163 @@ namespace singalUI.ViewModels
             // TODO: Implement report generation
         }
 
+        /// <summary>
+        /// Load pose estimation results into the Analysis tab
+        /// </summary>
+        public void LoadPoseEstimationResults(List<(double errorX, double errorY, double errorZ, double errorRx, double errorRy, double errorRz, double stageX, double stageY, double stageZ, double stageRx, double stageRy, double stageRz, double estX, double estY, double estZ, double estRx, double estRy, double estRz)> results)
+        {
+            // Ensure we're on the UI thread since we're modifying ObservableCollections
+            if (!Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
+            {
+                LogError($"[LoadPoseEstimationResults] Not on UI thread, dispatching with {results?.Count ?? 0} results");
+                Avalonia.Threading.Dispatcher.UIThread.Post(() => LoadPoseEstimationResults(results));
+                return;
+            }
+            
+            LogError($"[LoadPoseEstimationResults] *** UPDATING CHARTS *** with {results?.Count ?? 0} results");
+            
+            if (results == null || results.Count == 0)
+            {
+                LogError("[LoadPoseEstimationResults] No results to load");
+                return;
+            }
+
+            // Clear any status message since we have data
+            HasStatusMessage = false;
+            StatusMessage = "";
+            
+            LogError($"[LoadPoseEstimationResults] Clearing {ChartCards.Count} existing charts, rebuilding with new data");
+            ChartCards.Clear();
+
+            // Create charts: 3 Stage positions + 6 DLL outputs = 9 total charts
+            var chartConfigs = new[]
+            {
+                // Row 0: Stage Commanded Positions (X, Y) - Stage only exposes 3 axes
+                new { Name = "StageX", Title = "Stage X Position (Commanded)", Unit = "µm", Color = "#E91E63", Row = 0, Col = 0, Data = results.Select(r => r.stageX).ToList() },
+                new { Name = "StageY", Title = "Stage Y Position (Commanded)", Unit = "µm", Color = "#9C27B0", Row = 0, Col = 1, Data = results.Select(r => r.stageY).ToList() },
+                
+                // Row 1: Stage Commanded Position (Z only)
+                new { Name = "StageZ", Title = "Stage Z Position (Commanded)", Unit = "µm", Color = "#673AB7", Row = 1, Col = 0, Data = results.Select(r => r.stageZ).ToList() },
+                
+                // Row 2: DLL Estimated Positions (Tx, Ty) - from DLL
+                new { Name = "EstX", Title = "DLL Estimated Tx (X)", Unit = "mm", Color = "#4CAF50", Row = 2, Col = 0, Data = results.Select(r => r.estX).ToList() },
+                new { Name = "EstY", Title = "DLL Estimated Ty (Y)", Unit = "mm", Color = "#8BC34A", Row = 2, Col = 1, Data = results.Select(r => r.estY).ToList() },
+                
+                // Row 3: DLL Estimated Position (Tz) and Rotation (Rx) - from DLL
+                new { Name = "EstZ", Title = "DLL Estimated Tz (Z)", Unit = "mm", Color = "#CDDC39", Row = 3, Col = 0, Data = results.Select(r => r.estZ).ToList() },
+                new { Name = "EstRx", Title = "DLL Estimated Rx (Pitch)", Unit = "rad", Color = "#FFEB3B", Row = 3, Col = 1, Data = results.Select(r => r.estRx).ToList() },
+                
+                // Row 4: DLL Estimated Rotations (Ry, Rz) - from DLL
+                new { Name = "EstRy", Title = "DLL Estimated Ry (Yaw)", Unit = "rad", Color = "#FFC107", Row = 4, Col = 0, Data = results.Select(r => r.estRy).ToList() },
+                new { Name = "EstRz", Title = "DLL Estimated Rz (Roll)", Unit = "rad", Color = "#FF9800", Row = 4, Col = 1, Data = results.Select(r => r.estRz).ToList() },
+            };
+
+            foreach (var chart in chartConfigs)
+            {
+                var bars = CreateBars(chart.Data, 100, chart.Color);
+                var rms = CalculateRms(chart.Data);
+                var std = CalculateStd(chart.Data);
+
+                ChartCards.Add(new ChartCardViewModel(
+                    chart.Title,
+                    rms,
+                    chart.Color,
+                    bars,
+                    $"{chart.Name}:",
+                    $"{rms:F3} +/- {std:F3} {chart.Unit}",
+                    chart.Row,
+                    chart.Col,
+                    chart.Unit,
+                    new ObservableCollection<double>(chart.Data)
+                ));
+            }
+
+            // Calculate RMS from position errors
+            var posErrors = new List<double>();
+            for (int i = 0; i < results.Count; i++)
+            {
+                posErrors.Add(Math.Abs(results[i].errorX));
+                posErrors.Add(Math.Abs(results[i].errorY));
+                posErrors.Add(Math.Abs(results[i].errorZ));
+            }
+            double overallRms = CalculateRms(posErrors);
+            Overall_Rms = $"{overallRms:F3} µm RMS";
+            
+            LogError($"[LoadPoseEstimationResults] Overall RMS: {Overall_Rms}");
+
+            // Generate mock 3D visualization (like original version)
+            LogError("[LoadPoseEstimationResults] Generating 3D visualization");
+            Generate3DData();
+
+            if (ChartCards.Count > 0)
+            {
+                Selected2DChart = ChartCards[0];
+                LogError($"[LoadPoseEstimationResults] Selected first chart: {ChartCards[0].Title}");
+            }
+            
+            HasData = true;
+            LogError($"[LoadPoseEstimationResults] COMPLETE - Loaded {results.Count} results, HasData={HasData}, Created {ChartCards.Count} charts");
+        }
+
+        /// <summary>
+        /// Generate 3D visualization from real pose estimation error data
+        /// </summary>
+        private void Generate3DDataFromErrors(List<(double errorX, double errorY, double errorZ, double errorRx, double errorRy, double errorRz, double stageX, double stageY, double stageZ, double stageRx, double stageRy, double stageRz, double estX, double estY, double estZ, double estRx, double estRy, double estRz)> results)
+        {
+            var data = new Visualization3DData();
+
+            for (int i = 0; i < results.Count; i++)
+            {
+                var result = results[i];
+                
+                // Use actual stage positions
+                double stageX = result.stageX;
+                double stageY = result.stageY;
+                double stageZ = result.stageZ;
+
+                // Add point at stage position (green)
+                data.Points.Add(new Point3D(stageX, stageY, stageZ, "#4CAF50", 4.0));
+                
+                // Add point at estimated position (orange)
+                data.Points.Add(new Point3D(result.estX, result.estY, result.estZ, "#FF9800", 4.0));
+
+                // Add error vector from stage to estimated position (red line)
+                data.Lines.Add(new Line3D(
+                    new Point3D(stageX, stageY, stageZ),
+                    new Point3D(result.estX, result.estY, result.estZ),
+                    "#FF5252", 2.0));
+            }
+
+            data.CalculateBounds();
+            data.GenerateGrid(10);
+            data.GenerateMeshFromScatteredPoints();
+            Visualization3DData = data;
+        }
+
+        /// <summary>
+        /// Show a status message when pose estimation fails
+        /// </summary>
+        public void ShowFailureStatus(int totalAttempts, int failedAttempts)
+        {
+            // Ensure we're on the UI thread
+            if (!Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
+            {
+                Avalonia.Threading.Dispatcher.UIThread.Post(() => ShowFailureStatus(totalAttempts, failedAttempts));
+                return;
+            }
+            
+            HasData = false;
+            HasStatusMessage = true;
+            StatusMessage = $"Pose estimation completed: {failedAttempts} of {totalAttempts} attempts failed.\n\n" +
+                          "Possible causes:\n" +
+                          "• Calibration pattern not visible or out of focus\n" +
+                          "• Pattern too small or too large in frame\n" +
+                          "• Poor lighting conditions\n" +
+                          "• Pattern partially occluded";
+            
+            LogError($"[ShowFailureStatus] Displayed failure status: {failedAttempts}/{totalAttempts} failed");
+        }
+
         [RelayCommand]
         private void ToggleFullScreen()
         {
@@ -312,19 +543,144 @@ namespace singalUI.ViewModels
         }
 
         [RelayCommand]
-        private void BrowsePreviewFolder()
+        private void ShowSix2DPlots()
         {
-            // TODO: Open folder dialog to select data folder
+            SelectedPlotLayout = 0;
+        }
+
+        [RelayCommand]
+        private void ShowSingle3DPlot()
+        {
+            SelectedPlotLayout = 1;
+        }
+
+        [RelayCommand]
+        private void Select2DChart(ChartCardViewModel? chart)
+        {
+            if (chart == null)
+            {
+                return;
+            }
+
+            Selected2DChart = chart;
+        }
+
+        [RelayCommand]
+        private async void BrowsePreviewFolder()
+        {
+            try
+            {
+                var dialog = new Avalonia.Platform.Storage.FilePickerOpenOptions
+                {
+                    Title = "Select Pose Estimation CSV File",
+                    AllowMultiple = false,
+                    FileTypeFilter = new[]
+                    {
+                        new Avalonia.Platform.Storage.FilePickerFileType("CSV Files")
+                        {
+                            Patterns = new[] { "*.csv" }
+                        }
+                    }
+                };
+
+                var topLevel = Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
+                    ? desktop.MainWindow
+                    : null;
+
+                if (topLevel != null)
+                {
+                    var storageProvider = topLevel.StorageProvider;
+                    var result = await storageProvider.OpenFilePickerAsync(dialog);
+
+                    if (result.Count > 0)
+                    {
+                        PreviewDataFolder = result[0].Path.LocalPath;
+                        LogError($"[BrowsePreviewFolder] Selected: {PreviewDataFolder}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogError($"[BrowsePreviewFolder] Error: {ex.Message}");
+            }
         }
 
         [RelayCommand]
         private void LoadPreviewData()
         {
-            // TODO: Load preview data from selected folder
-            HasPreviewData = true;
-            PreviewImageCount = 42;
-            PreviewDataPoints = 100;
-            PreviewDate = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
+            try
+            {
+                if (string.IsNullOrEmpty(PreviewDataFolder) || !System.IO.File.Exists(PreviewDataFolder))
+                {
+                    LogError("[LoadPreviewData] No valid CSV file selected");
+                    return;
+                }
+
+                LogError($"[LoadPreviewData] Loading CSV: {PreviewDataFolder}");
+                
+                // Load session using the model
+                _currentSession = Models.PoseEstimationSession.LoadFromCsv(PreviewDataFolder);
+                
+                if (_currentSession.SuccessfulResults > 0)
+                {
+                    LogError($"[LoadPreviewData] Loaded {_currentSession.SuccessfulResults} successful results from CSV");
+                    
+                    // Convert to format expected by LoadPoseEstimationResults
+                    var dataForLoading = _currentSession.Results
+                        .Where(r => r.Success)
+                        .Select(r => (
+                            r.ErrorX, r.ErrorY, r.ErrorZ, 
+                            r.ErrorRx, r.ErrorRy, r.ErrorRz, 
+                            r.StageX, r.StageY, r.StageZ,
+                            r.StageRx, r.StageRy, r.StageRz,
+                            r.EstimatedX, r.EstimatedY, r.EstimatedZ,
+                            r.EstimatedRx, r.EstimatedRy, r.EstimatedRz
+                        )).ToList();
+                    
+                    LoadPoseEstimationResults(dataForLoading);
+                    
+                    // Update session info
+                    CurrentSessionPath = PreviewDataFolder;
+                    CurrentSessionName = _currentSession.SessionName;
+                    CurrentSessionResultCount = _currentSession.SuccessfulResults;
+                    
+                    HasPreviewData = true;
+                    PreviewImageCount = _currentSession.SuccessfulResults;
+                    PreviewDataPoints = _currentSession.SuccessfulResults;
+                    PreviewDate = _currentSession.SessionDate.ToString("yyyy-MM-dd HH:mm");
+                    
+                    LogError($"[LoadPreviewData] Session loaded: {CurrentSessionName} with {CurrentSessionResultCount} results");
+                }
+                else
+                {
+                    LogError("[LoadPreviewData] No valid results found in CSV");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogError($"[LoadPreviewData] Error: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Get image path for a specific step number
+        /// </summary>
+        public string? GetImagePathForStep(int stepNumber)
+        {
+            if (_currentSession == null) return null;
+            
+            var result = _currentSession.Results.FirstOrDefault(r => r.StepNumber == stepNumber);
+            return result?.ImagePath;
+        }
+        
+        /// <summary>
+        /// Get full result data for a specific step number
+        /// </summary>
+        public Models.PoseEstimationResult? GetResultForStep(int stepNumber)
+        {
+            if (_currentSession == null) return null;
+            
+            return _currentSession.Results.FirstOrDefault(r => r.StepNumber == stepNumber);
         }
 
         private void LogError(string message)

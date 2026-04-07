@@ -18,7 +18,11 @@ using PI;
     /// Get current position of an axis
     /// </summary>
     /// <param name="axisIndex">0-based axis index</param>
-    /// <returns>Current position in millimeters (linear) or degrees (rotation)</returns>
+    /// <returns>
+    /// Current position:
+    /// - PI Controller: nanometers (nm) for linear axes, microradians (µrad) for rotation axes
+    /// - SigmaKoki: micrometers (µm) for linear axes, degrees (°) for rotation axes
+    /// </returns>
     public abstract double GetPosition(int axisIndex);
 
     /// <summary>
@@ -42,6 +46,11 @@ using PI;
     public abstract bool AreAxesReferenced();
   }
 
+/// <summary>
+/// SigmaKoki controller implementation
+/// Units: MICROMETERS (µm) for linear axes, DEGREES (°) for rotation axes
+/// All position and movement values are in these units.
+/// </summary>
 public class SigmakokiController : StageController {
 
     private string[] axes = Array.Empty<string>();
@@ -134,6 +143,18 @@ public class SigmakokiController : StageController {
 
                 // Initialize axes based on controller type
                 InitializeAxes();
+                
+                // CRITICAL: Set HIT mode for HSC-103 (required for proper operation)
+                try
+                {
+                    Log($"[Sigmakoki] Setting HIT mode with Z:1 command...");
+                    string response = SendCommand("Z:1");
+                    Log($"[Sigmakoki] HIT mode response: {response}");
+                }
+                catch (Exception ex)
+                {
+                    Log($"[Sigmakoki] Warning: Could not set HIT mode: {ex.Message}");
+                }
 
                 // Note: Speed setting may not work on all controllers
                 // The stage will use default speed if speed command fails
@@ -325,7 +346,7 @@ public class SigmakokiController : StageController {
         _isMoving = true;
         try
         {
-            // Use raw amount as steps (UI provides step count)
+            // Amount is already in steps (converted by StageWrapper)
             int steps = (int)Math.Round(amount);
 
             // Build command in HIT MODE format (HSC-103, Hit_MV, PGC-04):
@@ -340,7 +361,7 @@ public class SigmakokiController : StageController {
             string commaPrefix = new string(',', index);
             string cmd = $"M:{commaPrefix}{direction}{absValue}";
 
-            Log($"[Sigmakoki] MoveRelative axis {index + 1} by {amount} (steps={steps})");
+            Log($"[Sigmakoki] MoveRelative axis {index + 1} by {steps} steps");
 
             string response = SendCommand(cmd);
             if (!response.Contains("OK") && !response.Contains("ok"))
@@ -557,7 +578,7 @@ public class SigmakokiController : StageController {
             {
                 if (int.TryParse(parts[axisIndex].Trim(), out int steps))
                 {
-                    // Convert steps to mm
+                    // Convert steps to µm (micrometers)
                     return steps / StepsPerMm;
                 }
             }
@@ -697,7 +718,7 @@ public class PIController : StageController {
     private const int NUMBEROFSTEPS = 2000;
 
     /// <summary>
-    /// PI controllers use MILLIMETERS for linear axes and DEGREES for rotation axes.
+    /// PI controllers use NANOMETERS (nm) for linear axes and MICRORADIANS (µrad) for rotation axes.
     /// All position and movement values are in these units.
     /// </summary>
 
@@ -1184,7 +1205,7 @@ public class PIController : StageController {
             return 0.0;
         }
 
-        // Position is returned in mm for linear axes, degrees for rotation
+        // Position is returned in nm for linear axes, µrad for rotation (PI controller)
         return position[0];
     }
 

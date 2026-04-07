@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Media;
 using singalUI.ViewModels;
 using System;
@@ -8,6 +9,7 @@ namespace singalUI.Views;
 public partial class MainWindow : Window
 {
     private Carousel? _carousel;
+    private WindowState _previousWindowState = WindowState.Normal;
 
     public MainWindow()
     {
@@ -15,6 +17,10 @@ public partial class MainWindow : Window
         {
             Console.WriteLine("[MainWindow] Constructor START");
             InitializeComponent();
+            
+            // Add F11 key handler for fullscreen toggle
+            this.KeyDown += OnKeyDown;
+            
             Console.WriteLine("[MainWindow] InitializeComponent completed");
 
             // DataContext is already set in App.axaml.cs, don't set it again
@@ -133,6 +139,26 @@ public partial class MainWindow : Window
         {
             activeTab.Background = new SolidColorBrush(Color.Parse("#0d0d0d")); // Match content background
             activeTab.CornerRadius = new Avalonia.CornerRadius(0, 0, 6, 6); // Rounded bottom corners
+        }
+    }
+
+    private void OnKeyDown(object? sender, KeyEventArgs e)
+    {
+        // F11 toggles fullscreen mode
+        if (e.Key == Key.F11)
+        {
+            if (WindowState == WindowState.FullScreen)
+            {
+                // Exit fullscreen - restore to previous state
+                WindowState = _previousWindowState;
+            }
+            else
+            {
+                // Enter fullscreen - save current state
+                _previousWindowState = WindowState;
+                WindowState = WindowState.FullScreen;
+            }
+            e.Handled = true;
         }
     }
 }

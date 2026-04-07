@@ -62,6 +62,25 @@ namespace singalUI.Services
         {
             try
             {
+                // Clean up any existing connection first
+                if (IsConnected || _device != null)
+                {
+                    Console.WriteLine("=== [MatrixVision] Cleaning up existing connection ===");
+                    try
+                    {
+                        StopAcquisition();
+                        _functionInterface?.Dispose();
+                        _functionInterface = null;
+                        _device?.close();
+                        _device = null;
+                        IsConnected = false;
+                    }
+                    catch (Exception cleanupEx)
+                    {
+                        Console.WriteLine($"=== [MatrixVision] Cleanup warning: {cleanupEx.Message} ===");
+                    }
+                }
+                
                 StatusChanged?.Invoke("Initializing camera manager...");
                 Console.WriteLine("=== [MatrixVision] Working Directory: " + Environment.CurrentDirectory);
                 Console.WriteLine("=== [MatrixVision] Current Directory: " + Directory.GetCurrentDirectory());
@@ -80,7 +99,10 @@ namespace singalUI.Services
                 Console.WriteLine($"=== [MatrixVision] MVIMPACT_ACQUIRE: {mvPath ?? "NOT SET"}");
 
                 Console.WriteLine("=== [MatrixVision] Updating device list ===");
+                // Force device manager to refresh - call multiple times to ensure detection
                 DeviceManager.updateDeviceList();
+                System.Threading.Thread.Sleep(100); // Brief delay for device enumeration
+                DeviceManager.updateDeviceList(); // Second call to catch any delayed devices
 
                 Console.WriteLine($"=== [MatrixVision] Device count: {DeviceManager.deviceCount} ===");
                 if (DeviceManager.deviceCount == 0)
@@ -340,27 +362,60 @@ namespace singalUI.Services
         /// </summary>
         public void SetExposure(double exposureUs)
         {
-            if (_device == null) return;
+            Console.WriteLine($"[MatrixVision] SetExposure called with {exposureUs:F1} µs");
+            if (_device == null)
+            {
+                Console.WriteLine($"[MatrixVision] SetExposure failed: device is null");
+                return;
+            }
             try
             {
                 lock (_lock)
                 {
                     var acqCtrl = new AcquisitionControl(_device);
+                    
+                    // Force disable auto-exposure EVERY time
                     if (acqCtrl.exposureAuto.isValid)
                     {
-                        try { acqCtrl.exposureAuto.write(0); } catch { }
+                        try 
+                        { 
+                            int autoMode = (int)acqCtrl.exposureAuto.read();
+                            if (autoMode != 0)
+                            {
+                                Console.WriteLine($"[MatrixVision] ExposureAuto was {autoMode}, forcing to 0 (Off)");
+                                acqCtrl.exposureAuto.write(0);
+                            }
+                        } 
+                        catch (Exception ex) 
+                        { 
+                            Console.WriteLine($"[MatrixVision] Failed to disable auto-exposure: {ex.Message}");
+                        }
                     }
 
                     if (acqCtrl.exposureTime.isValid)
                     {
+                        double before = acqCtrl.exposureTime.read();
                         acqCtrl.exposureTime.write(exposureUs);
                         double applied = acqCtrl.exposureTime.read();
+                        Console.WriteLine($"[MatrixVision] Exposure changed: {before:F1} → {applied:F1} µs (requested: {exposureUs:F1})");
+                        
+                        // Check if the value actually changed
+                        if (Math.Abs(applied - exposureUs) > 1.0)
+                        {
+                            Console.WriteLine($"[MatrixVision] WARNING: Camera applied {applied:F1} µs but we requested {exposureUs:F1} µs (diff: {Math.Abs(applied - exposureUs):F1})");
+                        }
+                        
                         StatusChanged?.Invoke($"Exposure applied: {applied:F1} us");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"[MatrixVision] SetExposure failed: exposureTime property not valid");
                     }
                 }
             }
             catch (Exception ex)
             {
+                Console.WriteLine($"[MatrixVision] SetExposure exception: {ex.Message}");
                 StatusChanged?.Invoke($"Exposure apply failed: {ex.Message}");
             }
         }
@@ -383,33 +438,63 @@ namespace singalUI.Services
         /// </summary>
         public void SetGain(double gain)
         {
-            if (_device == null) return;
+            Console.WriteLine($"[MatrixVision] SetGain called with {gain:F2} dB");
+            if (_device == null)
+            {
+                Console.WriteLine($"[MatrixVision] SetGain failed: device is null");
+                return;
+            }
             try
             {
                 lock (_lock)
                 {
                     var analogCtrl = new AnalogControl(_device);
+                    
+                    // Force disable auto-gain EVERY time
                     if (analogCtrl.gainAuto.isValid)
                     {
-                        try { analogCtrl.gainAuto.write(0); } catch { }
+                        try 
+                        { 
+                            int autoMode = (int)analogCtrl.gainAuto.read();
+                            if (autoMode != 0)
+                            {
+                                Console.WriteLine($"[MatrixVision] GainAuto was {autoMode}, forcing to 0 (Off)");
+                                analogCtrl.gainAuto.write(0);
+                            }
+                        } 
+                        catch (Exception ex) 
+                        { 
+                            Console.WriteLine($"[MatrixVision] Failed to disable auto-gain: {ex.Message}");
+                        }
                     }
 
                     if (analogCtrl.gain.isValid)
                     {
+                        double before = analogCtrl.gain.read();
                         analogCtrl.gain.write(gain);
                         double applied = analogCtrl.gain.read();
-                        StatusChanged?.Invoke($"Gain applied: {applied:F2} dB");
+                        Console.WriteLine($"[MatrixVision] Gain changed: {before:F2} → {applied:F2} dB (requested: {gain:F2})");
+                        
+                        // Check if the value actually changed
+                        if (Math.Abs(applied - gain) > 0.1)
+                        {
+                            Console.WriteLine($"[MatrixVision] WARNING: Camera applied {applied:F2} dB but we requested {gain:F2} dB (diff: {Math.Abs(applied - gain):F2})");
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine($"[MatrixVision] SetGain failed: gain property not valid");
                     }
                 }
             }
             catch (Exception ex)
             {
-                StatusChanged?.Invoke($"Gain apply failed: {ex.Message}");
+                Console.WriteLine($"[MatrixVision] SetGain exception: {ex.Message}");
             }
         }
 
         /// <summary>
-        /// Set frame rate
+        /// Set frame rate in FPS
         /// </summary>
         public void SetFrameRate(double fps)
         {
@@ -692,6 +777,24 @@ namespace singalUI.Services
 
             IsConnected = false;
             ConnectionChanged?.Invoke(false);
+        }
+
+        /// <summary>
+        /// Reconnect to camera (disconnect and reinitialize)
+        /// </summary>
+        public bool Reconnect()
+        {
+            Console.WriteLine("=== [MatrixVision] Reconnecting camera ===");
+            
+            // Dispose existing connection
+            if (IsConnected)
+            {
+                Dispose();
+                System.Threading.Thread.Sleep(500); // Give hardware time to reset
+            }
+            
+            // Reinitialize
+            return Initialize();
         }
     }
 }

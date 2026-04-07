@@ -10,12 +10,24 @@
         <DefineConstants>X64</DefineConstants>
     </PropertyGroup>
 
+    <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('Windows')) == 'true'">
+        <DefineConstants>$(DefineConstants);WINDOWS_NATIVE_DEPS</DefineConstants>
+    </PropertyGroup>
+
     <ItemGroup>
         <Folder Include="Models\" />
         <Folder Include="Converters\" />
         <Folder Include="Styles\" />
         <Folder Include="Services\" />
         <AvaloniaResource Include="Assets\**" />
+    </ItemGroup>
+
+    <!-- Copy pattern-configs directory to output -->
+    <ItemGroup>
+        <None Include="..\pattern-configs\*.json">
+            <Link>pattern-configs\%(Filename)%(Extension)</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
     </ItemGroup>
 
     <ItemGroup>
@@ -48,7 +60,7 @@
     </ItemGroup>
 
 
-    <ItemGroup>
+    <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows')) == 'true'">
         <!-- Native DLLs - Copy to output directory root (DO NOT use <Reference> for native DLLs) -->
         <None Include="libs\PoseEstApiWrapper.dll">
             <Link>PoseEstApiWrapper.dll</Link>
@@ -94,7 +106,7 @@
         </None>
     </ItemGroup>
     
-    <ItemGroup>
+    <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows')) == 'true'">
         <!-- Matrix Vision local assemblies -->
         <Reference Include="mv.impact.acquire">
             <HintPath>C:\Program Files\MATRIX VISION\mvIMPACT Acquire\bin\netstandard2.0\mv.impact.acquire.dll</HintPath>
@@ -102,7 +114,7 @@
         </Reference>
     </ItemGroup>
 
-    <ItemGroup>
+    <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows')) == 'true'">
         <!-- Copy Matrix Vision native DLLs to output -->
         <None Include="C:\Program Files\MATRIX VISION\mvIMPACT Acquire\bin\**\mv*.dll" Link="MatrixVision\%(RecursiveDir)%(Filename)%(Extension)">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -111,6 +123,14 @@
             <Link>mvGenTLProducer.cti</Link>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
+    </ItemGroup>
+
+    <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows')) != 'true'">
+      <Compile Remove="Services/Services/MatrixVisionCameraService.cs" />
+    </ItemGroup>
+
+    <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows')) == 'true'">
+      <Compile Remove="Services/Services/MatrixVisionCameraService.NonWindows.cs" />
     </ItemGroup>
 
     <ItemGroup>

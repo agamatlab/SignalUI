@@ -34,6 +34,7 @@
         <converters:StageHardwareDisplayNameConverter x:Key="StageHardwareDisplayNameConverter"/>
         <converters:SigmakokiVisibleInvertedConverter x:Key="SigmakokiVisibleInvertedConverter"/>
         <converters:ConnectionStatusColorConverter x:Key="ConnectionStatusColorConverter"/>
+        <converters:GreaterThanZeroConverter x:Key="GreaterThanZeroConverter"/>
     </Application.Resources>
 
     <Application.Styles>

@@ -304,35 +304,139 @@
                                        Margin="12,0,0,0"/>
                         </Grid>
 
-                        <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto">
-                            <StackPanel Grid.Row="0" Grid.Column="0" Spacing="8">
-                                <TextBlock Text="Window Size"
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Window Size"
+                                       FontSize="13"
+                                       Foreground="#ffffff"/>
+                            <NumericUpDown Value="{Binding WindowSize}"
+                                           Minimum="1"
+                                           Maximum="50"
+                                           Increment="0.5"
+                                           FormatString="F1"
                                            FontSize="13"
-                                           Foreground="#ffffff"/>
-                                <NumericUpDown Value="{Binding WindowSize}"
-                                               Minimum="1"
-                                               Maximum="50"
-                                               Increment="0.5"
-                                               FormatString="F1"
-                                               FontSize="13"
-                                               Padding="8,4"
-                                               HorizontalAlignment="Stretch"/>
-                            </StackPanel>
+                                           Padding="8,4"
+                                           HorizontalAlignment="Stretch"
+                                           MaxWidth="300"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
 
-                            <StackPanel Grid.Row="0" Grid.Column="1" Spacing="8" Margin="12,0,0,0">
-                                <TextBlock Text="Code Pitch (blocks)"
-                                           FontSize="13"
-                                           Foreground="#ffffff"/>
-                                <NumericUpDown Value="{Binding CodePitchBlocks}"
-                                               Minimum="1"
-                                               Maximum="20"
-                                               Increment="1"
-                                               FormatString="F0"
-                                               FontSize="13"
-                                               Padding="8,4"
-                                               HorizontalAlignment="Stretch"/>
-                            </StackPanel>
+                <!-- HMF File Configuration -->
+                <Border Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="20">
+                    <StackPanel Spacing="20">
+                        <!-- Section Header -->
+                        <Grid ColumnDefinitions="Auto,*">
+                            <Border Grid.Column="0" Width="24" Height="24" CornerRadius="3" Margin="0,2,0,0">
+                                <Path Data="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"
+                                      Fill="#ab47bc" Stretch="Uniform"/>
+                            </Border>
+                            <TextBlock Grid.Column="1"
+                                       Text="HMF Pattern Files (12x12)"
+                                       FontSize="16"
+                                       FontWeight="SemiBold"
+                                       Foreground="#ffffff"
+                                       VerticalAlignment="Center"
+                                       Margin="12,0,0,0"/>
                         </Grid>
+
+                        <!-- Enable Custom Paths -->
+                        <CheckBox IsChecked="{Binding UseCustomHmfPaths}"
+                                  Content="Use custom HMF file paths"
+                                  FontSize="13"
+                                  Foreground="#ffffff"/>
+
+                        <TextBlock Text="If unchecked, the system will look for 12+12_G.txt, 12+12_X.txt, and 12+12_Y.txt in the Archive folder relative to the captured image."
+                                   FontSize="11"
+                                   Foreground="#aaaaaa"
+                                   TextWrapping="Wrap"
+                                   IsVisible="{Binding !UseCustomHmfPaths}"/>
+
+                        <!-- HMF G File -->
+                        <Border Background="#1a1a1a"
+                                BorderBrush="#303030"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="12"
+                                IsVisible="{Binding UseCustomHmfPaths}">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="HMF G File (12+12_G.txt)"
+                                           FontSize="13"
+                                           FontWeight="SemiBold"
+                                           Foreground="#ffffff"/>
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBox Grid.Column="0"
+                                             Text="{Binding HmfGPath}"
+                                             IsReadOnly="True"
+                                             FontSize="12"
+                                             Padding="8,6"
+                                             Watermark="No file selected"/>
+                                    <Button Grid.Column="1"
+                                            Content="Browse..."
+                                            Command="{Binding BrowseHmfGFileCommand}"
+                                            Padding="12,6"
+                                            FontSize="12"
+                                            Margin="8,0,0,0"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- HMF X File -->
+                        <Border Background="#1a1a1a"
+                                BorderBrush="#303030"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="12"
+                                IsVisible="{Binding UseCustomHmfPaths}">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="HMF X File (12+12_X.txt)"
+                                           FontSize="13"
+                                           FontWeight="SemiBold"
+                                           Foreground="#ffffff"/>
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBox Grid.Column="0"
+                                             Text="{Binding HmfXPath}"
+                                             IsReadOnly="True"
+                                             FontSize="12"
+                                             Padding="8,6"
+                                             Watermark="No file selected"/>
+                                    <Button Grid.Column="1"
+                                            Content="Browse..."
+                                            Command="{Binding BrowseHmfXFileCommand}"
+                                            Padding="12,6"
+                                            FontSize="12"
+                                            Margin="8,0,0,0"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- HMF Y File -->
+                        <Border Background="#1a1a1a"
+                                BorderBrush="#303030"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="12"
+                                IsVisible="{Binding UseCustomHmfPaths}">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="HMF Y File (12+12_Y.txt)"
+                                           FontSize="13"
+                                           FontWeight="SemiBold"
+                                           Foreground="#ffffff"/>
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBox Grid.Column="0"
+                                             Text="{Binding HmfYPath}"
+                                             IsReadOnly="True"
+                                             FontSize="12"
+                                             Padding="8,6"
+                                             Watermark="No file selected"/>
+                                    <Button Grid.Column="1"
+                                            Content="Browse..."
+                                            Command="{Binding BrowseHmfYFileCommand}"
+                                            Padding="12,6"
+                                            FontSize="12"
+                                            Margin="8,0,0,0"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
                 </Border>
 
@@ -387,6 +491,10 @@
                         <TextBlock Text="Note: In production, this will use real camera frames from CameraSetupView."
                                    FontSize="11"
                                    Foreground="#ffffff"
+                                   FontStyle="Italic"/>
+                        <TextBlock Text="{Binding CameraResolutionStatus}"
+                                   FontSize="11"
+                                   Foreground="#8ec5ff"
                                    FontStyle="Italic"/>
                     </StackPanel>
                 </Border>

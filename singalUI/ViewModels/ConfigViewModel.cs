@@ -1,3 +1,4 @@
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using singalUI.libs;
@@ -13,6 +14,9 @@ namespace singalUI.ViewModels
 {
     public partial class ConfigViewModel : ViewModelBase
     {
+        // Static instance for cross-ViewModel communication
+        public static ConfigViewModel? Instance { get; private set; }
+
         private const double DefaultFocalLengthMm = 28.0;
         private const double DefaultPixelSizeMm = 4.4e-3;
         private const int DefaultImageWidth = 640;
@@ -22,6 +26,7 @@ namespace singalUI.ViewModels
         private const int PoseEstimateTimeoutMs = 180000;
         private int _poseRunSequence = 0;
         private int _poseEstimationRunning = 0;
+        private readonly DispatcherTimer _cameraResolutionTimer;
         private readonly string _errorLogFile = System.IO.Path.Combine(
             System.IO.Path.GetTempPath(), "pose_estimation_errors.log");
 
@@ -82,6 +87,22 @@ namespace singalUI.ViewModels
 
         #endregion
 
+        #region HMF File Paths
+
+        [ObservableProperty]
+        private string _hmfGPath = "";
+
+        [ObservableProperty]
+        private string _hmfXPath = "";
+
+        [ObservableProperty]
+        private string _hmfYPath = "";
+
+        [ObservableProperty]
+        private bool _useCustomHmfPaths = false;
+
+        #endregion
+
         #region Test Image Configuration
 
         [ObservableProperty]
@@ -89,6 +110,9 @@ namespace singalUI.ViewModels
 
         [ObservableProperty]
         private int _imageHeight = DefaultImageHeight;
+
+        [ObservableProperty]
+        private string _cameraResolutionStatus = "No connected camera resolution detected";
 
         #endregion
 
@@ -147,8 +171,16 @@ namespace singalUI.ViewModels
 
         public ConfigViewModel()
         {
+            Instance = this; // Set static instance for cross-ViewModel access
             LogToError("[ConfigViewModel] Constructor started");
             InitializeEstimator();
+            _cameraResolutionTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(500)
+            };
+            _cameraResolutionTimer.Tick += (_, _) => SyncCameraResolutionFromConnectedCamera();
+            _cameraResolutionTimer.Start();
+            SyncCameraResolutionFromConnectedCamera();
             LogToError("[ConfigViewModel] Constructor completed");
         }
 
@@ -175,6 +207,44 @@ namespace singalUI.ViewModels
                 ResultStatusMessage = $"Error: {ex.Message}";
                 ResultStatusColor = "#f44336";
                 LogToError($"[ConfigViewModel] Unexpected error: {ex.Message}");
+            }
+        }
+
+        private void SyncCameraResolutionFromConnectedCamera()
+        {
+            try
+            {
+                var cameraService = App.CameraService;
+                if (cameraService == null || !cameraService.IsConnected)
+                {
+                    CameraResolutionStatus = "No connected camera resolution detected";
+                    return;
+                }
+
+                var width = cameraService.ImageWidth;
+                var height = cameraService.ImageHeight;
+
+                if (width <= 0 || height <= 0)
+                {
+                    var (_, snapshotWidth, snapshotHeight, _) = cameraService.GetLatestFrameSnapshot();
+                    width = snapshotWidth;
+                    height = snapshotHeight;
+                }
+
+                if (width > 0 && height > 0)
+                {
+                    ImageWidth = width;
+                    ImageHeight = height;
+                    CameraResolutionStatus = $"Connected camera: {width} x {height}";
+                }
+                else
+                {
+                    CameraResolutionStatus = "Camera connected, waiting for resolution...";
+                }
+            }
+            catch (Exception ex)
+            {
+                CameraResolutionStatus = $"Camera resolution read failed: {ex.Message}";
             }
         }
 
@@ -519,6 +589,132 @@ namespace singalUI.ViewModels
 
         }
 
+        [RelayCommand]
+        private async Task BrowseHmfGFile()
+        {
+            try
+            {
+                var dialog = new Avalonia.Platform.Storage.FilePickerOpenOptions
+                {
+                    Title = "Select HMF G File (12+12_G.txt)",
+                    AllowMultiple = false,
+                    FileTypeFilter = new[]
+                    {
+                        new Avalonia.Platform.Storage.FilePickerFileType("Text Files")
+                        {
+                            Patterns = new[] { "*.txt" }
+                        },
+                        new Avalonia.Platform.Storage.FilePickerFileType("All Files")
+                        {
+                            Patterns = new[] { "*.*" }
+                        }
+                    }
+                };
+
+                var mainWindow = Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
+                    ? desktop.MainWindow
+                    : null;
+
+                if (mainWindow != null)
+                {
+                    var result = await mainWindow.StorageProvider.OpenFilePickerAsync(dialog);
+                    if (result.Count > 0)
+                    {
+                        HmfGPath = result[0].Path.LocalPath;
+                        LogToError($"[BrowseHmfGFile] Selected: {HmfGPath}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogToError($"[BrowseHmfGFile] Error: {ex.Message}");
+            }
+        }
+
+        [RelayCommand]
+        private async Task BrowseHmfXFile()
+        {
+            try
+            {
+                var dialog = new Avalonia.Platform.Storage.FilePickerOpenOptions
+                {
+                    Title = "Select HMF X File (12+12_X.txt)",
+                    AllowMultiple = false,
+                    FileTypeFilter = new[]
+                    {
+                        new Avalonia.Platform.Storage.FilePickerFileType("Text Files")
+                        {
+                            Patterns = new[] { "*.txt" }
+                        },
+                        new Avalonia.Platform.Storage.FilePickerFileType("All Files")
+                        {
+                            Patterns = new[] { "*.*" }
+                        }
+                    }
+                };
+
+                var mainWindow = Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
+                    ? desktop.MainWindow
+                    : null;
+
+                if (mainWindow != null)
+                {
+                    var result = await mainWindow.StorageProvider.OpenFilePickerAsync(dialog);
+                    if (result.Count > 0)
+                    {
+                        HmfXPath = result[0].Path.LocalPath;
+                        LogToError($"[BrowseHmfXFile] Selected: {HmfXPath}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogToError($"[BrowseHmfXFile] Error: {ex.Message}");
+            }
+        }
+
+        [RelayCommand]
+        private async Task BrowseHmfYFile()
+        {
+            try
+            {
+                var dialog = new Avalonia.Platform.Storage.FilePickerOpenOptions
+                {
+                    Title = "Select HMF Y File (12+12_Y.txt)",
+                    AllowMultiple = false,
+                    FileTypeFilter = new[]
+                    {
+                        new Avalonia.Platform.Storage.FilePickerFileType("Text Files")
+                        {
+                            Patterns = new[] { "*.txt" }
+                        },
+                        new Avalonia.Platform.Storage.FilePickerFileType("All Files")
+                        {
+                            Patterns = new[] { "*.*" }
+                        }
+                    }
+                };
+
+                var mainWindow = Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
+                    ? desktop.MainWindow
+                    : null;
+
+                if (mainWindow != null)
+                {
+                    var result = await mainWindow.StorageProvider.OpenFilePickerAsync(dialog);
+                    if (result.Count > 0)
+                    {
+                        HmfYPath = result[0].Path.LocalPath;
+                        LogToError($"[BrowseHmfYFile] Selected: {HmfYPath}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogToError($"[BrowseHmfYFile] Error: {ex.Message}");
+            }
+        }
+
         #endregion
 
         #region Helper Methods
@@ -603,10 +799,16 @@ namespace singalUI.ViewModels
                     $"Image data size mismatch. Expected {rows * cols}, got {imageData.Length}.");
             }
 
-            var archiveDir = Path.Combine(AppContext.BaseDirectory, "Archive");
+            var sessionName = singalUI.Services.SharedConfigParametersStore.Instance.SessionName;
+            if (string.IsNullOrWhiteSpace(sessionName))
+            {
+                sessionName = "session";
+            }
+
+            var archiveDir = Path.Combine(AppContext.BaseDirectory, "Archive", sessionName);
             if (!Directory.Exists(archiveDir))
             {
-                throw new DirectoryNotFoundException($"Archive directory not found: {archiveDir}");
+                Directory.CreateDirectory(archiveDir);
             }
 
             var imageBytes = new byte[imageData.Length];
@@ -616,8 +818,8 @@ namespace singalUI.ViewModels
             }
 
             var imagePath = Path.Combine(
-                AppContext.BaseDirectory,
-                $"last_pose_input_seq{frameSeq}_{DateTime.Now:yyyyMMdd_HHmmss_fff}.png");
+                archiveDir,
+                $"{sessionName}_pose_input_seq{frameSeq}_{DateTime.Now:yyyyMMdd_HHmmss_fff}.png");
             using (var imageMat = new Mat(rows, cols, MatType.CV_8UC1, imageBytes))
             {
                 Cv2.ImWrite(imagePath, imageMat);
