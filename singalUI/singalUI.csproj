@@ -98,6 +98,9 @@
             <Link>Archive\10+10_Y.txt</Link>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
+        <None Include="Archive\default_dll_parameters.txt">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
         <!-- PI GCS2 DLL - 64-bit version for x64 builds -->
         <None Include="libs\PI_GCS2_DLL_x64.dll">
             <Link>PI_GCS2_DLL_x64.dll</Link>

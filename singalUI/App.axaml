@@ -20,6 +20,7 @@
         <converters:InverseBoolConverter x:Key="InverseBoolConverter"/>
         <converters:FocusLevelColorConverter x:Key="FocusLevelColorConverter"/>
         <converters:FocusLevelWidthConverter x:Key="FocusLevelWidthConverter"/>
+        <converters:FocusLevelStarSplitConverter x:Key="FocusLevelStarSplitConverter"/>
         <converters:ControllerToIndexConverter x:Key="ControllerToIndexConverter"/>
         <converters:ControlModeVisibleConverter x:Key="ControlModeVisibleConverter"/>
         <converters:UnitToIndexConverter x:Key="UnitToIndexConverter"/>

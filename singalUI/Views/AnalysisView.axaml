@@ -84,12 +84,22 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <Border Grid.Row="0" Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="20" Margin="8,16,16,12">
+            <Border Grid.Row="0" Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="20" Margin="8,16,16,8">
+                <Button Content="Run stage calibration"
+                        Command="{Binding RunStageCalibrationCommand}"
+                        Padding="16,12"
+                        FontSize="14"
+                        FontWeight="SemiBold"
+                        Foreground="#ffffff"
+                        Background="#2e7d32"
+                        BorderBrush="#1b5e20"
+                        HorizontalAlignment="Stretch"/>
+            </Border>
+
+            <Border Grid.Row="1" Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="20" Margin="8,8,16,8">
                 <ScrollViewer>
                     <StackPanel Spacing="16">
                         <Grid ColumnDefinitions="Auto,*">
@@ -120,89 +130,8 @@
                 </ScrollViewer>
             </Border>
 
-            <!-- Preview Mode -->
-            <Border Grid.Row="1" Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="20" Margin="8,0,16,12">
-                <StackPanel Spacing="12">
-                    <Grid ColumnDefinitions="Auto,*">
-                        <Border Grid.Column="0" Width="20" Height="20" VerticalAlignment="Center">
-                            <Path Data="M10 4C5.5 4 1.73 7.11 0 11.5 1.73 15.89 5.5 19 10 19s8.27-3.11 10-7.5C18.27 7.11 14.5 4 10 4zm0 12.5c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"
-                                  Fill="#999999" 
-                                  Stretch="Uniform"/>
-                        </Border>
-                        <TextBlock Grid.Column="1" Text="Preview Mode" FontSize="16" FontWeight="SemiBold" Foreground="#ffffff" VerticalAlignment="Center" Margin="12,0,12,0"/>
-                    </Grid>
-
-                    <TextBlock Text="Open a previously saved calibration folder to view plots and captured images."
-                               FontSize="12"
-                               Foreground="#ffffff"
-                               TextWrapping="Wrap"/>
-
-                    <Grid ColumnDefinitions="*,Auto">
-                        <TextBlock Grid.Column="0"
-                                   Text="{Binding PreviewDataFolder, StringFormat={}{0}}"
-                                   FontSize="13"
-                                   Foreground="#ffffff"
-                                   VerticalAlignment="Center"
-                                   TextTrimming="CharacterEllipsis"
-                                   Margin="0,0,8,0"/>
-                        <Button Grid.Column="1"
-                                Content="Browse..."
-                                Command="{Binding BrowsePreviewFolderCommand}"
-                                Padding="10,6"
-                                FontSize="12"
-                                MinWidth="80"/>
-                    </Grid>
-
-                    <Button Content="Load Preview Data"
-                            Command="{Binding LoadPreviewDataCommand}"
-                            Padding="16,12"
-                            FontSize="14"
-                            HorizontalAlignment="Stretch"
-                            IsEnabled="{Binding HasPreviewData}"/>
-
-                    <!-- Preview Info -->
-                    <Border IsVisible="{Binding HasPreviewData}"
-                            Background="#1a1a1a"
-                            BorderBrush="#303030"
-                            BorderThickness="1"
-                            CornerRadius="6"
-                            Padding="12">
-                        <StackPanel Spacing="8">
-                            <Grid ColumnDefinitions="Auto,*">
-                                <TextBlock Grid.Column="0" Text="Images:" FontSize="12" Foreground="#ffffff"/>
-                                <TextBlock Grid.Column="1" Text="{Binding PreviewImageCount}" FontSize="12" Foreground="#ffffff" HorizontalAlignment="Right"/>
-                            </Grid>
-                            <Grid ColumnDefinitions="Auto,*">
-                                <TextBlock Grid.Column="0" Text="Data Points:" FontSize="12" Foreground="#ffffff"/>
-                                <TextBlock Grid.Column="1" Text="{Binding PreviewDataPoints}" FontSize="12" Foreground="#ffffff" HorizontalAlignment="Right"/>
-                            </Grid>
-                            <Grid ColumnDefinitions="Auto,*">
-                                <TextBlock Grid.Column="0" Text="Date:" FontSize="12" Foreground="#ffffff"/>
-                                <TextBlock Grid.Column="1" Text="{Binding PreviewDate}" FontSize="12" Foreground="#ffffff" HorizontalAlignment="Right"/>
-                            </Grid>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
-            </Border>
-
-            <Border Grid.Row="2" Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="20" Margin="8,0,16,12">
-                <StackPanel Spacing="12">
-                    <Grid ColumnDefinitions="Auto,*">
-                        <Border Grid.Column="0" Width="20" Height="20" VerticalAlignment="Center">
-                            <Path Data="M5 18h10v2H5v-2zm5-14v9.17l-2.59-2.58L6 12l4 4 4-4-1.41-1.41L10 13.17V4h-2z"
-                                  Fill="#999999" 
-                                  Stretch="Uniform"/>
-                        </Border>
-                        <TextBlock Grid.Column="1" Text="Export Data" FontSize="16" FontWeight="SemiBold" Foreground="#ffffff" VerticalAlignment="Center" Margin="12,0,12,0"/>
-                    </Grid>
-                    <Button Content="Export to CSV" Command="{Binding ExportCsvCommand}" Padding="16,12" FontSize="14" HorizontalAlignment="Stretch"/>
-                    <Button Content="Export to JSON" Command="{Binding ExportJsonCommand}" Padding="16,12" FontSize="14" HorizontalAlignment="Stretch"/>
-                    <Button Content="Save Plots as PNG" Command="{Binding ExportPngCommand}" Padding="16,12" FontSize="14" HorizontalAlignment="Stretch"/>
-                </StackPanel>
-            </Border>
-
             <!-- Error Log -->
-            <Border Grid.Row="3" Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="20" Margin="8,0,16,12">
+            <Border Grid.Row="2" Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="20" Margin="8,0,16,12">
                 <StackPanel Spacing="16">
                     <!-- Section Header -->
                     <Grid ColumnDefinitions="Auto,*">

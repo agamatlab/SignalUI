@@ -35,7 +35,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _cameraReady = true;
 
     [ObservableProperty]
-    private string _applicationVersion = "NanoMeas Calibrator 0.6.0";
+    private string _applicationVersion = "NanoMeas Calibrator 0.7.0";
 
     private static TopLevel? ShellTopLevel() =>
         Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime d
@@ -59,12 +59,6 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         ActiveTab = "analysis";
     }
-    
-    [RelayCommand]
-    private void NavigateToConfig()
-    {
-        ActiveTab = "config";
-    }
 
     [RelayCommand]
     private async Task GlobalSaveAsync()
@@ -75,19 +69,21 @@ public partial class MainWindowViewModel : ViewModelBase
 
         var file = await top.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
         {
-            Title = "Save calculation result",
+            Title = "Save analysis / calculation result",
             DefaultExtension = "csv",
             SuggestedFileName = "nanomeas_result.csv",
             FileTypeChoices = new[]
             {
                 new FilePickerFileType("CSV") { Patterns = new[] { "*.csv" } },
+                new FilePickerFileType("JSON") { Patterns = new[] { "*.json" } },
+                new FilePickerFileType("PNG plot") { Patterns = new[] { "*.png" } },
                 new FilePickerFileType("MATLAB") { Patterns = new[] { "*.mat" } },
                 FilePickerFileTypes.All,
             },
         });
 
         if (file != null)
-            Console.WriteLine($"[GlobalSave] Path chosen: {file.Path.LocalPath} (export wiring TBD)");
+            await singalUI.App.SharedAnalysisViewModel.SaveFromGlobalMenuAsync(file.Path.LocalPath);
     }
 
     [RelayCommand]

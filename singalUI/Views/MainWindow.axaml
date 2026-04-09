@@ -4,7 +4,7 @@
         xmlns:v="using:singalUI.Views"
         x:Class="singalUI.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
-        Title="NanoMeas Calibrator 0.6.0"
+        Title="NanoMeas Calibrator 0.7.0"
         Width="1400"
         Height="900"
         MinWidth="800"
@@ -33,7 +33,7 @@
                 <ComboBoxItem Content="6-DoF stage calibration"/>
                 <ComboBoxItem Content="XY-rot stage (rotation calib)"/>
             </ComboBox>
-            <!-- Menu Tabs (Configure before Analysis; chevron overlay hints left→right workflow) -->
+            <!-- Menu Tabs: Camera → Stage → Analysis (chevron overlay hints workflow) -->
             <Grid Name="TabBarContainer"
                   Grid.Column="1"
                   VerticalAlignment="Center"
@@ -73,26 +73,7 @@
                             <Setter Property="Background" Value="#3a3a3a"/>
                         </Style>
                     </Border.Styles>
-                    <TextBlock Text="Setup"
-                               FontSize="14"
-                               FontFamily="Segoe UI,Arial"
-                               Foreground="#e0e0e0"
-                               Padding="20,8,20,8"
-                               VerticalAlignment="Center"/>
-                </Border>
-
-                <Border Name="ConfigTab"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        Padding="0"
-                        Cursor="Hand"
-                        PointerPressed="NavigateToConfig">
-                    <Border.Styles>
-                        <Style Selector="Border:pointerover">
-                            <Setter Property="Background" Value="#3a3a3a"/>
-                        </Style>
-                    </Border.Styles>
-                    <TextBlock Text="Configure"
+                    <TextBlock Text="Stage"
                                FontSize="14"
                                FontFamily="Segoe UI,Arial"
                                Foreground="#e0e0e0"
@@ -141,7 +122,7 @@
 
             <!-- Center Title -->
             <TextBlock Grid.Column="2"
-                       Text="NanoMeas Calibrator 0.6.0"
+                       Text="NanoMeas Calibrator 0.7.0"
                        Foreground="#666666"
                        FontFamily="Consolas,Courier New"
                        FontSize="11"
@@ -164,7 +145,7 @@
                         Padding="16,8"
                         Cursor="Hand"
                         CornerRadius="0"
-                        ToolTip.Tip="Saves the calculation result as .CSV, .MAT, etc.">
+                        ToolTip.Tip="Saves analysis data as CSV, JSON, or other formats (same as former Analysis export).">
                     <Button.Styles>
                         <Style Selector="Button:pointerover">
                             <Setter Property="Background" Value="#3a3a3a"/>
@@ -210,7 +191,6 @@
         <Carousel Name="MainCarousel" Grid.Row="1">
             <v:CameraSetupView/>
             <v:CalibrationSetupView/>
-            <v:ConfigView/>
             <v:AnalysisView/>
         </Carousel>
     </Grid>

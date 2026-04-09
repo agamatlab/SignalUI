@@ -20,7 +20,7 @@
                 Padding="16,10">
             <Grid ColumnDefinitions="Auto,*,Auto">
                 <TextBlock Grid.Column="0"
-                           Text="Calibration Setup"
+                           Text="Stage"
                            FontSize="16"
                            FontWeight="SemiBold"
                            Foreground="#ffffff"
@@ -121,363 +121,168 @@
             </Grid>
         </Border>
 
-        <Panel Grid.Row="1" Grid.Column="0" Margin="16,16,8,16">
-        <Panel IsVisible="{Binding UseFullMotionTable}">
-        <!-- Motion Configuration Table - 7 Columns (Control mode OFF) -->
-        <Border Background="#252525"
-                BorderBrush="#404040"
-                BorderThickness="1"
-                Margin="0"
-                CornerRadius="8"
-                Padding="0"
-                IsVisible="{Binding SamplingMode, Converter={StaticResource ControlModeVisibleConverter}, ConverterParameter=Invert}">
-            <Grid RowDefinitions="Auto,Auto,*">
-                <!-- Movement Mode Toggle at Top -->
-                <Border Background="#2a2a2a"
-                        BorderBrush="#404040"
-                        BorderThickness="0,0,0,1"
-                        Padding="16,10">
-                    <StackPanel Orientation="Horizontal" Spacing="20">
-                        <TextBlock Text="Movement Mode:"
-                                   FontSize="14"
-                                   FontWeight="SemiBold"
-                                   Foreground="#ffffff"
-                                   VerticalAlignment="Center"/>
-                        <RadioButton Content="Absolute"
-                                     GroupName="AxisMovementMode"
-                                     IsChecked="{Binding MovementModeAbsolute}"
-                                     FontSize="13"
-                                     Foreground="#ffffff"
-                                     VerticalAlignment="Center"/>
-                        <RadioButton Content="Relative"
-                                     GroupName="AxisMovementMode"
-                                     IsChecked="{Binding MovementModeAbsolute, Converter={StaticResource InverseBoolConverter}}"
-                                     FontSize="13"
-                                     Foreground="#ffffff"
-                                     VerticalAlignment="Center"/>
-                    </StackPanel>
-                </Border>
+        <ScrollViewer Grid.Row="1" Grid.Column="0" Margin="16,16,8,16" VerticalScrollBarVisibility="Auto">
+        <StackPanel Spacing="16">
+        <StackPanel IsVisible="{Binding UseFullMotionTable}">
+        <ItemsControl ItemsSource="{Binding StageMotionGroups}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:ConnectedStageMotionGroup">
+                    <Border Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="0" Margin="0,0,0,12">
+                        <StackPanel Spacing="0">
+                            <TextBlock Text="{Binding ProductTitle}" FontSize="15" FontWeight="SemiBold" Foreground="#ffffff" Margin="16,12,16,4" HorizontalAlignment="Left"/>
 
-                <Border Grid.Row="1" Background="#2a2a2a"
-                        BorderBrush="#404040"
-                        BorderThickness="0,0,0,1"
-                        Padding="16,12">
-                    <Grid ColumnDefinitions="50,70,*,80,160,180,120">
-                        <TextBlock Grid.Column="0" Text="On"
-                                   FontSize="14"
-                                   FontWeight="SemiBold"
-                                   Foreground="#ffffff"/>
-                        <TextBlock Grid.Column="1" Text="Axis"
-                                   FontSize="14"
-                                   FontWeight="SemiBold"
-                                   Foreground="#ffffff"/>
-                        <TextBlock Grid.Column="2" Text="Label"
-                                   FontSize="14"
-                                   FontWeight="SemiBold"
-                                   Foreground="#ffffff"/>
-                        <TextBlock Grid.Column="3" Text="Unit"
-                                   FontSize="14"
-                                   FontWeight="SemiBold"
-                                   Foreground="#ffffff"/>
-                        <TextBlock Grid.Column="4" Text="Position"
-                                   FontSize="14"
-                                   FontWeight="SemiBold"
-                                   Foreground="#ffffff"
-                                   TextAlignment="Center"/>
-                        <TextBlock Grid.Column="5" Text="Step Size"
-                                   FontSize="14"
-                                   FontWeight="SemiBold"
-                                   Foreground="#ffffff"
-                                   TextAlignment="Center"/>
-                        <TextBlock Grid.Column="6" Text="Points"
-                                   FontSize="14"
-                                   FontWeight="SemiBold"
-                                   Foreground="#ffffff"
-                                   TextAlignment="Center"/>
-                    </Grid>
-                </Border>
-
-                <ItemsControl Grid.Row="2" ItemsSource="{Binding MotionRows}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Border BorderBrush="#303030"
-                                    BorderThickness="0,0,0,1"
-                                    Padding="16,10"
-                                    Background="#252525">
-                                <Grid ColumnDefinitions="50,70,*,80,160,140,100">
-                                    <CheckBox Grid.Column="0"
-                                              IsChecked="{Binding IsEnabled}"
-                                              Foreground="#ffffff"
-                                              HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"/>
-                                    <TextBlock Grid.Column="1"
-                                               Text="{Binding Axis}"
-                                               FontSize="14"
-                                               Foreground="#ffffff"
-                                               VerticalAlignment="Center"/>
-                                    <TextBlock Grid.Column="2"
-                                               Text="{Binding Label}"
-                                               FontSize="14"
-                                               Foreground="#ffffff"
-                                               VerticalAlignment="Center"/>
-                                    <TextBlock Grid.Column="3"
-                                               Text="{Binding Unit}"
-                                               FontSize="14"
-                                               Foreground="#ffffff"
-                                               VerticalAlignment="Center"/>
-                                    <!-- Position: Editable in Absolute mode (TargetPosition), Read-only in Relative mode (CalculatedEndPosition) -->
-                                    <NumericUpDown Grid.Column="4"
-                                                   Value="{Binding TargetPosition, Mode=TwoWay}"
-                                                   Minimum="-1000000"
-                                                   Maximum="1000000"
-                                                   Increment="100"
-                                                   FormatString="F1"
-                                                   FontSize="14"
-                                                   HorizontalAlignment="Stretch"
-                                                   HorizontalContentAlignment="Center"
-                                                   IsVisible="{Binding $parent[UserControl].((vm:CalibrationSetupViewModel)DataContext).MovementModeAbsolute}"/>
-                                    <Border Grid.Column="4"
-                                            Background="#1a1a1a"
-                                            BorderBrush="#505050"
-                                            BorderThickness="1"
-                                            CornerRadius="4"
-                                            Padding="0,8,0,8"
-                                            IsVisible="{Binding $parent[UserControl].((vm:CalibrationSetupViewModel)DataContext).MovementModeAbsolute, Converter={StaticResource InverseBoolConverter}}">
-                                        <TextBlock Text="{Binding CalculatedEndPosition, StringFormat={}{0:F2}}"
-                                                   FontSize="14"
-                                                   Foreground="#ffffff"
-                                                   HorizontalAlignment="Center"
-                                                   VerticalAlignment="Center"/>
+                            <Border IsVisible="{Binding $parent[UserControl].((vm:CalibrationSetupViewModel)DataContext).SamplingMode, Converter={StaticResource ControlModeVisibleConverter}, ConverterParameter=Invert}"
+                                    Background="#252525" BorderThickness="0" Padding="0">
+                                <Grid RowDefinitions="Auto,Auto,*">
+                                    <Border Background="#2a2a2a" BorderBrush="#404040" BorderThickness="0,0,0,1" Padding="16,10">
+                                        <StackPanel Orientation="Horizontal" Spacing="20">
+                                            <TextBlock Text="Movement Mode:" FontSize="14" FontWeight="SemiBold" Foreground="#ffffff" VerticalAlignment="Center"/>
+                                            <RadioButton Content="Absolute" GroupName="{Binding MovementRadioGroup}" IsChecked="{Binding $parent[UserControl].((vm:CalibrationSetupViewModel)DataContext).MovementModeAbsolute}" FontSize="13" Foreground="#ffffff" VerticalAlignment="Center"/>
+                                            <RadioButton Content="Relative" GroupName="{Binding MovementRadioGroup}" IsChecked="{Binding $parent[UserControl].((vm:CalibrationSetupViewModel)DataContext).MovementModeAbsolute, Converter={StaticResource InverseBoolConverter}}" FontSize="13" Foreground="#ffffff" VerticalAlignment="Center"/>
+                                        </StackPanel>
                                     </Border>
-                                    <!-- Step Size: Read-only in Absolute mode (AutoStepSize), Editable in Relative mode -->
-                                    <Border Grid.Column="5"
-                                            Background="#1a1a1a"
-                                            BorderBrush="#505050"
-                                            BorderThickness="1"
-                                            CornerRadius="4"
-                                            Padding="0,8,0,8"
-                                            IsVisible="{Binding $parent[UserControl].((vm:CalibrationSetupViewModel)DataContext).MovementModeAbsolute}">
-                                        <TextBlock Text="{Binding AutoStepSize, StringFormat={}{0:F2}}"
-                                                   FontSize="14"
-                                                   Foreground="#ffffff"
-                                                   HorizontalAlignment="Center"
-                                                   VerticalAlignment="Center"/>
+                                    <Border Grid.Row="1" Background="#2a2a2a" BorderBrush="#404040" BorderThickness="0,0,0,1" Padding="16,12">
+                                        <Grid ColumnDefinitions="50,70,*,80,160,180,120">
+                                            <TextBlock Grid.Column="0" Text="On" FontSize="14" FontWeight="SemiBold" Foreground="#ffffff"/>
+                                            <TextBlock Grid.Column="1" Text="Axis" FontSize="14" FontWeight="SemiBold" Foreground="#ffffff"/>
+                                            <TextBlock Grid.Column="2" Text="Label" FontSize="14" FontWeight="SemiBold" Foreground="#ffffff"/>
+                                            <TextBlock Grid.Column="3" Text="Unit" FontSize="14" FontWeight="SemiBold" Foreground="#ffffff"/>
+                                            <TextBlock Grid.Column="4" Text="Position" FontSize="14" FontWeight="SemiBold" Foreground="#ffffff" TextAlignment="Center"/>
+                                            <TextBlock Grid.Column="5" Text="Step Size" FontSize="14" FontWeight="SemiBold" Foreground="#ffffff" TextAlignment="Center"/>
+                                            <TextBlock Grid.Column="6" Text="Points" FontSize="14" FontWeight="SemiBold" Foreground="#ffffff" TextAlignment="Center"/>
+                                        </Grid>
                                     </Border>
-                                    <NumericUpDown Grid.Column="5"
-                                                   Value="{Binding StepSize, Mode=TwoWay}"
-                                                   Minimum="0.001"
-                                                   Maximum="1000"
-                                                   Increment="1"
-                                                   FormatString="F1"
-                                                   FontSize="14"
-                                                   HorizontalAlignment="Stretch"
-                                                   HorizontalContentAlignment="Center"
-                                                   IsVisible="{Binding $parent[UserControl].((vm:CalibrationSetupViewModel)DataContext).MovementModeAbsolute, Converter={StaticResource InverseBoolConverter}}"/>
-                                    <!-- Points: Always editable -->
-                                    <NumericUpDown Grid.Column="6"
-                                                   Value="{Binding NumSteps, Mode=TwoWay}"
-                                                   Minimum="1"
-                                                   Maximum="10000"
-                                                   Increment="1"
-                                                   FormatString="F0"
-                                                   FontSize="14"
-                                                   HorizontalAlignment="Stretch"
-                                                   HorizontalContentAlignment="Center"/>
+                                    <ItemsControl Grid.Row="2" ItemsSource="{Binding Rows}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border BorderBrush="#303030" BorderThickness="0,0,0,1" Padding="16,10" Background="#252525">
+                                                    <Grid ColumnDefinitions="50,70,*,80,160,140,100">
+                                                        <CheckBox Grid.Column="0" IsChecked="{Binding IsEnabled}" Foreground="#ffffff" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                        <TextBlock Grid.Column="1" Text="{Binding Axis}" FontSize="14" Foreground="#ffffff" VerticalAlignment="Center"/>
+                                                        <TextBlock Grid.Column="2" Text="{Binding Label}" FontSize="14" Foreground="#ffffff" VerticalAlignment="Center"/>
+                                                        <TextBlock Grid.Column="3" Text="{Binding Unit}" FontSize="14" Foreground="#ffffff" VerticalAlignment="Center"/>
+                                                        <NumericUpDown Grid.Column="4" Value="{Binding TargetPosition, Mode=TwoWay}" Minimum="-1000000" Maximum="1000000" Increment="100" FormatString="F1" FontSize="14" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                                                       IsVisible="{Binding $parent[UserControl].((vm:CalibrationSetupViewModel)DataContext).MovementModeAbsolute}"/>
+                                                        <Border Grid.Column="4" Background="#1a1a1a" BorderBrush="#505050" BorderThickness="1" CornerRadius="4" Padding="0,8,0,8"
+                                                                IsVisible="{Binding $parent[UserControl].((vm:CalibrationSetupViewModel)DataContext).MovementModeAbsolute, Converter={StaticResource InverseBoolConverter}}">
+                                                            <TextBlock Text="{Binding CalculatedEndPosition, StringFormat={}{0:F2}}" FontSize="14" Foreground="#ffffff" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                        </Border>
+                                                        <Border Grid.Column="5" Background="#1a1a1a" BorderBrush="#505050" BorderThickness="1" CornerRadius="4" Padding="0,8,0,8"
+                                                                IsVisible="{Binding $parent[UserControl].((vm:CalibrationSetupViewModel)DataContext).MovementModeAbsolute}">
+                                                            <TextBlock Text="{Binding AutoStepSize, StringFormat={}{0:F2}}" FontSize="14" Foreground="#ffffff" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                        </Border>
+                                                        <NumericUpDown Grid.Column="5" Value="{Binding StepSize, Mode=TwoWay}" Minimum="0.001" Maximum="1000" Increment="1" FormatString="F1" FontSize="14" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                                                       IsVisible="{Binding $parent[UserControl].((vm:CalibrationSetupViewModel)DataContext).MovementModeAbsolute, Converter={StaticResource InverseBoolConverter}}"/>
+                                                        <NumericUpDown Grid.Column="6" Value="{Binding NumSteps, Mode=TwoWay}" Minimum="1" Maximum="10000" Increment="1" FormatString="F0" FontSize="14" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
                                 </Grid>
                             </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </Grid>
-        </Border>
 
-        <!-- Motion Configuration Table - 8 Columns (Control mode ON) -->
-        <Border Background="#252525"
-                BorderBrush="#404040"
-                BorderThickness="1"
-                Margin="0"
-                CornerRadius="8"
-                Padding="0"
-                IsVisible="{Binding SamplingMode, Converter={StaticResource ControlModeVisibleConverter}}">
-            <Grid RowDefinitions="Auto,Auto,*">
-                <!-- Movement Mode Toggle at Top -->
-                <Border Background="#2a2a2a"
-                        BorderBrush="#404040"
-                        BorderThickness="0,0,0,1"
-                        Padding="16,10">
-                    <StackPanel Orientation="Horizontal" Spacing="20">
-                        <TextBlock Text="Movement Mode:"
-                                   FontSize="14"
-                                   FontWeight="SemiBold"
-                                   Foreground="#ffffff"
-                                   VerticalAlignment="Center"/>
-                        <RadioButton Content="Absolute"
-                                     GroupName="AxisMovementMode2"
-                                     IsChecked="{Binding MovementModeAbsolute}"
-                                     FontSize="13"
-                                     Foreground="#ffffff"
-                                     VerticalAlignment="Center"/>
-                        <RadioButton Content="Relative"
-                                     GroupName="AxisMovementMode2"
-                                     IsChecked="{Binding MovementModeAbsolute, Converter={StaticResource InverseBoolConverter}}"
-                                     FontSize="13"
-                                     Foreground="#ffffff"
-                                     VerticalAlignment="Center"/>
-                    </StackPanel>
-                </Border>
-
-                <Border Grid.Row="1" Background="#2a2a2a"
-                        BorderBrush="#404040"
-                        BorderThickness="0,0,0,1"
-                        Padding="16,12">
-                    <Grid ColumnDefinitions="50,70,*,80,160,180,120,160">
-                        <TextBlock Grid.Column="0" Text="On"
-                                   FontSize="14"
-                                   FontWeight="SemiBold"
-                                   Foreground="#ffffff"/>
-                        <TextBlock Grid.Column="1" Text="Axis"
-                                   FontSize="14"
-                                   FontWeight="SemiBold"
-                                   Foreground="#ffffff"/>
-                        <TextBlock Grid.Column="2" Text="Label"
-                                   FontSize="14"
-                                   FontWeight="SemiBold"
-                                   Foreground="#ffffff"/>
-                        <TextBlock Grid.Column="3" Text="Unit"
-                                   FontSize="14"
-                                   FontWeight="SemiBold"
-                                   Foreground="#ffffff"/>
-                        <TextBlock Grid.Column="4" Text="Position"
-                                   FontSize="14"
-                                   FontWeight="SemiBold"
-                                   Foreground="#ffffff"
-                                   TextAlignment="Center"/>
-                        <TextBlock Grid.Column="5" Text="Step Size"
-                                   FontSize="14"
-                                   FontWeight="SemiBold"
-                                   Foreground="#ffffff"
-                                   TextAlignment="Center"/>
-                        <TextBlock Grid.Column="6" Text="Points"
-                                   FontSize="14"
-                                   FontWeight="SemiBold"
-                                   Foreground="#ffffff"
-                                   TextAlignment="Center"/>
-                        <TextBlock Grid.Column="7" Text="Controls"
-                                   FontSize="14"
-                                   FontWeight="SemiBold"
-                                   Foreground="#ffffff"
-                                   TextAlignment="Center"/>
-                    </Grid>
-                </Border>
-
-                <ItemsControl Grid.Row="2" ItemsSource="{Binding MotionRows}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Border BorderBrush="#303030"
-                                    BorderThickness="0,0,0,1"
-                                    Padding="16,10"
-                                    Background="#252525">
-                                <Grid ColumnDefinitions="50,70,*,80,160,180,120,160">
-                                    <CheckBox Grid.Column="0"
-                                              IsChecked="{Binding IsEnabled}"
-                                              Foreground="#ffffff"
-                                              HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"/>
-                                    <TextBlock Grid.Column="1"
-                                               Text="{Binding Axis}"
-                                               FontSize="14"
-                                               Foreground="#ffffff"
-                                               VerticalAlignment="Center"/>
-                                    <TextBlock Grid.Column="2"
-                                               Text="{Binding Label}"
-                                               FontSize="14"
-                                               Foreground="#ffffff"
-                                               VerticalAlignment="Center"/>
-                                    <TextBlock Grid.Column="3"
-                                               Text="{Binding Unit}"
-                                               FontSize="14"
-                                               Foreground="#ffffff"
-                                               VerticalAlignment="Center"/>
-                                    <!-- Position: Editable in Absolute mode (TargetPosition), Read-only in Relative mode (CalculatedEndPosition) -->
-                                    <NumericUpDown Grid.Column="4"
-                                                   Value="{Binding TargetPosition, Mode=TwoWay}"
-                                                   Minimum="-1000000"
-                                                   Maximum="1000000"
-                                                   Increment="100"
-                                                   FormatString="F1"
-                                                   FontSize="14"
-                                                   HorizontalAlignment="Stretch"
-                                                   HorizontalContentAlignment="Center"
-                                                   IsVisible="{Binding $parent[UserControl].((vm:CalibrationSetupViewModel)DataContext).MovementModeAbsolute}"/>
-                                    <Border Grid.Column="4"
-                                            Background="#1a1a1a"
-                                            BorderBrush="#505050"
-                                            BorderThickness="1"
-                                            CornerRadius="4"
-                                            Padding="0,8,0,8"
-                                            IsVisible="{Binding $parent[UserControl].((vm:CalibrationSetupViewModel)DataContext).MovementModeAbsolute, Converter={StaticResource InverseBoolConverter}}">
-                                        <TextBlock Text="{Binding CalculatedEndPosition, StringFormat={}{0:F2}}"
-                                                   FontSize="14"
-                                                   Foreground="#ffffff"
-                                                   HorizontalAlignment="Center"
-                                                   VerticalAlignment="Center"/>
+                            <Border IsVisible="{Binding $parent[UserControl].((vm:CalibrationSetupViewModel)DataContext).SamplingMode, Converter={StaticResource ControlModeVisibleConverter}}"
+                                    Background="#252525" BorderThickness="0" Padding="0">
+                                <Grid RowDefinitions="Auto,Auto,*">
+                                    <Border Background="#2a2a2a" BorderBrush="#404040" BorderThickness="0,0,0,1" Padding="16,10">
+                                        <StackPanel Orientation="Horizontal" Spacing="20">
+                                            <TextBlock Text="Movement Mode:" FontSize="14" FontWeight="SemiBold" Foreground="#ffffff" VerticalAlignment="Center"/>
+                                            <RadioButton Content="Absolute" GroupName="{Binding MovementRadioGroupB}" IsChecked="{Binding $parent[UserControl].((vm:CalibrationSetupViewModel)DataContext).MovementModeAbsolute}" FontSize="13" Foreground="#ffffff" VerticalAlignment="Center"/>
+                                            <RadioButton Content="Relative" GroupName="{Binding MovementRadioGroupB}" IsChecked="{Binding $parent[UserControl].((vm:CalibrationSetupViewModel)DataContext).MovementModeAbsolute, Converter={StaticResource InverseBoolConverter}}" FontSize="13" Foreground="#ffffff" VerticalAlignment="Center"/>
+                                        </StackPanel>
                                     </Border>
-                                    <!-- Step Size: Read-only in Absolute mode (AutoStepSize), Editable in Relative mode -->
-                                    <Border Grid.Column="5"
-                                            Background="#1a1a1a"
-                                            BorderBrush="#505050"
-                                            BorderThickness="1"
-                                            CornerRadius="4"
-                                            Padding="0,8,0,8"
-                                            IsVisible="{Binding $parent[UserControl].((vm:CalibrationSetupViewModel)DataContext).MovementModeAbsolute}">
-                                        <TextBlock Text="{Binding AutoStepSize, StringFormat={}{0:F2}}"
-                                                   FontSize="14"
-                                                   Foreground="#ffffff"
-                                                   HorizontalAlignment="Center"
-                                                   VerticalAlignment="Center"/>
+                                    <Border Grid.Row="1" Background="#2a2a2a" BorderBrush="#404040" BorderThickness="0,0,0,1" Padding="16,12">
+                                        <Grid ColumnDefinitions="50,70,*,80,160,180,120,160">
+                                            <TextBlock Grid.Column="0" Text="On" FontSize="14" FontWeight="SemiBold" Foreground="#ffffff"/>
+                                            <TextBlock Grid.Column="1" Text="Axis" FontSize="14" FontWeight="SemiBold" Foreground="#ffffff"/>
+                                            <TextBlock Grid.Column="2" Text="Label" FontSize="14" FontWeight="SemiBold" Foreground="#ffffff"/>
+                                            <TextBlock Grid.Column="3" Text="Unit" FontSize="14" FontWeight="SemiBold" Foreground="#ffffff"/>
+                                            <TextBlock Grid.Column="4" Text="Position" FontSize="14" FontWeight="SemiBold" Foreground="#ffffff" TextAlignment="Center"/>
+                                            <TextBlock Grid.Column="5" Text="Step Size" FontSize="14" FontWeight="SemiBold" Foreground="#ffffff" TextAlignment="Center"/>
+                                            <TextBlock Grid.Column="6" Text="Points" FontSize="14" FontWeight="SemiBold" Foreground="#ffffff" TextAlignment="Center"/>
+                                            <TextBlock Grid.Column="7" Text="Controls" FontSize="14" FontWeight="SemiBold" Foreground="#ffffff" TextAlignment="Center"/>
+                                        </Grid>
                                     </Border>
-                                    <NumericUpDown Grid.Column="5"
-                                                   Value="{Binding StepSize, Mode=TwoWay}"
-                                                   Minimum="0.001"
-                                                   Maximum="1000"
-                                                   Increment="1"
-                                                   FormatString="F1"
-                                                   FontSize="14"
-                                                   HorizontalAlignment="Stretch"
-                                                   HorizontalContentAlignment="Center"
-                                                   IsVisible="{Binding $parent[UserControl].((vm:CalibrationSetupViewModel)DataContext).MovementModeAbsolute, Converter={StaticResource InverseBoolConverter}}"/>
-                                    <!-- Points: Always editable -->
-                                    <NumericUpDown Grid.Column="6"
-                                                   Value="{Binding NumSteps, Mode=TwoWay}"
-                                                   Minimum="1"
-                                                   Maximum="10000"
-                                                   Increment="1"
-                                                   FormatString="F0"
-                                                   FontSize="14"
-                                                   HorizontalAlignment="Stretch"
-                                                   HorizontalContentAlignment="Center"/>
-                                    <ComboBox Grid.Column="7"
-                                              SelectedIndex="{Binding SelectedController, Converter={StaticResource ControllerToIndexConverter}}"
-                                              PlaceholderText="Select Controller"
-                                              FontSize="13"
-                                              HorizontalAlignment="Stretch"
-                                              IsEnabled="{Binding IsEnabled}">
-                                        <ComboBoxItem Content="None"/>
-                                        <ComboBoxItem Content="Manual Jog"/>
-                                        <ComboBoxItem Content="Auto Step"/>
-                                        <ComboBoxItem Content="PID"/>
-                                        <ComboBoxItem Content="Servo"/>
-                                        <ComboBoxItem Content="Stepper"/>
-                                        <ComboBoxItem Content="DC"/>
-                                    </ComboBox>
+                                    <ItemsControl Grid.Row="2" ItemsSource="{Binding Rows}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border BorderBrush="#303030" BorderThickness="0,0,0,1" Padding="16,10" Background="#252525">
+                                                    <Grid ColumnDefinitions="50,70,*,80,160,180,120,160">
+                                                        <CheckBox Grid.Column="0" IsChecked="{Binding IsEnabled}" Foreground="#ffffff" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                        <TextBlock Grid.Column="1" Text="{Binding Axis}" FontSize="14" Foreground="#ffffff" VerticalAlignment="Center"/>
+                                                        <TextBlock Grid.Column="2" Text="{Binding Label}" FontSize="14" Foreground="#ffffff" VerticalAlignment="Center"/>
+                                                        <TextBlock Grid.Column="3" Text="{Binding Unit}" FontSize="14" Foreground="#ffffff" VerticalAlignment="Center"/>
+                                                        <NumericUpDown Grid.Column="4" Value="{Binding TargetPosition, Mode=TwoWay}" Minimum="-1000000" Maximum="1000000" Increment="100" FormatString="F1" FontSize="14" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                                                       IsVisible="{Binding $parent[UserControl].((vm:CalibrationSetupViewModel)DataContext).MovementModeAbsolute}"/>
+                                                        <Border Grid.Column="4" Background="#1a1a1a" BorderBrush="#505050" BorderThickness="1" CornerRadius="4" Padding="0,8,0,8"
+                                                                IsVisible="{Binding $parent[UserControl].((vm:CalibrationSetupViewModel)DataContext).MovementModeAbsolute, Converter={StaticResource InverseBoolConverter}}">
+                                                            <TextBlock Text="{Binding CalculatedEndPosition, StringFormat={}{0:F2}}" FontSize="14" Foreground="#ffffff" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                        </Border>
+                                                        <Border Grid.Column="5" Background="#1a1a1a" BorderBrush="#505050" BorderThickness="1" CornerRadius="4" Padding="0,8,0,8"
+                                                                IsVisible="{Binding $parent[UserControl].((vm:CalibrationSetupViewModel)DataContext).MovementModeAbsolute}">
+                                                            <TextBlock Text="{Binding AutoStepSize, StringFormat={}{0:F2}}" FontSize="14" Foreground="#ffffff" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                        </Border>
+                                                        <NumericUpDown Grid.Column="5" Value="{Binding StepSize, Mode=TwoWay}" Minimum="0.001" Maximum="1000" Increment="1" FormatString="F1" FontSize="14" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                                                       IsVisible="{Binding $parent[UserControl].((vm:CalibrationSetupViewModel)DataContext).MovementModeAbsolute, Converter={StaticResource InverseBoolConverter}}"/>
+                                                        <NumericUpDown Grid.Column="6" Value="{Binding NumSteps, Mode=TwoWay}" Minimum="1" Maximum="10000" Increment="1" FormatString="F0" FontSize="14" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                                                        <ComboBox Grid.Column="7" SelectedIndex="{Binding SelectedController, Converter={StaticResource ControllerToIndexConverter}}" PlaceholderText="Select Controller" FontSize="13" HorizontalAlignment="Stretch" IsEnabled="{Binding IsEnabled}">
+                                                            <ComboBoxItem Content="None"/>
+                                                            <ComboBoxItem Content="Manual Jog"/>
+                                                            <ComboBoxItem Content="Auto Step"/>
+                                                            <ComboBoxItem Content="PID"/>
+                                                            <ComboBoxItem Content="Servo"/>
+                                                            <ComboBoxItem Content="Stepper"/>
+                                                            <ComboBoxItem Content="DC"/>
+                                                        </ComboBox>
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
                                 </Grid>
                             </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </Grid>
-        </Border>
-        </Panel>
+
+                            <Border Background="#1a1a1a" BorderBrush="#303030" BorderThickness="1" CornerRadius="6" Padding="12" Margin="16,12,16,8">
+                                <StackPanel Spacing="10">
+                                    <TextBlock Text="Current Position" FontSize="14" FontWeight="SemiBold" Foreground="#ffffff"/>
+                                    <StackPanel Orientation="Horizontal" Spacing="12" IsVisible="{Binding ShowX}">
+                                        <TextBlock Text="X:" Width="36" FontSize="13" Foreground="#ffffff" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding DisplayX, StringFormat={}{0:F3} µm}" FontSize="13" Foreground="#ffffff" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="12" IsVisible="{Binding ShowY}">
+                                        <TextBlock Text="Y:" Width="36" FontSize="13" Foreground="#ffffff" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding DisplayY, StringFormat={}{0:F3} µm}" FontSize="13" Foreground="#ffffff" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="12" IsVisible="{Binding ShowZ}">
+                                        <TextBlock Text="Z:" Width="36" FontSize="13" Foreground="#ffffff" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding DisplayZ, StringFormat={}{0:F3} µm}" FontSize="13" Foreground="#ffffff" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="12" IsVisible="{Binding ShowRx}">
+                                        <TextBlock Text="Rx:" Width="36" FontSize="13" Foreground="#ffffff" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding DisplayRx, StringFormat={}{0:F3} deg}" FontSize="13" Foreground="#ffffff" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="12" IsVisible="{Binding ShowRy}">
+                                        <TextBlock Text="Ry:" Width="36" FontSize="13" Foreground="#ffffff" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding DisplayRy, StringFormat={}{0:F3} deg}" FontSize="13" Foreground="#ffffff" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="12" IsVisible="{Binding ShowRz}">
+                                        <TextBlock Text="Rz:" Width="36" FontSize="13" Foreground="#ffffff" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding DisplayRz, StringFormat={}{0:F3} deg}" FontSize="13" Foreground="#ffffff" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,6,0,0" VerticalAlignment="Center">
+                                        <TextBlock Text="Set zero" VerticalAlignment="Center" Foreground="#bbbbbb" FontSize="12"/>
+                                        <ToggleSwitch IsChecked="{Binding DisplayPositionAsRaw, Mode=TwoWay}" OnContent="" OffContent="" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Display raw" VerticalAlignment="Center" Foreground="#bbbbbb" FontSize="12"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        </StackPanel>
 
         <!-- Rotation calibration: compact single-DOF motion (first row) -->
         <Border Background="#252525"
@@ -521,8 +326,8 @@
                 </Grid>
             </Grid>
         </Border>
-
-        </Panel>
+        </StackPanel>
+        </ScrollViewer>
 
         <!-- Right Panel - Scrollable -->
         <ScrollViewer Grid.Row="1" Grid.Column="1" Margin="8,16,16,16">
@@ -536,27 +341,22 @@
                             <Button Grid.Column="1" Content="+ Add" Command="{Binding AddStageCommand}" Padding="10,6" FontSize="12" Foreground="#ffffff" HorizontalAlignment="Right"/>
                         </Grid>
 
-                        <Border Background="#1a1a1a" BorderBrush="#303030" BorderThickness="1" CornerRadius="4" Padding="10,8">
-                            <TextBlock Text="{Binding OverallStageStatus}" FontSize="12" Foreground="#ffffff" TextWrapping="Wrap"/>
-                        </Border>
-
                         <ItemsControl ItemsSource="{Binding StageWrappers}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
                                     <Border Background="#2a2a2a" BorderBrush="#404040" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,0,0,8">
-                                        <Grid RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="*,Auto,Auto">
+                                        <Grid RowDefinitions="Auto,*" ColumnDefinitions="*,Auto,Auto">
                                             <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding Id, StringFormat='Stage {0}'}" FontSize="14" FontWeight="SemiBold" Foreground="#ffffff"/>
                                             <Ellipse Grid.Row="0" Grid.Column="1" Width="12" Height="12" VerticalAlignment="Center" Margin="8,0,8,0" Fill="{Binding IsConnected, Converter={StaticResource ConnectionStatusColorConverter}}" Stroke="#505050" StrokeThickness="1"/>
                                             <Button Grid.Row="0" Grid.Column="2" Command="{Binding $parent[UserControl].((vm:CalibrationSetupViewModel)DataContext).RemoveStageCommand}" CommandParameter="{Binding}" Padding="4" Background="Transparent" BorderThickness="0" Width="28" Height="28" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-4,-4,0">
                                                 <Path Width="18" Height="18" Fill="#ff4444" Data="M9 3h6l1 1h4v2H4V4h4l1-1zm-3 5h14l-1 14H7L6 8zm3 3v9h2v-9H9zm4 0v9h2v-9h-2z" Stretch="Uniform"/>
                                             </Button>
-                                            <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Text="{Binding ConnectionStatus}" FontSize="12" Foreground="#ffffff"/>
-                                            <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Orientation="Vertical" Spacing="8" Margin="0,8,0,0">
+                                            <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Orientation="Vertical" Spacing="8" Margin="0,8,0,0">
                                                 <ComboBox SelectedIndex="{Binding HardwareType, Converter={StaticResource StageHardwareToIndexConverter}}" PlaceholderText="Select Hardware..." FontSize="12" Foreground="#ffffff" HorizontalAlignment="Stretch">
                                                     <ComboBoxItem Content="None"/>
-                                                    <ComboBoxItem Content="PI"/>
-                                                    <ComboBoxItem Content="Sigma Koki"/>
-                                                    <ComboBoxItem Content="Sigma Koki rotation (HSC-103)"/>
+                                                    <ComboBoxItem Content="PI 6-dof"/>
+                                                    <ComboBoxItem Content="Optosigma OSMS26-100(X)"/>
+                                                    <ComboBoxItem Content="Optosigma OSMS-120YAW"/>
                                                 </ComboBox>
                                                 <StackPanel Spacing="8" IsVisible="{Binding HardwareType, Converter={StaticResource SigmakokiRotationVisibleConverter}}">
                                                     <TextBox Text="{Binding SerialPortName}" Watermark="COM port (e.g. COM3)" FontSize="12"/>
@@ -569,7 +369,7 @@
                                                         <NumericUpDown Grid.Column="1" Value="{Binding DegreesPerPulse}" Minimum="0.000001" Maximum="1" Increment="0.00001" FormatString="G9" FontSize="12"/>
                                                     </Grid>
                                                 </StackPanel>
-                                                <ComboBox SelectedIndex="{Binding SigmakokiController, Converter={StaticResource SigmakokiControllerToIndexConverter}}" PlaceholderText="Select Sigma Koki Model..." FontSize="12" Foreground="#ffffff" HorizontalAlignment="Stretch" IsVisible="{Binding HardwareType, Converter={StaticResource SigmakokiVisibleConverter}}">
+                                                <ComboBox IsVisible="False" SelectedIndex="{Binding SigmakokiController, Converter={StaticResource SigmakokiControllerToIndexConverter}}" PlaceholderText="Select Sigma Koki Model..." FontSize="12" Foreground="#ffffff" HorizontalAlignment="Stretch">
                                                     <ComboBoxItem Content="GIP-101B (1 axis)"/>
                                                     <ComboBoxItem Content="GSC-01 (1 axis)"/>
                                                     <ComboBoxItem Content="SHOT-302GS (2 axes)"/>
@@ -581,7 +381,6 @@
                                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                                     <Button Content="Connect" Command="{Binding $parent[UserControl].((vm:CalibrationSetupViewModel)DataContext).ConnectStageCommand}" CommandParameter="{Binding}" Padding="12,6" FontSize="12" Foreground="#ffffff" IsEnabled="{Binding IsConnected, Converter={StaticResource InverseBoolConverter}}"/>
                                                     <Button Content="Disconnect" Command="{Binding $parent[UserControl].((vm:CalibrationSetupViewModel)DataContext).DisconnectStageCommand}" CommandParameter="{Binding}" Padding="12,6" FontSize="12" Foreground="#ffffff" IsEnabled="{Binding IsConnected}"/>
-                                                    <Button Content="Reference" Command="{Binding $parent[UserControl].((vm:CalibrationSetupViewModel)DataContext).ReferenceAxesCommand}" CommandParameter="{Binding}" Padding="12,6" FontSize="12" Foreground="#ffffff" IsEnabled="{Binding IsConnected}"/>
                                                 </StackPanel>
                                             </StackPanel>
                                         </Grid>
@@ -592,98 +391,23 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Current Position -->
-                <Border Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="16">
-                    <StackPanel Spacing="12">
-                        <Grid ColumnDefinitions="Auto,*">
-                            <Border Grid.Column="0" Width="20" Height="20" CornerRadius="2">
-                                <Path Data="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" Fill="#4fc3f7" Stretch="Uniform"/>
-                            </Border>
-                            <TextBlock Grid.Column="1" Text="Current Position" FontSize="16" FontWeight="SemiBold" Foreground="#ffffff" VerticalAlignment="Center" Margin="12,0,0,0"/>
-                        </Grid>
-                        <Border Background="#1a1a1a" BorderBrush="#303030" BorderThickness="1" CornerRadius="6" Padding="12">
-                            <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" ColumnDefinitions="Auto,*">
-                                <TextBlock Grid.Row="0" Grid.Column="0" Text="X:" FontSize="13" Foreground="#ffffff" Margin="0,4,16,4"/>
-                                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding CurrentPositionX, StringFormat={}{0:F3} µm}" FontSize="13" Foreground="#ffffff" Margin="0,4,0,4"/>
-                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Y:" FontSize="13" Foreground="#ffffff" Margin="0,4,16,4"/>
-                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding CurrentPositionY, StringFormat={}{0:F3} µm}" FontSize="13" Foreground="#ffffff" Margin="0,4,0,4"/>
-                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Z:" FontSize="13" Foreground="#ffffff" Margin="0,4,16,4"/>
-                                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding CurrentPositionZ, StringFormat={}{0:F3} µm}" FontSize="13" Foreground="#ffffff" Margin="0,4,0,4"/>
-                                <TextBlock Grid.Row="3" Grid.Column="0" Text="Rx:" FontSize="13" Foreground="#ffffff" Margin="0,4,16,4"/>
-                                <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding CurrentPositionRx, StringFormat={}{0:F3} deg}" FontSize="13" Foreground="#ffffff" Margin="0,4,0,4"/>
-                                <TextBlock Grid.Row="4" Grid.Column="0" Text="Ry:" FontSize="13" Foreground="#ffffff" Margin="0,4,16,4"/>
-                                <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding CurrentPositionRy, StringFormat={}{0:F3} deg}" FontSize="13" Foreground="#ffffff" Margin="0,4,0,4"/>
-                                <TextBlock Grid.Row="5" Grid.Column="0" Text="Rz:" FontSize="13" Foreground="#ffffff" Margin="0,4,16,4"/>
-                                <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding CurrentPositionRz, StringFormat={}{0:F3} deg}" FontSize="13" Foreground="#ffffff" Margin="0,4,0,4"/>
-                            </Grid>
-                        </Border>
-                        <Border Background="#1a1a1a"
-                                BorderBrush="#303030"
-                                BorderThickness="1"
-                                CornerRadius="6"
-                                Padding="10">
-                            <StackPanel Spacing="6">
-                                <StackPanel Orientation="Horizontal"
-                                            VerticalAlignment="Center"
-                                            Spacing="12"
-                                            FlowDirection="LeftToRight">
-                                    <TextBlock Text="Set zero"
-                                               VerticalAlignment="Center"
-                                               Foreground="#bbbbbb"
-                                               FontSize="12"/>
-                                    <ToggleSwitch IsChecked="{Binding DisplayStagePositionAsRaw, Mode=TwoWay}"
-                                                  OnContent=""
-                                                  OffContent=""
-                                                  VerticalAlignment="Center"/>
-                                    <TextBlock Text="Display raw"
-                                               VerticalAlignment="Center"
-                                               Foreground="#bbbbbb"
-                                               FontSize="12"/>
-                                </StackPanel>
-                                <TextBlock Text="Showing relative stage pose at the frame when the switch is turned off."
-                                           FontSize="11"
-                                           Foreground="#9e9e9e"
-                                           TextWrapping="Wrap"/>
-                            </StackPanel>
-                        </Border>
-                    </StackPanel>
-                </Border>
-
-                <!-- Calibration Summary -->
-                <Border Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="16">
-                    <StackPanel Spacing="12">
-                        <Grid ColumnDefinitions="Auto,*">
-                            <Border Grid.Column="0" Width="20" Height="20" CornerRadius="2">
-                                <Path Data="M3 3h18v18H3V3zm2 2v14h14V5H5zm2 2h10v2H7V7zm0 4h10v2H7v-2zm0 4h7v2H7v-2z" Fill="#81c784" Stretch="Uniform"/>
-                            </Border>
-                            <TextBlock Grid.Column="1" Text="Calibration Summary" FontSize="16" FontWeight="SemiBold" Foreground="#ffffff" VerticalAlignment="Center" Margin="12,0,0,0"/>
-                        </Grid>
-                        <Border Background="#303030" BorderBrush="#505050" BorderThickness="1" CornerRadius="6" Padding="12">
-                            <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,*">
-                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Total Points:" FontSize="13" Foreground="#ffffff" Margin="0,0,12,6"/>
-                                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding TotalPlannedPoints, StringFormat={}{0:N0}}" FontSize="13" FontWeight="SemiBold" Foreground="#ffffff" Margin="0,0,0,6"/>
-                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Est. Time:" FontSize="13" Foreground="#ffffff" Margin="0,0,12,0"/>
-                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding EstimatedTime, StringFormat={}{0:F0} s}" FontSize="13" FontWeight="SemiBold" Foreground="#ffffff"/>
-                            </Grid>
-                        </Border>
-                        <TextBlock Text="Position = Current + (Step Size × Points)" FontSize="12" Foreground="#ffffff" TextAlignment="Center"/>
-                    </StackPanel>
-                </Border>
-
                 <!-- Movement Status -->
                 <Border Background="#1a1a1a" BorderBrush="#303030" BorderThickness="1" CornerRadius="4" Padding="12,8">
                     <TextBlock Text="{Binding MovementStatus}" FontSize="12" Foreground="#ffffff" TextWrapping="Wrap"/>
                 </Border>
 
                 <!-- Action Buttons -->
-                <StackPanel Spacing="8">
-                    <Button Content="{Binding StartSequenceButtonText}" Command="{Binding StartSequenceCommand}" Padding="18,14" FontSize="14" Foreground="#ffffff" Background="#2e7d32" HorizontalAlignment="Stretch" IsEnabled="{Binding IsSequenceRunning, Converter={StaticResource InverseBoolConverter}}"/>
-                    <Button Content="Move All Axes (Local)" Command="{Binding MoveAllAxesLocalCommand}" Foreground="#ffffff" Padding="18,14" FontSize="14" HorizontalAlignment="Stretch" IsEnabled="{Binding IsSequenceRunning, Converter={StaticResource InverseBoolConverter}}"/>
-                    <Button Content="Abort Sequence" Command="{Binding AbortSequenceCommand}" Foreground="#ffffff" Background="#c62828" Padding="18,14" FontSize="14" HorizontalAlignment="Stretch" IsEnabled="{Binding IsSequenceRunning}"/>
-                </StackPanel>
+                <Border Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="20">
+                    <StackPanel Spacing="8">
+                        <Button Content="{Binding StartSequenceButtonText}" Command="{Binding StartSequenceCommand}" Padding="18,14" FontSize="14" FontWeight="SemiBold" Foreground="#ffffff" Background="#2e7d32" BorderBrush="#1b5e20" HorizontalAlignment="Stretch" IsEnabled="{Binding IsSequenceRunning, Converter={StaticResource InverseBoolConverter}}"/>
+                        <Button Content="{Binding AbortSequenceButtonText}" Command="{Binding AbortSequenceCommand}" Foreground="#ffffff" Padding="18,14" FontSize="14" FontWeight="SemiBold" HorizontalAlignment="Stretch"
+                                IsEnabled="{Binding IsSequenceRunning}"
+                                Background="{Binding AbortSequenceButtonBackground}"/>
+                    </StackPanel>
+                </Border>
 
-                <!-- Rotation calibration (batch) -->
-                <Border IsVisible="{Binding RotationCalibVm.ShowRotationCalibPanel}"
+                <!-- Rotation calibration (batch) — hidden per UI spec; bindings/commands kept for future use -->
+                <Border IsVisible="False"
                         Background="#252525"
                         BorderBrush="#404040"
                         BorderThickness="1"

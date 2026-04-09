@@ -1,5 +1,4 @@
 using singalUI.libs;
-
 using singalUI.Models;
 
 namespace singalUI.Services;
@@ -72,12 +71,6 @@ public static class StageControllerFactory
     /// </summary>
     public static string GetDisplayName(StageHardwareType hardwareType)
     {
-        return hardwareType switch
-        {
-            StageHardwareType.PI => "PI (Physik Instrumente)",
-            StageHardwareType.Sigmakoki => "Sigma Koki",
-            StageHardwareType.SigmakokiRotationStage => "Sigma Koki rotation (HSC-103)",
-            _ => "None"
-        };
+        return StageHardwareUi.ProductName(hardwareType);
     }
 }

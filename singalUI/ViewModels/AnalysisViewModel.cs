@@ -5,7 +5,11 @@ using singalUI.Models;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
+using System.Text;
+using System.Text.Json;
+using System.Threading.Tasks;
 
 namespace singalUI.ViewModels
 {
@@ -302,22 +306,65 @@ namespace singalUI.ViewModels
             return Math.Sqrt(sumOfSquares / data.Count);
         }
 
-        [RelayCommand]
-        private void ExportCsv()
+        /// <summary>Invoked from the main window SAVE menu (merged former Analysis export).</summary>
+        public async Task SaveFromGlobalMenuAsync(string localPath)
         {
-            // TODO: Implement CSV export
+            var ext = Path.GetExtension(localPath).ToLowerInvariant();
+            try
+            {
+                switch (ext)
+                {
+                    case ".csv":
+                        await SaveAnalysisCsvAsync(localPath);
+                        LogError($"Saved CSV: {localPath}");
+                        break;
+                    case ".json":
+                        await SaveAnalysisJsonAsync(localPath);
+                        LogError($"Saved JSON: {localPath}");
+                        break;
+                    case ".png":
+                        LogError("PNG plot export is not implemented yet; use CSV or JSON from SAVE.");
+                        break;
+                    case ".mat":
+                        LogError("MAT export is not implemented yet; use CSV or JSON from SAVE.");
+                        break;
+                    default:
+                        await SaveAnalysisCsvAsync(localPath);
+                        LogError($"Saved CSV (default extension): {localPath}");
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                LogError($"Save failed: {ex.Message}");
+            }
         }
 
-        [RelayCommand]
-        private void ExportJson()
+        private async Task SaveAnalysisCsvAsync(string path)
         {
-            // TODO: Implement JSON export
+            var sb = new StringBuilder();
+            sb.AppendLine("Label,Value");
+            foreach (var card in ChartCards)
+            {
+                var l = card.StatLabel.Replace("\"", "\"\"", StringComparison.Ordinal);
+                var v = card.StatValue.Replace("\"", "\"\"", StringComparison.Ordinal);
+                sb.AppendLine($"\"{l}\",\"{v}\"");
+            }
+
+            var overall = Overall_Rms.Replace("\"", "\"\"", StringComparison.Ordinal);
+            sb.AppendLine($"\"Overall RMS\",\"{overall}\"");
+            await File.WriteAllTextAsync(path, sb.ToString(), System.Text.Encoding.UTF8);
         }
 
-        [RelayCommand]
-        private void ExportPng()
+        private async Task SaveAnalysisJsonAsync(string path)
         {
-            // TODO: Implement PNG export
+            var payload = new
+            {
+                OverallRms = Overall_Rms,
+                Cards = ChartCards.Select(c => new { c.StatLabel, c.StatValue }).ToList(),
+            };
+            var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true });
+            await File.WriteAllTextAsync(path, json, System.Text.Encoding.UTF8);
         }
 
         [RelayCommand]
@@ -340,19 +387,9 @@ namespace singalUI.ViewModels
         }
 
         [RelayCommand]
-        private void BrowsePreviewFolder()
+        private void RunStageCalibration()
         {
-            // TODO: Open folder dialog to select data folder
-        }
-
-        [RelayCommand]
-        private void LoadPreviewData()
-        {
-            // TODO: Load preview data from selected folder
-            HasPreviewData = true;
-            PreviewImageCount = 42;
-            PreviewDataPoints = 100;
-            PreviewDate = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
+            LogError("Run stage calibration requested (stub — connect 6-DoF batch pipeline here).");
         }
 
         private void LogError(string message)

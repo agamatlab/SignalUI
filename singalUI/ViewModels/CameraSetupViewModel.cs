@@ -95,9 +95,9 @@ namespace singalUI.ViewModels
         [ObservableProperty]
         private ObservableCollection<string> _savedConfigs = new();
 
-        // Pattern Analysis
+        // Pattern Analysis (Camera tab: 0 = 40×40 mm WS10, 1 = 100×100 mm WS12 → drives SharedConfig + Archive)
         [ObservableProperty]
-        private int _selectedPatternType = 0; // 0 = CheckerBoard
+        private int _selectedPatternType;
 
         [ObservableProperty]
         private int _checkerBoardColumns = 9;
@@ -189,7 +189,13 @@ namespace singalUI.ViewModels
         private string _cameraStatus = "Disconnected";
 
         [ObservableProperty]
-        private double _focusLevel = 72;
+        private double _focusLevel;
+
+        private bool _suppressCameraPatternPresetApply = true;
+
+        /// <summary>Horizontal width of the focus meter track; set from view (2× measured &quot;Focus Level&quot; label width).</summary>
+        [ObservableProperty]
+        private double _focusMeterTrackWidth = 200;
 
         // Stage Movement Controls
         [ObservableProperty]
@@ -239,8 +245,18 @@ namespace singalUI.ViewModels
         [ObservableProperty]
         private string _cameraFrameInfo = "No camera";
 
+        /// <summary>Resolution overlay on live preview (e.g. "1920 × 1080"). Empty when disconnected or no frame yet.</summary>
+        [ObservableProperty]
+        private string _cameraResolutionText = "";
+
         [ObservableProperty]
         private long _frameCount = 0;
+
+        public bool ShowCameraResolutionOverlay => CameraConnected && !string.IsNullOrWhiteSpace(CameraResolutionText);
+
+        partial void OnCameraResolutionTextChanged(string value) => OnPropertyChanged(nameof(ShowCameraResolutionOverlay));
+
+        partial void OnCameraConnectedChanged(bool value) => OnPropertyChanged(nameof(ShowCameraResolutionOverlay));
 
         [ObservableProperty]
         private bool _isAcquiring = false;
@@ -297,8 +313,47 @@ namespace singalUI.ViewModels
             Log("Collections initialized");
             Log($"Initial LivePosition: X={LivePosition.X}, Y={LivePosition.Y}, Z={LivePosition.Z}");
             _nanoMeasPreviewTask = Task.Run(() => NanoMeasLivePreviewLoop(_nanoMeasPreviewCts.Token));
+
+            var cfg = App.SharedConfigViewModel;
+            SelectedPatternType = Math.Clamp(cfg.CameraPatternPresetIndex, 0, 1);
+            _suppressCameraPatternPresetApply = false;
+
             Console.WriteLine("[CameraSetupViewModel] Constructor END");
             LogToError("CameraSetupViewModel initialized - Error log ready");
+        }
+
+        partial void OnSelectedPatternTypeChanged(int value)
+        {
+            if (_suppressCameraPatternPresetApply)
+                return;
+            ApplyCheckerboardDllPreset(Math.Clamp(value, 0, 1));
+        }
+
+        private static void ApplyCheckerboardDllPreset(int presetIndex)
+        {
+            var cfg = App.SharedConfigViewModel;
+            cfg.CameraPatternPresetIndex = presetIndex;
+            cfg.SelectedPatternType = 0;
+            if (presetIndex == 0)
+            {
+                cfg.WindowSize = 10.0;
+                cfg.PitchX = 0.1;
+                cfg.PitchY = 0.1;
+                cfg.ComponentsX = 11.0;
+                cfg.ComponentsY = 11.0;
+                cfg.CodePitchBlocks = 6.0;
+            }
+            else
+            {
+                cfg.WindowSize = 12.0;
+                cfg.PitchX = 0.25;
+                cfg.PitchY = 0.25;
+                cfg.ComponentsX = 11.0;
+                cfg.ComponentsY = 11.0;
+                cfg.CodePitchBlocks = 6.0;
+            }
+
+            _ = DllDefaultParametersArchive.TrySave(cfg);
         }
 
         /// <summary>
@@ -540,6 +595,8 @@ namespace singalUI.ViewModels
                 // Update initial connection state
                 CameraConnected = cameraService.IsConnected;
                 CameraStatus = cameraService.IsConnected ? "Connected" : "Disconnected";
+                if (!cameraService.IsConnected)
+                    FocusLevel = 0;
 
                 Log($"[CameraService] Wired up. Connected: {cameraService.IsConnected}, Serial: {cameraService.CameraSerial}");
             }
@@ -625,7 +682,8 @@ namespace singalUI.ViewModels
                 // Update UI (we're already on UI thread)
                 CameraFrame = _reusableBitmap;
                 OnPropertyChanged(nameof(CameraFrame));
-                CameraFrameInfo = $"{width}x{height} | Frame: {seq} (latest: {_latestFrameSeq})";
+                CameraFrameInfo = $"{width}x{height}";
+                CameraResolutionText = $"{width} × {height}";
                 FrameCount = seq;
                 _lastRenderedSeq = seq;
 
@@ -725,9 +783,7 @@ namespace singalUI.ViewModels
             double exposure = CameraParameters.Exposure;
             double gain = CameraParameters.Gain;
             double fps = CameraParameters.Fps;
-            double illumination = Math.Clamp(CameraParameters.Illumination, 0.0, 100.0);
-            // Illumination always affects effective exposure in this app path.
-            double effectiveExposure = exposure * Math.Max(illumination / 100.0, 0.01);
+            double effectiveExposure = exposure;
 
             bool exposureChanged = !_lastAppliedEffectiveExposure.HasValue || Math.Abs(effectiveExposure - _lastAppliedEffectiveExposure.Value) > 0.001;
             bool gainChanged = !_lastAppliedGain.HasValue || Math.Abs(gain - _lastAppliedGain.Value) > 0.001;
@@ -754,7 +810,7 @@ namespace singalUI.ViewModels
 
             if (exposureChanged || gainChanged || fpsChanged)
             {
-                Log($"[LiveApply] Exposure={exposure:F1}us EffectiveExposure={effectiveExposure:F1}us Illum={illumination:F1}% AutoIllum={AutoIllumination} Gain={gain:F2}dB FPS={fps:F2}");
+                Log($"[LiveApply] Exposure={exposure:F1}us EffectiveExposure={effectiveExposure:F1}us Gain={gain:F2}dB FPS={fps:F2}");
 
                 if (cameraService.TryReadAppliedParameters(out var appliedExposure, out var appliedGain, out var appliedFps))
                 {
@@ -785,7 +841,9 @@ namespace singalUI.ViewModels
                 {
                     CameraFrame = null;
                     CameraFrameInfo = "Disconnected";
+                    CameraResolutionText = "";
                     _lastRenderedSeq = -1;
+                    FocusLevel = 0;
                 }
             });
         }
@@ -926,8 +984,10 @@ namespace singalUI.ViewModels
                 // Update reprojection error
                 ReprojectionError = 0.020 + _random.NextDouble() * 0.01;
 
-                // Update focus level (simulate fluctuation)
-                FocusLevel = 65 + _random.NextDouble() * 25;
+                if (CameraConnected)
+                    FocusLevel = 65 + _random.NextDouble() * 25;
+                else
+                    FocusLevel = 0;
             });
         }
 

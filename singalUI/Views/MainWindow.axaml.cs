@@ -77,12 +77,7 @@ public partial class MainWindow : Window
 
     private void NavigateToAnalysis(object sender, Avalonia.Input.PointerPressedEventArgs e)
     {
-        SetActiveView(3, "analysis");
-    }
-
-    private void NavigateToConfig(object sender, Avalonia.Input.PointerPressedEventArgs e)
-    {
-        SetActiveView(2, "config");
+        SetActiveView(2, "analysis");
     }
     
     private void SetActiveView(int index, string viewName)
@@ -108,8 +103,6 @@ public partial class MainWindow : Window
         var cameraTab = this.FindControl<Border>("CameraTab");
         var setupTab = this.FindControl<Border>("SetupTab");
         var analysisTab = this.FindControl<Border>("AnalysisTab");
-        var configTab = this.FindControl<Border>("ConfigTab");
-
         // Reset all tabs to default state
         if (cameraTab != null)
         {
@@ -126,12 +119,6 @@ public partial class MainWindow : Window
             analysisTab.Background = Brushes.Transparent;
             analysisTab.CornerRadius = new Avalonia.CornerRadius(0);
         }
-        if (configTab != null)
-        {
-            configTab.Background = Brushes.Transparent;
-            configTab.CornerRadius = new Avalonia.CornerRadius(0);
-        }
-
         // Set active tab with rounded bottom corners (Microsoft Word style)
         Border? activeTab = null;
         switch (activeIndex)
@@ -143,9 +130,6 @@ public partial class MainWindow : Window
                 activeTab = setupTab;
                 break;
             case 2:
-                activeTab = configTab;
-                break;
-            case 3:
                 activeTab = analysisTab;
                 break;
         }

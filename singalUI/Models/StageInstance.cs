@@ -70,18 +70,8 @@ public partial class StageInstance : ObservableObject
     /// </summary>
     private AxisType[] GetSigmakokiAxes()
     {
-        // Map Sigma Koki controller types to axes
-        return SigmakokiController switch
-        {
-            SigmakokiControllerType.GIP_101B => new[] { AxisType.X }, // 1 axis
-            SigmakokiControllerType.GSC01 => new[] { AxisType.X },  // 1 axis
-            SigmakokiControllerType.SHOT_302GS => new[] { AxisType.X, AxisType.Y }, // 2 axes
-            SigmakokiControllerType.HSC_103 => new[] { AxisType.X, AxisType.Y, AxisType.Z }, // 3 axes
-            SigmakokiControllerType.SHOT_304GS => new[] { AxisType.X, AxisType.Y, AxisType.Z, AxisType.Rx }, // 4 axes
-            SigmakokiControllerType.Hit_MV => new[] { AxisType.X, AxisType.Y, AxisType.Z, AxisType.Rx }, // 4 axes
-            SigmakokiControllerType.PGC_04 => new[] { AxisType.X, AxisType.Y, AxisType.Z, AxisType.Rx }, // 4 axes
-            _ => System.Array.Empty<AxisType>()
-        };
+        // Optosigma OSMS26-100(X): single linear axis mapped to X in the UI.
+        return new[] { AxisType.X };
     }
 
     /// <summary>
@@ -97,16 +87,7 @@ public partial class StageInstance : ObservableObject
     /// <summary>
     /// Get hardware type name
     /// </summary>
-    private string GetHardwareTypeName()
-    {
-        return HardwareType switch
-        {
-            StageHardwareType.PI => "PI",
-            StageHardwareType.Sigmakoki => $"Sigma Koki ({SigmakokiController.GetDisplayName()})",
-            StageHardwareType.SigmakokiRotationStage => "Sigma Koki rotation (HSC-103)",
-            _ => "None"
-        };
-    }
+    private string GetHardwareTypeName() => StageHardwareUi.ProductName(HardwareType);
 
     /// <summary>
     /// Get enabled axes as a string

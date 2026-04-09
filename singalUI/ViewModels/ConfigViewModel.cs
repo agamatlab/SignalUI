@@ -60,6 +60,10 @@ namespace singalUI.ViewModels
         [ObservableProperty]
         private int _selectedPatternType = 0; // 0 = CheckerBoard, 1 = HMF Coded Target
 
+        /// <summary>Camera tab checkerboard preset: 0 = 40×40 mm WS10, 1 = 100×100 mm WS12 (persisted in Archive txt).</summary>
+        [ObservableProperty]
+        private int _cameraPatternPresetIndex;
+
         [ObservableProperty]
         private double _pitchX = 0.1;
 
@@ -228,8 +232,30 @@ namespace singalUI.ViewModels
             App.CalibrationAppModeChanged += OnGlobalCalibrationModeChanged;
             SyncCalibrationModeFromApp();
             LogToError("[ConfigViewModel] Constructor started");
+            DllDefaultParametersArchive.LoadOrInitialize(this);
             InitializeEstimator();
             LogToError("[ConfigViewModel] Constructor completed");
+        }
+
+        /// <summary>Applies the same numeric defaults as <see cref="ResetDefaults"/> (used by Archive seeding).</summary>
+        public void ApplyDefaultDllParameters()
+        {
+            CameraPatternPresetIndex = 0;
+            SelectedPatternType = 0;
+            PitchX = 0.1;
+            PitchY = 0.1;
+            ComponentsX = 11.0;
+            ComponentsY = 11.0;
+            FocalLength = DefaultFocalLengthMm;
+            PixelSize = DefaultPixelSizeMm;
+            Fx = 6363.64;
+            Fy = 6363.64;
+            Cx = 0.0;
+            Cy = 0.0;
+            WindowSize = 10.0;
+            CodePitchBlocks = 6.0;
+            ImageWidth = DefaultImageWidth;
+            ImageHeight = DefaultImageHeight;
         }
 
         private void OnGlobalCalibrationModeChanged(object? sender, EventArgs e) =>
@@ -1143,32 +1169,10 @@ namespace singalUI.ViewModels
         private void ResetDefaults()
         {
             LogToError("[ResetDefaults] Resetting to default values");
-
-            // Pattern Analysis defaults
-            SelectedPatternType = 0;
-            PitchX = 0.1;
-            PitchY = 0.1;
-            ComponentsX = 11.0;
-            ComponentsY = 11.0;
-
-            // Camera Intrinsics defaults
-            FocalLength = DefaultFocalLengthMm;
-            PixelSize = DefaultPixelSizeMm;
-            Fx = 6363.64;
-            Fy = 6363.64;
-            Cx = 0.0;
-            Cy = 0.0;
-
-            // Algorithm defaults
-            WindowSize = 10.0;
-            CodePitchBlocks = 6.0;
-
-            // Test image defaults
-            ImageWidth = DefaultImageWidth;
-            ImageHeight = DefaultImageHeight;
-
+            ApplyDefaultDllParameters();
             ResultStatusMessage = "Reset to defaults";
             LogToError($"[ResetDefaults] Values reset: Fx={Fx:F3}, Fy={Fy:F3}, Cx={Cx:F1}, Cy={Cy:F1}");
+            _ = DllDefaultParametersArchive.TrySave(this);
         }
 
         [RelayCommand]

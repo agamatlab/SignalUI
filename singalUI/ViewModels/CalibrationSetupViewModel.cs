@@ -86,6 +86,9 @@ namespace singalUI.ViewModels
         private ObservableCollection<MotionConfiguration> _motionRows = new();
 
         [ObservableProperty]
+        private ObservableCollection<ConnectedStageMotionGroup> _stageMotionGroups = new();
+
+        [ObservableProperty]
         private int _totalPlannedPoints = 1;
 
         [ObservableProperty]
@@ -93,6 +96,31 @@ namespace singalUI.ViewModels
 
         [ObservableProperty]
         private bool _isSequenceRunning = false;
+
+        private bool _sequenceAbortUiStopped;
+        private bool _sequenceEndedByUserAbort;
+
+        [ObservableProperty]
+        private string _abortSequenceButtonText = "Abort Sequence";
+
+        [ObservableProperty]
+        private string _abortSequenceButtonBackground = "#555555";
+
+        partial void OnIsSequenceRunningChanged(bool value) => UpdateAbortSequenceButtonChrome();
+
+        private void UpdateAbortSequenceButtonChrome()
+        {
+            if (_sequenceAbortUiStopped)
+            {
+                AbortSequenceButtonText = "Stopped";
+                AbortSequenceButtonBackground = "#555555";
+            }
+            else
+            {
+                AbortSequenceButtonText = "Abort Sequence";
+                AbortSequenceButtonBackground = IsSequenceRunning ? "#c62828" : "#555555";
+            }
+        }
 
         // Stage Movement Controls
         [ObservableProperty]
@@ -167,40 +195,6 @@ namespace singalUI.ViewModels
         [ObservableProperty]
         private bool _movementModeAbsolute = true; // true = Absolute, false = Relative
 
-        // Current Position from stage controllers
-        [ObservableProperty]
-        private double _currentPositionX = 0.0;
-
-        [ObservableProperty]
-        private double _currentPositionY = 0.0;
-
-        [ObservableProperty]
-        private double _currentPositionZ = 0.0;
-
-        [ObservableProperty]
-        private double _currentPositionRx = 0.0;
-
-        [ObservableProperty]
-        private double _currentPositionRy = 0.0;
-
-        [ObservableProperty]
-        private double _currentPositionRz = 0.0;
-
-        [ObservableProperty]
-        private bool _displayStagePositionAsRaw = true;
-
-        private double _rawStageX, _rawStageY, _rawStageZ, _rawStageRx, _rawStageRy, _rawStageRz;
-        private double _zeroStageX, _zeroStageY, _zeroStageZ, _zeroStageRx, _zeroStageRy, _zeroStageRz;
-
-        partial void OnDisplayStagePositionAsRawChanged(bool value)
-        {
-            if (!value)
-            {
-                CaptureStageZeroBaseline();
-            }
-            ApplyDisplayedStagePosition();
-        }
-
         public ConfigViewModel RotationCalibVm => App.SharedConfigViewModel;
 
         // Position polling timer
@@ -222,6 +216,7 @@ namespace singalUI.ViewModels
             CalculateTotals();
             StartConnectionPolling();
             StartPositionPolling();
+            UpdateAbortSequenceButtonChrome();
             Log("CalibrationSetupViewModel initialized");
         }
 
@@ -240,11 +235,8 @@ namespace singalUI.ViewModels
             OnPropertyChanged(nameof(StartSequenceButtonText));
         }
 
-        /// <summary>Setup primary action label (rotation mode saves raw PNGs + optional background decode).</summary>
-        public string StartSequenceButtonText =>
-            IsRotationCalibrationMode
-                ? "Start rotation capture (.\\storage, Rz→0° then ≥12 steps)"
-                : "Start Sequence";
+        /// <summary>Setup primary action label.</summary>
+        public string StartSequenceButtonText => "Start Sequence";
 
         private void OnMotionRowsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
         {
@@ -309,66 +301,21 @@ namespace singalUI.ViewModels
         {
             try
             {
-                // Reset positions (stored in µm for linear axes, degrees for rotation)
-                double x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0;
-
-                foreach (var wrapper in StageWrappers)
-                {
-                    if (!wrapper.IsConnected || wrapper.Controller == null)
-                        continue;
-
-                    var axes = wrapper.EnabledAxes;
-                    foreach (var axis in axes)
-                    {
-                        // GetPosition returns mm from PI controller
-                        double posMm = wrapper.GetAxisPosition(axis);
-                        // Convert mm to µm (1 mm = 1000 µm) for linear axes
-                        // Rotation axes stay in degrees
-                        double posDisplay = axis switch
-                        {
-                            AxisType.X or AxisType.Y or AxisType.Z => posMm * 1000.0, // mm to µm
-                            _ => posMm // degrees stay as degrees
-                        };
-
-                        switch (axis)
-                        {
-                            case AxisType.X: x = posDisplay; break;
-                            case AxisType.Y: y = posDisplay; break;
-                            case AxisType.Z: z = posDisplay; break;
-                            case AxisType.Rx: rx = posDisplay; break;
-                            case AxisType.Ry: ry = posDisplay; break;
-                            case AxisType.Rz: rz = posDisplay; break;
-                        }
-                    }
-                }
-
-                // Update UI on main thread (Avalonia requires this)
                 Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                 {
-                    _rawStageX = x;
-                    _rawStageY = y;
-                    _rawStageZ = z;
-                    _rawStageRx = rx;
-                    _rawStageRy = ry;
-                    _rawStageRz = rz;
-                    ApplyDisplayedStagePosition();
-
-                    // Also update positions in MotionRows for calculated end position
                     foreach (var row in MotionRows)
                     {
-                        row.CurrentPosition = row.Axis switch
-                        {
-                            AxisType.X => x,
-                            AxisType.Y => y,
-                            AxisType.Z => z,
-                            AxisType.Rx => rx,
-                            AxisType.Ry => ry,
-                            AxisType.Rz => rz,
-                            _ => 0
-                        };
+                        var w = StageWrappers.FirstOrDefault(sw => sw.Id == row.OwningStageId);
+                        if (w == null || !w.IsConnected || w.Controller == null)
+                            continue;
+                        row.CurrentPosition = GetCurrentDisplayPosition(w, row.Axis);
                     }
 
-                    // Update calculated end position for relative mode display
+                    foreach (var group in StageMotionGroups)
+                    {
+                        group.UpdateRawFromWrapper();
+                    }
+
                     OnPropertyChanged(nameof(CalculatedEndPosition));
                 });
             }
@@ -435,38 +382,6 @@ namespace singalUI.ViewModels
             }
         }
 
-        private void CaptureStageZeroBaseline()
-        {
-            _zeroStageX = _rawStageX;
-            _zeroStageY = _rawStageY;
-            _zeroStageZ = _rawStageZ;
-            _zeroStageRx = _rawStageRx;
-            _zeroStageRy = _rawStageRy;
-            _zeroStageRz = _rawStageRz;
-        }
-
-        private void ApplyDisplayedStagePosition()
-        {
-            if (DisplayStagePositionAsRaw)
-            {
-                CurrentPositionX = _rawStageX;
-                CurrentPositionY = _rawStageY;
-                CurrentPositionZ = _rawStageZ;
-                CurrentPositionRx = _rawStageRx;
-                CurrentPositionRy = _rawStageRy;
-                CurrentPositionRz = _rawStageRz;
-            }
-            else
-            {
-                CurrentPositionX = _rawStageX - _zeroStageX;
-                CurrentPositionY = _rawStageY - _zeroStageY;
-                CurrentPositionZ = _rawStageZ - _zeroStageZ;
-                CurrentPositionRx = _rawStageRx - _zeroStageRx;
-                CurrentPositionRy = _rawStageRy - _zeroStageRy;
-                CurrentPositionRz = _rawStageRz - _zeroStageRz;
-            }
-        }
-
         public void ClearErrorLog()
         {
             try
@@ -499,6 +414,7 @@ namespace singalUI.ViewModels
         {
             Log($"[UpdateAxis] Clearing motion rows, checking {StageWrappers.Count} wrappers...");
             MotionRows.Clear();
+            StageMotionGroups.Clear();
 
             foreach (var wrapper in StageWrappers)
             {
@@ -509,11 +425,12 @@ namespace singalUI.ViewModels
                     continue;
                 }
 
-                // Map controller axes to AxisType
                 var axes = wrapper.EnabledAxes;
                 var availableAxes = wrapper.AvailableAxes;
                 Log($"[UpdateAxis] Stage {wrapper.Id}: EnabledAxes={axes.Length}, AvailableAxes={availableAxes.Length}");
                 Log($"[UpdateAxis] Stage {wrapper.Id}: Available axes: [{string.Join(", ", availableAxes)}]");
+
+                var groupRows = new ObservableCollection<MotionConfiguration>();
 
                 for (int i = 0; i < axes.Length && i < availableAxes.Length; i++)
                 {
@@ -521,6 +438,7 @@ namespace singalUI.ViewModels
                     bool rot = IsRotationalAxis(axis);
                     var config = new MotionConfiguration
                     {
+                        OwningStageId = wrapper.Id,
                         Axis = axis,
                         Label = $"{axis} ({availableAxes[i]})",
                         Unit = GetAxisUnit(axis),
@@ -531,11 +449,19 @@ namespace singalUI.ViewModels
                         TargetPosition = 0
                     };
                     MotionRows.Add(config);
+                    groupRows.Add(config);
                     Log($"[UpdateAxis] Added axis: {config.Label}, Unit={config.Unit}, StepSize={config.StepSize}");
+                }
+
+                if (groupRows.Count > 0)
+                {
+                    var group = new ConnectedStageMotionGroup(wrapper, groupRows);
+                    group.RefreshAxisVisibility();
+                    StageMotionGroups.Add(group);
                 }
             }
 
-            Log($"[UpdateAxis] Total motion rows: {MotionRows.Count}");
+            Log($"[UpdateAxis] Total motion rows: {MotionRows.Count}, stage groups: {StageMotionGroups.Count}");
             CalculateTotals();
         }
 
@@ -565,11 +491,24 @@ namespace singalUI.ViewModels
         private void InitializeMotionRows()
         {
             MotionRows.Clear();
-            // Subscribe to wrapper property changes
             foreach (var wrapper in StageWrappers)
             {
                 wrapper.PropertyChanged += OnWrapperPropertyChanged;
             }
+
+            StageWrappers.CollectionChanged += (_, e) =>
+            {
+                if (e.NewItems != null)
+                {
+                    foreach (StageWrapper w in e.NewItems)
+                        w.PropertyChanged += OnWrapperPropertyChanged;
+                }
+                if (e.OldItems != null)
+                {
+                    foreach (StageWrapper w in e.OldItems)
+                        w.PropertyChanged -= OnWrapperPropertyChanged;
+                }
+            };
         }
 
         /// <summary>
@@ -677,6 +616,10 @@ namespace singalUI.ViewModels
         [RelayCommand]
         private async Task StartSequence()
         {
+            _sequenceEndedByUserAbort = false;
+            _sequenceAbortUiStopped = false;
+            UpdateAbortSequenceButtonChrome();
+
             var enabledAxes = MotionRows.Where(r => r.IsEnabled).ToList();
             if (enabledAxes.Count == 0)
             {
@@ -867,6 +810,9 @@ namespace singalUI.ViewModels
             finally
             {
                 IsSequenceRunning = false;
+                if (!_sequenceEndedByUserAbort)
+                    _sequenceAbortUiStopped = false;
+                UpdateAbortSequenceButtonChrome();
             }
         }
 
@@ -875,9 +821,12 @@ namespace singalUI.ViewModels
         {
             if (IsSequenceRunning)
             {
+                _sequenceEndedByUserAbort = true;
+                _sequenceAbortUiStopped = true;
                 Log("[AbortSequence] Aborting sequence...");
                 MovementStatus = "Aborting...";
                 IsSequenceRunning = false;
+                UpdateAbortSequenceButtonChrome();
             }
         }
 
