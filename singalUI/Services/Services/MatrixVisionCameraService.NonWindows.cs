@@ -19,6 +19,11 @@ public class MatrixVisionCameraService : IDisposable
     public string CameraSerial { get; set; } = "";
     public int ImageWidth { get; private set; }
     public int ImageHeight { get; private set; }
+    
+    // Diagnostic properties for compatibility
+    public string LastInitModuleBase { get; private set; } = "";
+    public bool LastInitCtiFound { get; private set; }
+    public int LastInitDeviceCount { get; private set; } = -1;
 
     public (byte[]? buffer, int width, int height, long seq) GetLatestFrameSnapshot()
     {
@@ -30,6 +35,12 @@ public class MatrixVisionCameraService : IDisposable
         IsConnected = false;
         StatusChanged?.Invoke(UnsupportedMessage);
         ConnectionChanged?.Invoke(false);
+        return false;
+    }
+    
+    public bool Reconnect()
+    {
+        StatusChanged?.Invoke(UnsupportedMessage);
         return false;
     }
 

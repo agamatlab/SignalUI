@@ -318,7 +318,6 @@
                                            Padding="8,4"
                                            HorizontalAlignment="Stretch"
                                            Foreground="#ffffff"/>
-                            </StackPanel>
                         </StackPanel>
                     </StackPanel>
                 </Border>

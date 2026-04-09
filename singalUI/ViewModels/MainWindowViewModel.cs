@@ -37,6 +37,9 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private string _applicationVersion = "NanoMeas Calibrator 0.7.0";
 
+    [ObservableProperty]
+    private string _statusBarText = "System Ready";
+
     private static TopLevel? ShellTopLevel() =>
         Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime d
             ? d.MainWindow

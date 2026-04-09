@@ -2,14 +2,19 @@
     <PropertyGroup>
         <AssemblyName>NanoMeas</AssemblyName>
         <OutputType>WinExe</OutputType>
-        <!-- net8.0-windows: ensures System.IO.Ports resolves the Windows COM implementation (avoids PlatformNotSupported on real Windows when portable net8.0 assets are wrong). -->
-        <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+        <!-- Multi-target: On Windows build both net8.0 and net8.0-windows, on macOS/Linux only net8.0 -->
+        <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('Windows'))">net8.0;net8.0-windows10.0.19041.0</TargetFrameworks>
+        <TargetFramework Condition="!$([MSBuild]::IsOSPlatform('Windows'))">net8.0</TargetFramework>
         <Nullable>enable</Nullable>
-        <ApplicationManifest>app.manifest</ApplicationManifest>
         <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <!-- Use 64-bit PI DLL -->
         <DefineConstants>X64</DefineConstants>
+    </PropertyGroup>
+
+    <!-- Windows-specific settings -->
+    <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-windows10.0.19041.0'">
+        <ApplicationManifest>app.manifest</ApplicationManifest>
     </PropertyGroup>
 
     <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('Windows')) == 'true'">
@@ -54,7 +59,8 @@
         <PackageReference Include="HotAvalonia" Version="3.0.2" />
         <!-- OpenCV for image processing -->
         <PackageReference Include="OpenCvSharp4" Version="4.9.0.20240103" />
-        <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.9.0.20240103" />
+        <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.9.0.20240103" Condition="'$(TargetFramework)' == 'net8.0-windows10.0.19041.0'" />
+        <PackageReference Include="OpenCvSharp4.runtime.osx.10.15-x64" Version="4.6.0.20230105" Condition="'$(TargetFramework)' == 'net8.0' AND $([MSBuild]::IsOSPlatform('OSX'))" />
         <!-- System.Drawing.Common required by mv.impact.acquire -->
         <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
         <!-- Serial port communication for stage controller -->

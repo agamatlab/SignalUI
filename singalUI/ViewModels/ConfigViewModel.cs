@@ -575,8 +575,9 @@ namespace singalUI.ViewModels
                 _lastNanoMeasRotationFrames = results;
                 _lastNanoMeasRotationSessionDir = sessionDir;
 
-                await Dispatcher.UIThread.InvokeAsync(() =>
-                    singalUI.App.SharedAnalysisViewModel.ApplyRotationCalibrationPoses3D(results));
+                // Rotation calibration visualization disabled (rotation stage feature removed)
+                // await Dispatcher.UIThread.InvokeAsync(() =>
+                //     singalUI.App.SharedAnalysisViewModel.ApplyRotationCalibrationPoses3D(results));
 
                 LogToError($"[RunRotationCalib#{runId}] Session={sessionDir}");
                 LogToError($"[RunRotationCalib#{runId}] {ver ?? "NanoMeas_GetVersion: (null)"}");
