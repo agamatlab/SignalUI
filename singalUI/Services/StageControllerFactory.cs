@@ -1,5 +1,4 @@
 using singalUI.libs;
-
 using singalUI.Models;
 
 namespace singalUI.Services;
@@ -16,14 +15,30 @@ public static class StageControllerFactory
     /// <param name="sigmakokiType">Sigma Koki controller type (required if hardwareType is Sigmakoki)</param>
     /// <param name="portName">Serial port name (e.g., "COM3" for Windows, "/dev/ttyUSB0" for Linux)</param>
     /// <returns>StageController instance or null if type is None</returns>
-    public static StageController? CreateController(StageHardwareType hardwareType, SigmakokiControllerType sigmakokiType = SigmakokiControllerType.HSC_103, string portName = "COM3")
+    /// <summary>Create controller from full stage configuration (COM, HSC axis, DPP for rotation stage).</summary>
+    public static StageController? CreateController(StageInstance configuration)
     {
-        return hardwareType switch
+        return configuration.HardwareType switch
         {
             StageHardwareType.PI => new PIController(),
-            StageHardwareType.Sigmakoki => CreateSigmakokiController(sigmakokiType, portName),
+            StageHardwareType.Sigmakoki => CreateSigmakokiController(configuration.SigmakokiController, configuration.SerialPortName),
+            StageHardwareType.SigmakokiRotationStage => new Hsc103RotationStageController(
+                configuration.SerialPortName,
+                configuration.Hsc103AxisNumber,
+                configuration.DegreesPerPulse),
             _ => null
         };
+    }
+
+    public static StageController? CreateController(StageHardwareType hardwareType, SigmakokiControllerType sigmakokiType = SigmakokiControllerType.HSC_103, string portName = "COM3")
+    {
+        var cfg = new StageInstance
+        {
+            HardwareType = hardwareType,
+            SigmakokiController = sigmakokiType,
+            SerialPortName = portName
+        };
+        return CreateController(cfg);
     }
 
     private static SigmakokiController CreateSigmakokiController(SigmakokiControllerType sigmakokiType, string portName)
@@ -56,11 +71,6 @@ public static class StageControllerFactory
     /// </summary>
     public static string GetDisplayName(StageHardwareType hardwareType)
     {
-        return hardwareType switch
-        {
-            StageHardwareType.PI => "PI (Physik Instrumente)",
-            StageHardwareType.Sigmakoki => "Sigma Koki",
-            _ => "None"
-        };
+        return StageHardwareUi.ProductName(hardwareType);
     }
 }

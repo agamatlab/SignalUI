@@ -1,6 +1,8 @@
 using Avalonia.Controls;
+using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Threading;
 using singalUI.ViewModels;
 using System;
 
@@ -9,7 +11,23 @@ namespace singalUI.Views;
 public partial class MainWindow : Window
 {
     private Carousel? _carousel;
+    private readonly DispatcherTimer _tabChevronTimer = new()
+    {
+        Interval = TimeSpan.FromMilliseconds(1000.0 / 120.0),
+    };
+    private DateTime _tabChevronAnimStartUtc = DateTime.UtcNow;
+    private const double TabChevronCycleSeconds = 2.6;
+    private const double TabChevronSweepWidth = 22.0;
+    private const double TabChevronNaturalHeight = 50.0;
+    private const double TabChevronClipOvershootPx = 10.0;
+    private const double TabChevronVerticalBiasPx = 4.0;
     private WindowState _previousWindowState = WindowState.Normal;
+
+    private static double EaseInOutCubic(double u)
+    {
+        u = Math.Clamp(u, 0.0, 1.0);
+        return u < 0.5 ? 4.0 * u * u * u : 1.0 - Math.Pow(-2.0 * u + 2.0, 3) / 2.0;
+    }
 
     public MainWindow()
     {
@@ -40,6 +58,9 @@ public partial class MainWindow : Window
 
             // Update tab highlighting
             UpdateTabStates(0);
+            _tabChevronAnimStartUtc = DateTime.UtcNow;
+            _tabChevronTimer.Tick += (_, _) => UpdateTabChevronAnimation();
+            _tabChevronTimer.Start();
             Console.WriteLine("[MainWindow] Constructor END");
         }
         catch (Exception ex)
@@ -63,11 +84,6 @@ public partial class MainWindow : Window
     private void NavigateToAnalysis(object sender, Avalonia.Input.PointerPressedEventArgs e)
     {
         SetActiveView(2, "analysis");
-    }
-
-    private void NavigateToConfig(object sender, Avalonia.Input.PointerPressedEventArgs e)
-    {
-        SetActiveView(3, "config");
     }
     
     private void SetActiveView(int index, string viewName)
@@ -93,8 +109,6 @@ public partial class MainWindow : Window
         var cameraTab = this.FindControl<Border>("CameraTab");
         var setupTab = this.FindControl<Border>("SetupTab");
         var analysisTab = this.FindControl<Border>("AnalysisTab");
-        var configTab = this.FindControl<Border>("ConfigTab");
-
         // Reset all tabs to default state
         if (cameraTab != null)
         {
@@ -111,12 +125,6 @@ public partial class MainWindow : Window
             analysisTab.Background = Brushes.Transparent;
             analysisTab.CornerRadius = new Avalonia.CornerRadius(0);
         }
-        if (configTab != null)
-        {
-            configTab.Background = Brushes.Transparent;
-            configTab.CornerRadius = new Avalonia.CornerRadius(0);
-        }
-
         // Set active tab with rounded bottom corners (Microsoft Word style)
         Border? activeTab = null;
         switch (activeIndex)
@@ -130,9 +138,6 @@ public partial class MainWindow : Window
             case 2:
                 activeTab = analysisTab;
                 break;
-            case 3:
-                activeTab = configTab;
-                break;
         }
 
         if (activeTab != null)
@@ -140,6 +145,30 @@ public partial class MainWindow : Window
             activeTab.Background = new SolidColorBrush(Color.Parse("#0d0d0d")); // Match content background
             activeTab.CornerRadius = new Avalonia.CornerRadius(0, 0, 6, 6); // Rounded bottom corners
         }
+    }
+
+    /// <summary>
+    /// Continuous L→R chevron over the tab strip (non-interactive hint for Camera → … → Analysis).
+    /// </summary>
+    private void UpdateTabChevronAnimation()
+    {
+        var host = this.FindControl<Grid>("TabBarContainer");
+        var path = this.FindControl<Path>("TabChevronPath");
+        if (host == null || path == null)
+            return;
+
+        double w = host.Bounds.Width;
+        double h = host.Bounds.Height;
+        if (w < 1 || h < 1)
+            return;
+
+        double u = (DateTime.UtcNow - _tabChevronAnimStartUtc).TotalSeconds % TabChevronCycleSeconds / TabChevronCycleSeconds;
+        double t = EaseInOutCubic(u);
+        double x = -TabChevronSweepWidth + t * (w + TabChevronSweepWidth);
+        double scale = (h + TabChevronClipOvershootPx) / TabChevronNaturalHeight;
+        path.RenderTransform = new ScaleTransform(scale, scale);
+        Canvas.SetLeft(path, x);
+        Canvas.SetTop(path, (h - TabChevronNaturalHeight * scale) / 2.0 + TabChevronVerticalBiasPx);
     }
 
     private void OnKeyDown(object? sender, KeyEventArgs e)

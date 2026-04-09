@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 
 namespace singalUI.Services;
@@ -47,6 +48,24 @@ public partial class StageWrapper : ObservableObject
     {
         get => Configuration.SigmakokiController;
         set => Configuration.SigmakokiController = value;
+    }
+
+    public string SerialPortName
+    {
+        get => Configuration.SerialPortName;
+        set => Configuration.SerialPortName = value;
+    }
+
+    public int Hsc103AxisNumber
+    {
+        get => Configuration.Hsc103AxisNumber;
+        set => Configuration.Hsc103AxisNumber = value;
+    }
+
+    public double DegreesPerPulse
+    {
+        get => Configuration.DegreesPerPulse;
+        set => Configuration.DegreesPerPulse = value;
     }
 
     /// <summary>
@@ -115,8 +134,8 @@ public partial class StageWrapper : ObservableObject
             ConnectionStatus = "Connecting...";
             Log($"Stage {Id}: Starting connection (Hardware: {HardwareType})...");
 
-            // Create controller
-            var controller = StageControllerFactory.CreateController(HardwareType, SigmakokiController);
+            // Create controller (uses COM / HSC settings from configuration)
+            var controller = StageControllerFactory.CreateController(Configuration);
             if (controller == null)
             {
                 ConnectionStatus = "Failed to create controller";
@@ -162,6 +181,21 @@ public partial class StageWrapper : ObservableObject
             Log($"Stage {Id}: You may be loading a 32-bit DLL in a 64-bit process (or vice versa)");
             return false;
         }
+        catch (PlatformNotSupportedException ex)
+        {
+            ConnectionStatus = FormatSerialPortLoadError(ex.Message);
+            IsConnected = false;
+            Log($"Stage {Id}: PLATFORM NOT SUPPORTED - {ConnectionStatus}");
+            return false;
+        }
+        catch (NotSupportedException ex) when (ex.Message.Contains("System.IO.Ports", StringComparison.Ordinal))
+        {
+            // Some runtimes throw NotSupportedException (not PlatformNotSupportedException) for the same serial stub.
+            ConnectionStatus = FormatSerialPortLoadError(ex.Message);
+            IsConnected = false;
+            Log($"Stage {Id}: SERIAL PORTS NOT SUPPORTED - {ConnectionStatus}");
+            return false;
+        }
         catch (Exception ex)
         {
             ConnectionStatus = $"Error: {ex.Message}";
@@ -170,6 +204,22 @@ public partial class StageWrapper : ObservableObject
             Log($"Stage {Id}: Stack trace: {ex.StackTrace}");
             return false;
         }
+    }
+
+    /// <summary>
+    /// System.IO.Ports sometimes loads a stub that says "only supported on Windows" even on Windows
+    /// when the app targets portable net8.0 or the wrong RID assets are deployed. App now targets net8.0-windows;
+    /// publish with -r win-x64 or -r win-arm64 matching the machine.
+    /// </summary>
+    private static string FormatSerialPortLoadError(string runtimeMessage)
+    {
+        if (!OperatingSystem.IsWindows())
+            return runtimeMessage;
+
+        string arch = RuntimeInformation.OSArchitecture.ToString();
+        string proc = RuntimeInformation.ProcessArchitecture.ToString();
+        string rid = RuntimeInformation.RuntimeIdentifier;
+        return $"{runtimeMessage} [This process reports Windows; OSArch={arch}, ProcessArch={proc}, RID={rid}. Use a build published for your CPU (win-x64 vs win-arm64) and keep all DLLs next to the exe.]";
     }
 
     /// <summary>
@@ -307,10 +357,10 @@ public partial class StageWrapper : ObservableObject
         // Get position AFTER move to verify
         double posAfter = Controller.GetPosition(axisIndex);
         double actualMove = posAfter - posBefore;
-        Log($"Stage {Id}: Move completed. New pos: {posAfter:F4} mm, actual delta: {actualMove:F4} mm");
+        Log($"Stage {Id}: Move completed. New pos: {posAfter:F4}, actual delta: {actualMove:F4}");
 
-        // Warning if movement doesn't match
-        if (Math.Abs(actualMove) < Math.Abs(amount) * 0.9)
+        // Warning if movement doesn't match (skip for tiny degree steps)
+        if (Math.Abs(amount) > 1e-6 && Math.Abs(actualMove) < Math.Abs(amount) * 0.9)
         {
             Log($"Stage {Id}: WARNING - Actual movement ({actualMove:F4}) less than requested ({amount:F4})!");
         }
@@ -334,10 +384,13 @@ public partial class StageWrapper : ObservableObject
 
         // Get position BEFORE move
         double posBefore = Controller.GetPosition(axisIndex);
-        Log($"Stage {Id}: Moving {axis} (index {axisIndex}) to absolute position {position:F4} mm, current pos: {posBefore:F4} mm");
+        Log($"Stage {Id}: Moving {axis} (index {axisIndex}) to absolute position {position:F4}, current pos: {posBefore:F4}");
 
-        // Use SigmakokiController's MoveAbsolute method
-        if (Controller is SigmakokiController sigmakokiController)
+        if (Controller is Hsc103RotationStageController hscRot)
+        {
+            hscRot.MoveAbsoluteDegrees(position);
+        }
+        else if (Controller is SigmakokiController sigmakokiController)
         {
             sigmakokiController.MoveAbsolute(axisIndex, position);
         }
@@ -350,7 +403,7 @@ public partial class StageWrapper : ObservableObject
 
         // Get position AFTER move to verify
         double posAfter = Controller.GetPosition(axisIndex);
-        Log($"Stage {Id}: Absolute move completed. New pos: {posAfter:F4} mm");
+        Log($"Stage {Id}: Absolute move completed. New pos: {posAfter:F4}");
     }
 
     /// <summary>

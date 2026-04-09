@@ -2,13 +2,15 @@
 
 ## Issue: Camera Preview Not Working in Rider
 
-### Root Cause: Working Directory Path Mismatch
+### Root Cause: Working Directory Path Mismatch (mitigated in app)
 
-**The Problem:**
+**Update:** `MatrixVisionCameraService` now resolves `mvGenTLProducer.cti` from **`AppContext.BaseDirectory`** (output / publish folder) and prepends `MatrixVision\` + app root to `PATH` when unset. Rider “working directory” is less critical than before; if issues persist, check `%LocalAppData%\singalUI\camera_log.txt`.
+
+**The Problem (historical):**
 - WSL uses Linux paths: `/mnt/c/Users/agama/...`
 - Rider/Windows uses Windows paths: `C:\Users\agama\...`
-- Matrix Vision SDK searches for files relative to current working directory
-- When running from Rider, the SDK can't find `mvGenTLProducer.cti` or DLLs
+- Older builds relied on `Environment.CurrentDirectory` for the CTI path
+- When running from Rider, the SDK could fail to find `mvGenTLProducer.cti` or DLLs
 
 ### Error Messages Seen:
 

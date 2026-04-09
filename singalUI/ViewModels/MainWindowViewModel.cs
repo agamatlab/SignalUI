@@ -1,12 +1,29 @@
-﻿using CommunityToolkit.Mvvm.ComponentModel;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Platform.Storage;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using singalUI.Models;
+using System;
+using System.Threading.Tasks;
 
 namespace singalUI.ViewModels;
 
 public partial class MainWindowViewModel : ViewModelBase
 {
+    public MainWindowViewModel()
+    {
+        _calibrationModeIndex = (int)singalUI.App.CalibrationAppMode;
+    }
+
     [ObservableProperty]
-    private string _statusBarText = "System Ready";
+    private int _calibrationModeIndex;
+
+    partial void OnCalibrationModeIndexChanged(int value)
+    {
+        singalUI.App.CalibrationAppMode = (CalibrationAppMode)value;
+    }
 
     [ObservableProperty]
     private string _activeTab = "camera";
@@ -18,7 +35,15 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _cameraReady = true;
 
     [ObservableProperty]
-    private string _applicationVersion = "6-DOF Calibrator Pro v2.4.1";
+    private string _applicationVersion = "NanoMeas Calibrator 0.7.0";
+
+    [ObservableProperty]
+    private string _statusBarText = "System Ready";
+
+    private static TopLevel? ShellTopLevel() =>
+        Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime d
+            ? d.MainWindow
+            : null;
 
     // Session Name from shared store
     public string SessionName
@@ -63,22 +88,54 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         ActiveTab = "analysis";
     }
-    
+
     [RelayCommand]
-    private void NavigateToConfig()
+    private async Task GlobalSaveAsync()
     {
-        ActiveTab = "config";
+        var top = ShellTopLevel();
+        if (top == null)
+            return;
+
+        var file = await top.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Save analysis / calculation result",
+            DefaultExtension = "csv",
+            SuggestedFileName = "nanomeas_result.csv",
+            FileTypeChoices = new[]
+            {
+                new FilePickerFileType("CSV") { Patterns = new[] { "*.csv" } },
+                new FilePickerFileType("JSON") { Patterns = new[] { "*.json" } },
+                new FilePickerFileType("PNG plot") { Patterns = new[] { "*.png" } },
+                new FilePickerFileType("MATLAB") { Patterns = new[] { "*.mat" } },
+                FilePickerFileTypes.All,
+            },
+        });
+
+        if (file != null)
+            await singalUI.App.SharedAnalysisViewModel.SaveFromGlobalMenuAsync(file.Path.LocalPath);
     }
 
     [RelayCommand]
-    private void OpenConfig()
+    private async Task GlobalLoadAsync()
     {
-        StatusBarText = "Opening configuration file...";
-    }
+        var top = ShellTopLevel();
+        if (top == null)
+            return;
 
-    [RelayCommand]
-    private void SaveConfig()
-    {
-        StatusBarText = "Saving configuration...";
+        var picks = await top.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Load image or calculation result",
+            AllowMultiple = false,
+            FileTypeFilter = new[]
+            {
+                new FilePickerFileType("PNG image") { Patterns = new[] { "*.png" } },
+                new FilePickerFileType("CSV") { Patterns = new[] { "*.csv" } },
+                new FilePickerFileType("MATLAB") { Patterns = new[] { "*.mat" } },
+                FilePickerFileTypes.All,
+            },
+        });
+
+        if (picks.Count > 0)
+            Console.WriteLine($"[GlobalLoad] Path chosen: {picks[0].Path.LocalPath} (import wiring TBD)");
     }
 }

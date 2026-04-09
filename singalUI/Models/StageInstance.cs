@@ -28,6 +28,18 @@ public partial class StageInstance : ObservableObject
     [ObservableProperty]
     private string[] _availableAxes = System.Array.Empty<string>();
 
+    /// <summary>Serial port for HSC-103 rotation stage (e.g. COM3).</summary>
+    [ObservableProperty]
+    private string _serialPortName = "COM3";
+
+    /// <summary>HSC-103 physical axis index 1–3 (see hsc103.py --axis).</summary>
+    [ObservableProperty]
+    private int _hsc103AxisNumber = 1;
+
+    /// <summary>Degrees per controller pulse (default matches hsc103.py).</summary>
+    [ObservableProperty]
+    private double _degreesPerPulse = 0.00001;
+
     /// <summary>
     /// Get the axes this stage controls based on its hardware type
     /// Automatically determined based on controller type
@@ -38,6 +50,7 @@ public partial class StageInstance : ObservableObject
         {
             StageHardwareType.PI => GetPIAxes(),
             StageHardwareType.Sigmakoki => GetSigmakokiAxes(),
+            StageHardwareType.SigmakokiRotationStage => new[] { AxisType.Rz },
             _ => System.Array.Empty<AxisType>()
         };
     }
@@ -57,18 +70,8 @@ public partial class StageInstance : ObservableObject
     /// </summary>
     private AxisType[] GetSigmakokiAxes()
     {
-        // Map Sigma Koki controller types to axes
-        return SigmakokiController switch
-        {
-            SigmakokiControllerType.GIP_101B => new[] { AxisType.X }, // 1 axis
-            SigmakokiControllerType.GSC01 => new[] { AxisType.X },  // 1 axis
-            SigmakokiControllerType.SHOT_302GS => new[] { AxisType.X, AxisType.Y }, // 2 axes
-            SigmakokiControllerType.HSC_103 => new[] { AxisType.X, AxisType.Y, AxisType.Z }, // 3 axes
-            SigmakokiControllerType.SHOT_304GS => new[] { AxisType.X, AxisType.Y, AxisType.Z, AxisType.Rx }, // 4 axes
-            SigmakokiControllerType.Hit_MV => new[] { AxisType.X, AxisType.Y, AxisType.Z, AxisType.Rx }, // 4 axes
-            SigmakokiControllerType.PGC_04 => new[] { AxisType.X, AxisType.Y, AxisType.Z, AxisType.Rx }, // 4 axes
-            _ => System.Array.Empty<AxisType>()
-        };
+        // Optosigma OSMS26-100(X): single linear axis mapped to X in the UI.
+        return new[] { AxisType.X };
     }
 
     /// <summary>
@@ -84,15 +87,7 @@ public partial class StageInstance : ObservableObject
     /// <summary>
     /// Get hardware type name
     /// </summary>
-    private string GetHardwareTypeName()
-    {
-        return HardwareType switch
-        {
-            StageHardwareType.PI => "PI",
-            StageHardwareType.Sigmakoki => $"Sigma Koki ({SigmakokiController.GetDisplayName()})",
-            _ => "None"
-        };
-    }
+    private string GetHardwareTypeName() => StageHardwareUi.ProductName(HardwareType);
 
     /// <summary>
     /// Get enabled axes as a string

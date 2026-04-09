@@ -12,7 +12,7 @@ public partial class AnalysisView : UserControl
         {
             Console.WriteLine("[AnalysisView] Constructor START");
             InitializeComponent();
-            DataContext = new AnalysisViewModel();
+            DataContext = singalUI.App.SharedAnalysisViewModel;
             Console.WriteLine("[AnalysisView] Constructor END");
         }
         catch (Exception ex)

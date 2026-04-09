@@ -1,0 +1,17 @@
+# Default parameters for NanoMeas / pose DLLs (key=value). Edited by app from Camera pattern + intrinsics.
+CameraPatternPresetIndex=0
+SelectedPatternType=0
+PitchX=0.1
+PitchY=0.1
+ComponentsX=11
+ComponentsY=11
+FocalLength=28
+PixelSize=0.0044
+Fx=6363.64
+Fy=6363.64
+Cx=0
+Cy=0
+WindowSize=10
+CodePitchBlocks=6
+ImageWidth=1600
+ImageHeight=1200

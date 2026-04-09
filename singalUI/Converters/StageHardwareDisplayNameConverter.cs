@@ -13,14 +13,7 @@ public class StageHardwareDisplayNameConverter : IValueConverter
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         if (value is StageHardwareType hardware)
-        {
-            return hardware switch
-            {
-                StageHardwareType.PI => "PI",
-                StageHardwareType.Sigmakoki => "Sigma Koki",
-                _ => "None"
-            };
-        }
+            return StageHardwareUi.ProductName(hardware);
         return "None";
     }
 

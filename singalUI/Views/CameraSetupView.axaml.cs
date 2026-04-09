@@ -21,6 +21,7 @@ public partial class CameraSetupView : UserControl
             Console.WriteLine("[CameraSetupView] InitializeComponent completed");
 
             DataContext = new CameraSetupViewModel();
+            LayoutUpdated += OnCameraViewLayoutUpdated;
             Console.WriteLine("[CameraSetupView] DataContext set, Constructor END");
             
             // Wire up mouse events for camera preview zoom/pan
@@ -113,5 +114,18 @@ public partial class CameraSetupView : UserControl
         }
 
         e.Handled = true;
+    }
+
+    private void OnCameraViewLayoutUpdated(object? sender, EventArgs e)
+    {
+        // Focus meter track width calculation disabled (feature not in current version)
+        // if (ViewModel == null) return;
+        // var tb = this.FindControl<TextBlock>("FocusMeterLabelMeasure");
+        // if (tb == null) return;
+        // double w = tb.Bounds.Width;
+        // if (w <= 0) return;
+        // double target = w * 2;
+        // if (System.Math.Abs(ViewModel.FocusMeterTrackWidth - target) > 0.5)
+        //     ViewModel.FocusMeterTrackWidth = target;
     }
 }

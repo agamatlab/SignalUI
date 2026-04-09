@@ -20,6 +20,7 @@
         <converters:InverseBoolConverter x:Key="InverseBoolConverter"/>
         <converters:FocusLevelColorConverter x:Key="FocusLevelColorConverter"/>
         <converters:FocusLevelWidthConverter x:Key="FocusLevelWidthConverter"/>
+        <converters:FocusLevelStarSplitConverter x:Key="FocusLevelStarSplitConverter"/>
         <converters:ControllerToIndexConverter x:Key="ControllerToIndexConverter"/>
         <converters:ControlModeVisibleConverter x:Key="ControlModeVisibleConverter"/>
         <converters:UnitToIndexConverter x:Key="UnitToIndexConverter"/>
@@ -34,6 +35,7 @@
         <converters:StageHardwareDisplayNameConverter x:Key="StageHardwareDisplayNameConverter"/>
         <converters:SigmakokiVisibleInvertedConverter x:Key="SigmakokiVisibleInvertedConverter"/>
         <converters:ConnectionStatusColorConverter x:Key="ConnectionStatusColorConverter"/>
+        <converters:SigmakokiRotationVisibleConverter x:Key="SigmakokiRotationVisibleConverter"/>
         <converters:GreaterThanZeroConverter x:Key="GreaterThanZeroConverter"/>
     </Application.Resources>
 

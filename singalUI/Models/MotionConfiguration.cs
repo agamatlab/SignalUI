@@ -8,6 +8,10 @@ namespace singalUI.Models
         [ObservableProperty]
         private AxisType _axis;
 
+        /// <summary>Stage wrapper <see cref="Services.StageWrapper.Id"/> that owns this motion row.</summary>
+        [ObservableProperty]
+        private int _owningStageId;
+
         [ObservableProperty]
         private string _label = string.Empty;
 

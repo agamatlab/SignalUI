@@ -101,6 +101,9 @@ namespace singalUI.Models
         public double Scale { get; set; } = 1.0;
         public Point Offset { get; set; } = new Point(0, 0);
 
+        /// <summary>World-space point that left-drag rotation orbits around (default origin).</summary>
+        public Point3D RotationPivot { get; set; } = new Point3D(0, 0, 0);
+
         /// <summary>
         /// Project 3D point to 2D screen coordinates
         /// </summary>
@@ -118,23 +121,23 @@ namespace singalUI.Models
         }
 
         /// <summary>
-        /// Rotate point around origin
+        /// Rotate point around <see cref="RotationPivot"/> (same as world origin when pivot is 0,0,0).
         /// </summary>
         private Point3D RotatePoint(Point3D p)
         {
-            // Rotate around X axis
-            double y1 = p.Y * Math.Cos(RotationX) - p.Z * Math.Sin(RotationX);
-            double z1 = p.Y * Math.Sin(RotationX) + p.Z * Math.Cos(RotationX);
+            double px = RotationPivot.X, py = RotationPivot.Y, pz = RotationPivot.Z;
+            double x = p.X - px, y = p.Y - py, z = p.Z - pz;
 
-            // Rotate around Y axis
-            double x2 = p.X * Math.Cos(RotationY) + z1 * Math.Sin(RotationY);
-            double z2 = -p.X * Math.Sin(RotationY) + z1 * Math.Cos(RotationY);
+            double y1 = y * Math.Cos(RotationX) - z * Math.Sin(RotationX);
+            double z1 = y * Math.Sin(RotationX) + z * Math.Cos(RotationX);
 
-            // Rotate around Z axis
+            double x2 = x * Math.Cos(RotationY) + z1 * Math.Sin(RotationY);
+            double z2 = -x * Math.Sin(RotationY) + z1 * Math.Cos(RotationY);
+
             double x3 = x2 * Math.Cos(RotationZ) - y1 * Math.Sin(RotationZ);
             double y3 = x2 * Math.Sin(RotationZ) + y1 * Math.Cos(RotationZ);
 
-            return new Point3D(x3, y3, z2);
+            return new Point3D(x3 + px, y3 + py, z2 + pz);
         }
 
         /// <summary>
@@ -144,6 +147,30 @@ namespace singalUI.Models
         {
             var rotated = RotatePoint(point3D);
             return rotated.Z;
+        }
+
+        /// <summary>
+        /// After changing <see cref="Scale"/> from <paramref name="oldScale"/> to <paramref name="newScale"/>,
+        /// adjusts <see cref="Offset"/> so the screen projection of <paramref name="worldPivot"/> stays fixed
+        /// (zoom centered on that 3D point, not the world origin). <paramref name="canvasWidth"/> must be positive.
+        /// </summary>
+        public void ZoomAboutWorldPoint(Point3D worldPivot, double oldScale, double newScale, double canvasWidth)
+        {
+            if (Math.Abs(oldScale) < 1e-15 || Math.Abs(newScale - oldScale) < 1e-15)
+                return;
+            if (canvasWidth <= 0)
+                return;
+
+            double k = newScale / oldScale;
+            var rp = RotatePoint(worldPivot);
+            double denom = CameraDistance + rp.Z;
+            if (Math.Abs(denom) < 1e-6)
+                return;
+
+            double fp = CameraDistance / denom;
+            Offset = new Point(
+                Offset.X + rp.X * fp * oldScale * (1 - k),
+                Offset.Y + rp.Y * fp * oldScale * (k - 1));
         }
     }
 

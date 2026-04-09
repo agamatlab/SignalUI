@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace singalUI.ViewModels
 {
@@ -716,6 +717,15 @@ namespace singalUI.ViewModels
                 Console.WriteLine("[ErrorLog] Error log cleared");
             }
             catch { }
+        }
+
+        /// <summary>
+        /// Save analysis data from global menu (stub for compatibility)
+        /// </summary>
+        public async Task SaveFromGlobalMenuAsync(string filePath)
+        {
+            await Task.CompletedTask;
+            LogError($"Save to {filePath} - Feature not yet implemented in this version");
         }
     }
 }

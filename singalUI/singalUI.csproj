@@ -1,13 +1,20 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
+        <AssemblyName>NanoMeas</AssemblyName>
         <OutputType>WinExe</OutputType>
-        <TargetFramework>net8.0</TargetFramework>
+        <!-- Multi-target: On Windows build both net8.0 and net8.0-windows, on macOS/Linux only net8.0 -->
+        <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('Windows'))">net8.0;net8.0-windows10.0.19041.0</TargetFrameworks>
+        <TargetFramework Condition="!$([MSBuild]::IsOSPlatform('Windows'))">net8.0</TargetFramework>
         <Nullable>enable</Nullable>
-        <ApplicationManifest>app.manifest</ApplicationManifest>
         <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <!-- Use 64-bit PI DLL -->
         <DefineConstants>X64</DefineConstants>
+    </PropertyGroup>
+
+    <!-- Windows-specific settings -->
+    <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-windows10.0.19041.0'">
+        <ApplicationManifest>app.manifest</ApplicationManifest>
     </PropertyGroup>
 
     <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('Windows')) == 'true'">
@@ -52,7 +59,8 @@
         <PackageReference Include="HotAvalonia" Version="3.0.2" />
         <!-- OpenCV for image processing -->
         <PackageReference Include="OpenCvSharp4" Version="4.9.0.20240103" />
-        <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.9.0.20240103" />
+        <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.9.0.20240103" Condition="'$(TargetFramework)' == 'net8.0-windows10.0.19041.0'" />
+        <PackageReference Include="OpenCvSharp4.runtime.osx.10.15-x64" Version="4.6.0.20230105" Condition="'$(TargetFramework)' == 'net8.0' AND $([MSBuild]::IsOSPlatform('OSX'))" />
         <!-- System.Drawing.Common required by mv.impact.acquire -->
         <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
         <!-- Serial port communication for stage controller -->
@@ -82,16 +90,33 @@
             <Link>libiomp5md.dll</Link>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
-        <None Include="..\..\PoseEstApi\PoseEstApi\Archive\12+12_G.txt">
+        <!-- Runtime: N+N → hmf_temp_{G,X,Y}.txt → mirror to 12+12_* (bridge DLL path). Source: PoseEstApi\code 10+10. -->
+        <!-- Ship 12+12_* and 10+10_* as named bundles; hmf_temp_* is created by the app when estimating pose. -->
+        <None Include="..\..\PoseEstApi\code\10+10_G.txt">
             <Link>Archive\12+12_G.txt</Link>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
-        <None Include="..\..\PoseEstApi\PoseEstApi\Archive\12+12_X.txt">
+        <None Include="..\..\PoseEstApi\code\10+10_X.txt">
             <Link>Archive\12+12_X.txt</Link>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
-        <None Include="..\..\PoseEstApi\PoseEstApi\Archive\12+12_Y.txt">
+        <None Include="..\..\PoseEstApi\code\10+10_Y.txt">
             <Link>Archive\12+12_Y.txt</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Include="..\..\PoseEstApi\code\10+10_G.txt">
+            <Link>Archive\10+10_G.txt</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Include="..\..\PoseEstApi\code\10+10_X.txt">
+            <Link>Archive\10+10_X.txt</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Include="..\..\PoseEstApi\code\10+10_Y.txt">
+            <Link>Archive\10+10_Y.txt</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Include="Archive\default_dll_parameters.txt">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
         <!-- PI GCS2 DLL - 64-bit version for x64 builds -->
@@ -104,7 +129,41 @@
             <Link>PI_GCS2_DLL.dll</Link>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
+        <!-- HSC-103 rotation: Python + pyserial (see PythonStage/requirements.txt) -->
+        <None Include="PythonStage\**\*">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
     </ItemGroup>
+
+    <!-- NanoMeasCalib + bridge: optional until built; see PoseEstApi/RotPoseEstApi/native/RotCalibBridge -->
+    <Target Name="CopyRotCalibNative" AfterTargets="Build">
+        <PropertyGroup>
+            <_RotBridge>..\..\PoseEstApi\RotPoseEstApi\native\RotCalibBridge\bin\x64\$(Configuration)\RotCalibBridge.dll</_RotBridge>
+            <_NanoMeas>..\..\PoseEstApi\RotPoseEstApi\lib\NanoMeasCalib.dll</_NanoMeas>
+        </PropertyGroup>
+        <Copy Condition="Exists('$(_RotBridge)')"
+              SourceFiles="$(_RotBridge)"
+              DestinationFolder="$(OutputPath)"
+              SkipUnchangedFiles="true" />
+        <Copy Condition="Exists('$(_NanoMeas)')"
+              SourceFiles="$(_NanoMeas)"
+              DestinationFolder="$(OutputPath)"
+              SkipUnchangedFiles="true" />
+    </Target>
+
+    <!-- NanoMeas SDK (rotation calib): copy when present; see PoseEstApi/NanoMeas_SDK_secret/README.md -->
+    <Target Name="CopyNanoMeasSdkNative" AfterTargets="Build">
+        <PropertyGroup>
+            <_NanoMeasSdkDir>..\..\PoseEstApi\NanoMeas_SDK_secret</_NanoMeasSdkDir>
+        </PropertyGroup>
+        <ItemGroup>
+            <_NanoMeasSdkFiles Include="$(_NanoMeasSdkDir)\NanoMeas.dll" Condition="Exists('$(_NanoMeasSdkDir)\NanoMeas.dll')" />
+            <_NanoMeasSdkFiles Include="$(_NanoMeasSdkDir)\fftw3.dll" Condition="Exists('$(_NanoMeasSdkDir)\fftw3.dll')" />
+        </ItemGroup>
+        <Copy SourceFiles="@(_NanoMeasSdkFiles)"
+              DestinationFolder="$(OutputPath)"
+              SkipUnchangedFiles="true" />
+    </Target>
     
     <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows')) == 'true'">
         <!-- Matrix Vision local assemblies -->
@@ -116,10 +175,10 @@
 
     <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows')) == 'true'">
         <!-- Copy Matrix Vision native DLLs to output -->
-        <None Include="C:\Program Files\MATRIX VISION\mvIMPACT Acquire\bin\**\mv*.dll" Link="MatrixVision\%(RecursiveDir)%(Filename)%(Extension)">
+        <None Include="C:\Program Files\MATRIX VISION\mvIMPACT Acquire\bin\x64\**\mv*.dll" Link="MatrixVision\%(RecursiveDir)%(Filename)%(Extension)">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
-        <None Include="C:\Program Files\MATRIX VISION\mvIMPACT Acquire\bin\mvGenTLProducer.cti">
+        <None Include="C:\Program Files\MATRIX VISION\mvIMPACT Acquire\bin\x64\mvGenTLProducer.cti">
             <Link>mvGenTLProducer.cti</Link>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
@@ -139,6 +198,9 @@
         <SubType>Code</SubType>
       </Compile>
       <Compile Update="libs\Sigmakoki.cs">
+        <DependentUpon>StageController.cs</DependentUpon>
+      </Compile>
+      <Compile Update="libs\Hsc103RotationStageController.cs">
         <DependentUpon>StageController.cs</DependentUpon>
       </Compile>
     </ItemGroup>
