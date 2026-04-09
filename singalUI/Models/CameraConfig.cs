@@ -60,12 +60,31 @@ public class CameraConfig
     [JsonPropertyName("checkerBoardUnit")]
     public int CheckerBoardUnit { get; set; } = 0; // 0 = mm, 1 = μm, 2 = in
 
+    [JsonPropertyName("patternHasCode")]
+    public bool PatternHasCode { get; set; } = false;
+
+    [JsonPropertyName("patternConfigType")]
+    public string PatternConfigType { get; set; } = "Checker Board";
+
+    [JsonPropertyName("patternPitchSize")]
+    public double PatternPitchSize { get; set; } = 1.0;
+
+    [JsonPropertyName("patternCompatibleLenses")]
+    public string PatternCompatibleLenses { get; set; } = "Not specified";
+
     // Auto modes
     [JsonPropertyName("autoFocus")]
     public bool AutoFocus { get; set; } = false;
 
     [JsonPropertyName("autoIllumination")]
     public bool AutoIllumination { get; set; } = false;
+
+    // FFT Focus Calculation
+    [JsonPropertyName("enableFftFocus")]
+    public bool EnableFftFocus { get; set; } = true;
+
+    [JsonPropertyName("fftCalculationInterval")]
+    public int FftCalculationInterval { get; set; } = 10;
 
     /// <summary>
     /// Convert to JSON string
@@ -114,8 +133,14 @@ public class CameraConfig
             CheckerBoardPitchX = vm.CheckerBoardPitchX,
             CheckerBoardPitchY = vm.CheckerBoardPitchY,
             CheckerBoardUnit = vm.CheckerBoardUnit,
+            PatternHasCode = vm.PatternHasCode,
+            PatternConfigType = vm.PatternConfigType,
+            PatternPitchSize = vm.PatternConfigPitchSize,
+            PatternCompatibleLenses = vm.PatternCompatibleLenses,
             AutoFocus = vm.AutoFocus,
-            AutoIllumination = vm.AutoIllumination
+            AutoIllumination = vm.AutoIllumination,
+            EnableFftFocus = vm.EnableFftFocus,
+            FftCalculationInterval = vm.FftCalculationInterval
         };
     }
 
@@ -140,7 +165,27 @@ public class CameraConfig
         vm.CheckerBoardPitchX = CheckerBoardPitchX;
         vm.CheckerBoardPitchY = CheckerBoardPitchY;
         vm.CheckerBoardUnit = CheckerBoardUnit;
+        vm.PatternHasCode = PatternHasCode;
+        vm.PatternConfigType = PatternConfigType;
+        vm.PatternConfigPitchSize = PatternPitchSize;
+        vm.PatternCompatibleLenses = PatternCompatibleLenses;
         vm.AutoFocus = AutoFocus;
         vm.AutoIllumination = AutoIllumination;
+        vm.EnableFftFocus = EnableFftFocus;
+        vm.FftCalculationInterval = FftCalculationInterval;
+    }
+
+    public void ApplyPatternToViewModel(ViewModels.CameraSetupViewModel vm)
+    {
+        vm.SelectedPatternType = PatternType;
+        vm.CheckerBoardColumns = CheckerBoardColumns;
+        vm.CheckerBoardRows = CheckerBoardRows;
+        vm.CheckerBoardPitchX = CheckerBoardPitchX;
+        vm.CheckerBoardPitchY = CheckerBoardPitchY;
+        vm.CheckerBoardUnit = CheckerBoardUnit;
+        vm.PatternHasCode = PatternHasCode;
+        vm.PatternConfigType = PatternConfigType;
+        vm.PatternConfigPitchSize = PatternPitchSize;
+        vm.PatternCompatibleLenses = PatternCompatibleLenses;
     }
 }

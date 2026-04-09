@@ -42,6 +42,32 @@ public partial class MainWindowViewModel : ViewModelBase
             ? d.MainWindow
             : null;
 
+    // Session Name from shared store
+    public string SessionName
+    {
+        get => singalUI.Services.SharedConfigParametersStore.Instance.SessionName;
+        set
+        {
+            if (singalUI.Services.SharedConfigParametersStore.Instance.SessionName != value)
+            {
+                singalUI.Services.SharedConfigParametersStore.Instance.SessionName = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    partial void OnActiveTabChanged(string value)
+    {
+        StatusBarText = value switch
+        {
+            "setup" => "Viewing Calibration Setup",
+            "camera" => "Live Camera Feed Active - Adjusting Setup",
+            "analysis" => "Data Visualization Mode",
+            "config" => "Pose Estimation Configuration",
+            _ => "System Ready"
+        };
+    }
+
     [RelayCommand]
     private void NavigateToSetup()
     {

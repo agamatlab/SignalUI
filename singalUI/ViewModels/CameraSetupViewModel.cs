@@ -5,18 +5,15 @@ using Avalonia.Platform.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using OpenCvSharp;
-using singalUI.libs;
 using singalUI.Models;
 using singalUI.Services;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
-using System.Threading;
 using System.Threading.Tasks;
 using System.Timers;
 using Avalonia.Threading;
@@ -29,9 +26,8 @@ namespace singalUI.ViewModels
     {
         private readonly DispatcherTimer _cameraFrameTimer;
         private readonly DispatcherTimer _liveCameraApplyTimer;
-        private readonly CancellationTokenSource _nanoMeasPreviewCts = new();
-        private Task? _nanoMeasPreviewTask;
         private readonly Random _random = new();
+        private readonly Dictionary<string, string> _patternConfigFileMap = new(StringComparer.OrdinalIgnoreCase);
         private readonly string _logFile = Path.Combine(Path.GetTempPath(), "singalui_debug.log");
         private readonly string _cameraLogFile = Path.Combine(Path.GetTempPath(), "singalui_camera.log");
         private WriteableBitmap? _reusableBitmap;
@@ -91,13 +87,35 @@ namespace singalUI.ViewModels
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "singalUI",
             "CameraConfigs");
+        private static readonly string[] PatternConfigDirectoryCandidates =
+        {
+            Path.Combine(Environment.CurrentDirectory, "pattern-configs"),
+            Path.Combine(Environment.CurrentDirectory, "singalUI", "pattern-configs"),
+            Path.Combine(AppContext.BaseDirectory, "pattern-configs"),
+            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "pattern-configs"),
+            "/Users/aghamatlabakbarzade/ms/lastSignal/pattern-configs"
+        };
 
         [ObservableProperty]
         private ObservableCollection<string> _savedConfigs = new();
 
-        // Pattern Analysis (Camera tab: 0 = 40×40 mm WS10, 1 = 100×100 mm WS12 → drives SharedConfig + Archive)
         [ObservableProperty]
-        private int _selectedPatternType;
+        private ObservableCollection<string> _availablePatternConfigs = new();
+
+        [ObservableProperty]
+        private string? _selectedPatternConfig;
+
+        partial void OnSelectedPatternConfigChanged(string? value)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                LoadSelectedPatternConfig();
+            }
+        }
+
+        // Pattern Analysis
+        [ObservableProperty]
+        private int _selectedPatternType = 0; // 0 = CheckerBoard
 
         [ObservableProperty]
         private int _checkerBoardColumns = 9;
@@ -115,6 +133,21 @@ namespace singalUI.ViewModels
         private int _checkerBoardUnit = 0; // 0 = mm, 1 = μm, 2 = in
 
         [ObservableProperty]
+        private bool _patternHasCode;
+
+        [ObservableProperty]
+        private string _patternConfigType = "Checker Board";
+
+        [ObservableProperty]
+        private double _patternConfigPitchSize = 1.0;
+
+        [ObservableProperty]
+        private string _patternCompatibleLenses = "Not specified";
+
+        [ObservableProperty]
+        private int _codePitchBlocks = 6;
+
+        [ObservableProperty]
         private int _selectedCameraModel = -1;
 
         [ObservableProperty]
@@ -129,12 +162,48 @@ namespace singalUI.ViewModels
         [ObservableProperty]
         private double _panY = 0.0;
 
+        // Session Name from shared store
+        public string SessionName
+        {
+            get => SharedConfigParametersStore.Instance.SessionName;
+            set
+            {
+                if (SharedConfigParametersStore.Instance.SessionName != value)
+                {
+                    SharedConfigParametersStore.Instance.SessionName = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         // Auto Mode Toggles
         [ObservableProperty]
         private bool _autoFocus = false;
 
         [ObservableProperty]
         private bool _autoIllumination = false;
+
+        [ObservableProperty]
+        private bool _advancedMode = false;
+
+        // FFT Focus Calculation
+        [ObservableProperty]
+        private bool _enableFftFocus = true;  // Default: enabled (checkbox checked)
+
+        partial void OnEnableFftFocusChanged(bool value)
+        {
+            Console.WriteLine($"[FFT Focus] EnableFftFocus changed to: {value}");
+            if (value)
+            {
+                Console.WriteLine($"[FFT Focus] FFT enabled - will calculate every {FftCalculationInterval} frames");
+            }
+        }
+
+        [ObservableProperty]
+        private int _fftCalculationInterval = 10;  // Calculate every 10 frames (for performance)
+
+        [ObservableProperty]
+        private double _rawFocusValue = 0.0;  // Raw FFT energy value (for debugging)
 
         // Modular collections for collapsible panels
         [ObservableProperty]
@@ -189,13 +258,7 @@ namespace singalUI.ViewModels
         private string _cameraStatus = "Disconnected";
 
         [ObservableProperty]
-        private double _focusLevel;
-
-        private bool _suppressCameraPatternPresetApply = true;
-
-        /// <summary>Horizontal width of the focus meter track; set from view (2× measured &quot;Focus Level&quot; label width).</summary>
-        [ObservableProperty]
-        private double _focusMeterTrackWidth = 200;
+        private double _focusLevel = 72;
 
         // Stage Movement Controls
         [ObservableProperty]
@@ -225,19 +288,6 @@ namespace singalUI.ViewModels
         [ObservableProperty]
         private string _errorLog = "";
 
-        /// <summary>Display strings for pose preview (numbers or "-" when last result had no pose).</summary>
-        [ObservableProperty] private string _posePreviewXText = "-";
-        [ObservableProperty] private string _posePreviewYText = "-";
-        [ObservableProperty] private string _posePreviewZText = "-";
-        [ObservableProperty] private string _posePreviewRxText = "-";
-        [ObservableProperty] private string _posePreviewRyText = "-";
-        [ObservableProperty] private string _posePreviewRzText = "-";
-
-        private const string NanoMeasPosePreviewPngFileName = "last_camera_frame.png";
-
-        private static string PosePreviewCaptureDirectory() =>
-            Path.Combine(AppContext.BaseDirectory, "storage", "temp_capture");
-
         // Camera Frame Display
         [ObservableProperty]
         private WriteableBitmap? _cameraFrame;
@@ -245,18 +295,8 @@ namespace singalUI.ViewModels
         [ObservableProperty]
         private string _cameraFrameInfo = "No camera";
 
-        /// <summary>Resolution overlay on live preview (e.g. "1920 × 1080"). Empty when disconnected or no frame yet.</summary>
-        [ObservableProperty]
-        private string _cameraResolutionText = "";
-
         [ObservableProperty]
         private long _frameCount = 0;
-
-        public bool ShowCameraResolutionOverlay => CameraConnected && !string.IsNullOrWhiteSpace(CameraResolutionText);
-
-        partial void OnCameraResolutionTextChanged(string value) => OnPropertyChanged(nameof(ShowCameraResolutionOverlay));
-
-        partial void OnCameraConnectedChanged(bool value) => OnPropertyChanged(nameof(ShowCameraResolutionOverlay));
 
         [ObservableProperty]
         private bool _isAcquiring = false;
@@ -268,6 +308,9 @@ namespace singalUI.ViewModels
 
         public CameraSetupViewModel()
         {
+            Console.WriteLine("===========================================");
+            Console.WriteLine("=== NEW CODE VERSION 2024-03-27 21:06 ===");
+            Console.WriteLine("===========================================");
             Console.WriteLine("[CameraSetupViewModel] Constructor START");
             // Initialize logging
             File.WriteAllText(_logFile, $"=== Log started at {DateTime.Now:O} ===\n");
@@ -283,6 +326,7 @@ namespace singalUI.ViewModels
 
             // Load saved configs
             LoadSavedConfigs();
+            LoadPatternConfigs();
 
             // NOTE: Position timer disabled - using real gRPC stream instead
             // _positionUpdateTimer = new Timer(100) { AutoReset = true };
@@ -310,270 +354,15 @@ namespace singalUI.ViewModels
 
             InitializeModularCollections();
             HookCameraParameters(CameraParameters);
+            
+            // Explicitly notify UI of initial camera parameter values
+            OnPropertyChanged(nameof(CameraParameters));
+            
             Log("Collections initialized");
+            Log($"Initial CameraParameters: Exposure={CameraParameters.Exposure}, Gain={CameraParameters.Gain}, Illumination={CameraParameters.Illumination}, FPS={CameraParameters.Fps}");
             Log($"Initial LivePosition: X={LivePosition.X}, Y={LivePosition.Y}, Z={LivePosition.Z}");
-            _nanoMeasPreviewTask = Task.Run(() => NanoMeasLivePreviewLoop(_nanoMeasPreviewCts.Token));
-
-            var cfg = App.SharedConfigViewModel;
-            SelectedPatternType = Math.Clamp(cfg.CameraPatternPresetIndex, 0, 1);
-            _suppressCameraPatternPresetApply = false;
-
             Console.WriteLine("[CameraSetupViewModel] Constructor END");
             LogToError("CameraSetupViewModel initialized - Error log ready");
-        }
-
-        partial void OnSelectedPatternTypeChanged(int value)
-        {
-            if (_suppressCameraPatternPresetApply)
-                return;
-            ApplyCheckerboardDllPreset(Math.Clamp(value, 0, 1));
-        }
-
-        private static void ApplyCheckerboardDllPreset(int presetIndex)
-        {
-            var cfg = App.SharedConfigViewModel;
-            cfg.CameraPatternPresetIndex = presetIndex;
-            cfg.SelectedPatternType = 0;
-            if (presetIndex == 0)
-            {
-                cfg.WindowSize = 10.0;
-                cfg.PitchX = 0.1;
-                cfg.PitchY = 0.1;
-                cfg.ComponentsX = 11.0;
-                cfg.ComponentsY = 11.0;
-                cfg.CodePitchBlocks = 6.0;
-            }
-            else
-            {
-                cfg.WindowSize = 12.0;
-                cfg.PitchX = 0.25;
-                cfg.PitchY = 0.25;
-                cfg.ComponentsX = 11.0;
-                cfg.ComponentsY = 11.0;
-                cfg.CodePitchBlocks = 6.0;
-            }
-
-            _ = DllDefaultParametersArchive.TrySave(cfg);
-        }
-
-        /// <summary>
-        /// One frame at a time: under <c>./storage/temp_capture</c>, remove previous PNG, save the frame used for this run, run NanoMeas on the same U8 buffer,
-        /// post pose to the UI, then repeat with a new frame. PNG on disk matches what was fed to the DLL for that cycle.
-        /// </summary>
-        private void NanoMeasLivePreviewLoop(CancellationToken ct)
-        {
-            IntPtr handle = IntPtr.Zero;
-            int lastW = 0, lastH = 0, lastWindowN = -1;
-            var poseBuf = new double[6];
-            var poseAbsBuf = new double[6];
-            Thread.Sleep(500);
-            while (!ct.IsCancellationRequested)
-            {
-                try
-                {
-                    NanoMeasSdkNative.EnsureNanoMeasNativeReady();
-                    var cfg = App.SharedConfigViewModel;
-
-                    var camSvc = App.CameraService;
-                    if (camSvc == null || !camSvc.IsConnected || !camSvc.IsAcquiring)
-                    {
-                        Thread.Sleep(400);
-                        continue;
-                    }
-
-                    var (buf, w, h, _) = camSvc.GetLatestFrameSnapshot();
-                    if (buf == null || w < 8 || h < 8 || buf.Length < w * h)
-                    {
-                        Thread.Sleep(50);
-                        continue;
-                    }
-
-                    int windowN = (int)Math.Round(cfg.WindowSize);
-                    if (windowN < 1)
-                    {
-                        Thread.Sleep(400);
-                        continue;
-                    }
-
-                    if (handle != IntPtr.Zero &&
-                        (w != lastW || h != lastH || windowN != lastWindowN))
-                    {
-                        NanoMeasSdkNative.NanoMeas_Destroy(handle);
-                        handle = IntPtr.Zero;
-                    }
-
-                    if (handle == IntPtr.Zero)
-                    {
-                        if (!NanoMeasSdkNative.TryLoadArchiveHmfSequences(windowN, out var seqX, out var seqY, out var hmfErr))
-                        {
-                            LogToError("[NanoMeas preview] " + (hmfErr ?? "HMF load failed."));
-                            Thread.Sleep(1200);
-                            continue;
-                        }
-
-                        handle = NanoMeasSdkNative.NanoMeas_Create();
-                        if (handle == IntPtr.Zero)
-                        {
-                            LogToError("[NanoMeas preview] NanoMeas_Create returned NULL.");
-                            Thread.Sleep(1000);
-                            continue;
-                        }
-
-                        var ip = new NanoMeasSdkNative.NanoMeasIpDFTConfigNative { win_order = 3 };
-                        int ini = NanoMeasSdkNative.NanoMeas_Initialize(handle, h, w, ref ip);
-                        if (ini != NanoMeasSdkNative.NanoMeasOk)
-                        {
-                            var e = NanoMeasSdkNative.MarshalUtf8String(NanoMeasSdkNative.NanoMeas_GetLastError(handle));
-                            NanoMeasSdkNative.NanoMeas_Destroy(handle);
-                            handle = IntPtr.Zero;
-                            LogToError($"[NanoMeas preview] Initialize failed ({ini}): {e}");
-                            Thread.Sleep(800);
-                            continue;
-                        }
-
-                        int sh = NanoMeasSdkNative.NanoMeas_SetHmfData(handle, seqX, seqX.Length, seqY, seqY.Length);
-                        if (sh != NanoMeasSdkNative.NanoMeasOk)
-                        {
-                            var e = NanoMeasSdkNative.MarshalUtf8String(NanoMeasSdkNative.NanoMeas_GetLastError(handle));
-                            NanoMeasSdkNative.NanoMeas_Destroy(handle);
-                            handle = IntPtr.Zero;
-                            LogToError($"[NanoMeas preview] SetHmfData failed ({sh}): {e}");
-                            Thread.Sleep(800);
-                            continue;
-                        }
-
-                        lastW = w;
-                        lastH = h;
-                        lastWindowN = windowN;
-                    }
-
-                    string captureDir = PosePreviewCaptureDirectory();
-                    Directory.CreateDirectory(captureDir);
-                    string pngPath = Path.Combine(captureDir, NanoMeasPosePreviewPngFileName);
-
-                    try
-                    {
-                        if (File.Exists(pngPath))
-                            File.Delete(pngPath);
-                    }
-                    catch (Exception ex)
-                    {
-                        LogToError("[NanoMeas preview] Could not delete prior PNG in storage/temp_capture: " + ex.Message);
-                    }
-
-                    var copy = new byte[w * h];
-                    Array.Copy(buf, 0, copy, 0, copy.Length);
-
-                    try
-                    {
-                        using (var imageMat = new Mat(h, w, MatType.CV_8UC1, copy))
-                            Cv2.ImWrite(pngPath, imageMat);
-                    }
-                    catch (Exception ex)
-                    {
-                        LogToError("[NanoMeas preview] ImWrite failed: " + ex.Message);
-                    }
-
-                    double cx = Math.Abs(cfg.Cx) < 1e-9 ? w * 0.5 : cfg.Cx;
-                    double cy = Math.Abs(cfg.Cy) < 1e-9 ? h * 0.5 : cfg.Cy;
-                    var cam = NanoMeasSdkNative.BuildCameraParams(
-                        cfg.Fx, cfg.Fy, cx, cy, cfg.PixelSize, cfg.PixelSize, cfg.FocalLength);
-                    int codeBlocks = (int)Math.Round(cfg.CodePitchBlocks);
-                    var grid = NanoMeasSdkNative.BuildGridParams(cfg.PitchX, cfg.PitchY, codeBlocks, windowN);
-
-                    var res = NanoMeasSdkNative.CreatePipelineResult();
-                    _ = NanoMeasSdkNative.NanoMeas_ProcessFrame_Track_U8(
-                        handle,
-                        copy,
-                        h,
-                        w,
-                        ref cam,
-                        ref grid,
-                        IntPtr.Zero,
-                        10,
-                        3.0,
-                        ref res);
-
-                    NanoMeasSdkNative.CopyPipelinePoseArrays(ref res, poseBuf, poseAbsBuf);
-                    double[] p = SelectPoseForDisplay(poseBuf, poseAbsBuf, res.decode_success);
-                    PostPosePreviewTexts(p);
-                }
-                catch (OperationCanceledException)
-                {
-                    break;
-                }
-                catch (DllNotFoundException ex)
-                {
-                    LogToError("[NanoMeas preview] DLL: " + ex.Message);
-                    Thread.Sleep(2000);
-                }
-                catch (Exception ex)
-                {
-                    LogToError("[NanoMeas preview] " + ex.Message);
-                    Thread.Sleep(600);
-                }
-            }
-
-            if (handle != IntPtr.Zero)
-            {
-                NanoMeasSdkNative.NanoMeas_Destroy(handle);
-                handle = IntPtr.Zero;
-            }
-        }
-
-        private static bool IsAllNearZero(double[]? a)
-        {
-            if (a == null || a.Length == 0)
-                return true;
-            for (int i = 0; i < a.Length; i++)
-            {
-                if (Math.Abs(a[i]) > 1e-15)
-                    return false;
-            }
-            return true;
-        }
-
-        private static double[] SelectPoseForDisplay(double[] pose, double[] poseAbs, int decodeSuccess)
-        {
-            if (!IsAllNearZero(pose))
-                return pose;
-            if (decodeSuccess != 0 && !IsAllNearZero(poseAbs))
-                return poseAbs;
-            return pose;
-        }
-
-        private void PostPosePreviewTexts(double[] p)
-        {
-            // Snapshot: worker thread reuses poseBuf; UI post runs later.
-            var snap = (double[])p.Clone();
-            const double radToDeg = 180.0 / Math.PI;
-            const string dash = "-";
-            IFormatProvider iv = CultureInfo.InvariantCulture;
-            bool noPose = IsAllNearZero(snap);
-            double rxDeg = snap[0] * radToDeg;
-            double ryDeg = snap[1] * radToDeg;
-            double rzDeg = snap[2] * radToDeg;
-            Dispatcher.UIThread.Post(() =>
-            {
-                if (noPose)
-                {
-                    PosePreviewXText = dash;
-                    PosePreviewYText = dash;
-                    PosePreviewZText = dash;
-                    PosePreviewRxText = dash;
-                    PosePreviewRyText = dash;
-                    PosePreviewRzText = dash;
-                }
-                else
-                {
-                    PosePreviewXText = snap[3].ToString("F3", iv);
-                    PosePreviewYText = snap[4].ToString("F3", iv);
-                    PosePreviewZText = snap[5].ToString("F3", iv);
-                    PosePreviewRxText = rxDeg.ToString("F3", iv);
-                    PosePreviewRyText = ryDeg.ToString("F3", iv);
-                    PosePreviewRzText = rzDeg.ToString("F3", iv);
-                }
-            });
         }
 
         private void WireUpCameraService()
@@ -595,8 +384,6 @@ namespace singalUI.ViewModels
                 // Update initial connection state
                 CameraConnected = cameraService.IsConnected;
                 CameraStatus = cameraService.IsConnected ? "Connected" : "Disconnected";
-                if (!cameraService.IsConnected)
-                    FocusLevel = 0;
 
                 Log($"[CameraService] Wired up. Connected: {cameraService.IsConnected}, Serial: {cameraService.CameraSerial}");
             }
@@ -682,13 +469,51 @@ namespace singalUI.ViewModels
                 // Update UI (we're already on UI thread)
                 CameraFrame = _reusableBitmap;
                 OnPropertyChanged(nameof(CameraFrame));
-                CameraFrameInfo = $"{width}x{height}";
-                CameraResolutionText = $"{width} × {height}";
+                CameraFrameInfo = $"{width}x{height} | Frame: {seq} (latest: {_latestFrameSeq})";
                 FrameCount = seq;
                 _lastRenderedSeq = seq;
 
-                // Simulate focus level fluctuation
-                FocusLevel = 65 + _random.NextDouble() * 25;
+                // Debug: Log FFT state every 100 frames
+                if (seq % 100 == 0)
+                {
+                    Log($"[FFT Debug] Frame {seq}: EnableFftFocus={EnableFftFocus}, Interval={FftCalculationInterval}, FocusLevel={FocusLevel:F1}");
+                }
+
+                // Calculate real focus quality using FFT (only if enabled)
+                if (EnableFftFocus)
+                {
+                    if (seq % FftCalculationInterval == 0)
+                    {
+                        try
+                        {
+                            Log($"[FFT Focus] Starting calculation for frame {seq}...");
+                            var (normalized, rawEnergy) = FocusCalculator.CalculateFFTFocus(buffer, width, height, downsampleFactor: 4);
+                            RawFocusValue = rawEnergy;
+                            FocusLevel = normalized;  // Normalized to 0-100
+                            
+                            Log($"[FFT Focus] Frame {seq}: {FocusLevel:F1}% (raw energy: {RawFocusValue:F2})");
+                            
+                            // Log raw energy for calibration (every 10 calculations)
+                            if (seq % (FftCalculationInterval * 10) == 0)
+                            {
+                                Log($"[FFT Focus] Calibration info: raw={RawFocusValue:F2}, normalized={FocusLevel:F1}%");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Log($"[FFT Focus] Calculation error: {ex.Message}");
+                            Log($"[FFT Focus] Stack trace: {ex.StackTrace}");
+                            FocusLevel = 0.0; // Set to 0 on error to indicate problem
+                        }
+                    }
+                    // When FFT is enabled but not on interval frame, keep previous FocusLevel
+                }
+                else
+                {
+                    // When FFT is disabled, show a neutral value
+                    FocusLevel = 50.0;
+                    RawFocusValue = 0.0;
+                }
             }
             catch (Exception ex)
             {
@@ -742,9 +567,11 @@ namespace singalUI.ViewModels
         {
             if (parameters == null)
             {
+                Console.WriteLine("[HookCameraParameters] Parameters is null");
                 return;
             }
 
+            Console.WriteLine($"[HookCameraParameters] Hooking up property changed events for CameraParameters");
             parameters.PropertyChanged -= OnCameraParametersPropertyChanged;
             parameters.PropertyChanged += OnCameraParametersPropertyChanged;
             ResetAppliedCameraParameters();
@@ -752,6 +579,7 @@ namespace singalUI.ViewModels
 
         private void OnCameraParametersPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
         {
+            Console.WriteLine($"[CameraParam] Property changed: {e.PropertyName}");
             ResetAppliedCameraParameters();
             TryApplyLiveCameraParameters();
         }
@@ -769,6 +597,11 @@ namespace singalUI.ViewModels
             var cameraService = App.CameraService;
             if (cameraService == null || !cameraService.IsConnected)
             {
+                // Don't spam logs, but log occasionally
+                if (DateTime.UtcNow.Second % 10 == 0)
+                {
+                    Console.WriteLine($"[TryApply] Camera not connected - service null: {cameraService == null}, connected: {cameraService?.IsConnected ?? false}");
+                }
                 return;
             }
 
@@ -783,17 +616,26 @@ namespace singalUI.ViewModels
             double exposure = CameraParameters.Exposure;
             double gain = CameraParameters.Gain;
             double fps = CameraParameters.Fps;
-            double effectiveExposure = exposure;
+            double illumination = Math.Clamp(CameraParameters.Illumination, 0.0, 100.0);
+            // Illumination always affects effective exposure in this app path.
+            double effectiveExposure = exposure * Math.Max(illumination / 100.0, 0.01);
 
             bool exposureChanged = !_lastAppliedEffectiveExposure.HasValue || Math.Abs(effectiveExposure - _lastAppliedEffectiveExposure.Value) > 0.001;
             bool gainChanged = !_lastAppliedGain.HasValue || Math.Abs(gain - _lastAppliedGain.Value) > 0.001;
             bool fpsChanged = !_lastAppliedFps.HasValue || Math.Abs(fps - _lastAppliedFps.Value) > 0.001;
+
+            // Log every time we check (for debugging)
+            if (exposureChanged || gainChanged || fpsChanged)
+            {
+                Console.WriteLine($"[TryApply] Changes detected - Exp:{exposureChanged} Gain:{gainChanged} FPS:{fpsChanged}");
+            }
 
             if (exposureChanged)
             {
                 cameraService.SetExposure(effectiveExposure);
                 _lastAppliedExposure = exposure;
                 _lastAppliedEffectiveExposure = effectiveExposure;
+                Console.WriteLine($"[Illumination] Applied: exposure={exposure:F1}µs × illumination={illumination:F0}% = effective={effectiveExposure:F1}µs");
             }
 
             if (gainChanged)
@@ -810,7 +652,7 @@ namespace singalUI.ViewModels
 
             if (exposureChanged || gainChanged || fpsChanged)
             {
-                Log($"[LiveApply] Exposure={exposure:F1}us EffectiveExposure={effectiveExposure:F1}us Gain={gain:F2}dB FPS={fps:F2}");
+                Log($"[LiveApply] Exposure={exposure:F1}us EffectiveExposure={effectiveExposure:F1}us Illum={illumination:F1}% AutoIllum={AutoIllumination} Gain={gain:F2}dB FPS={fps:F2}");
 
                 if (cameraService.TryReadAppliedParameters(out var appliedExposure, out var appliedGain, out var appliedFps))
                 {
@@ -841,9 +683,7 @@ namespace singalUI.ViewModels
                 {
                     CameraFrame = null;
                     CameraFrameInfo = "Disconnected";
-                    CameraResolutionText = "";
                     _lastRenderedSeq = -1;
-                    FocusLevel = 0;
                 }
             });
         }
@@ -913,13 +753,13 @@ namespace singalUI.ViewModels
             try
             {
                 string logMessage = $"[{DateTime.Now:HH:mm:ss.fff}] {message}";
-                ErrorLog = string.IsNullOrEmpty(ErrorLog) ? logMessage : $"{ErrorLog}\n{logMessage}";
+                ErrorLog = logMessage + "\n" + ErrorLog;
 
                 // Keep only last MaxErrorLogLines lines
-                var lines = ErrorLog.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                var lines = ErrorLog.Split('\n');
                 if (lines.Length > MaxErrorLogLines)
                 {
-                    ErrorLog = string.Join("\n", lines.Skip(lines.Length - MaxErrorLogLines));
+                    ErrorLog = string.Join("\n", lines.Take(MaxErrorLogLines));
                 }
             }
             catch
@@ -984,10 +824,8 @@ namespace singalUI.ViewModels
                 // Update reprojection error
                 ReprojectionError = 0.020 + _random.NextDouble() * 0.01;
 
-                if (CameraConnected)
-                    FocusLevel = 65 + _random.NextDouble() * 25;
-                else
-                    FocusLevel = 0;
+                // Update focus level (simulate fluctuation)
+                FocusLevel = 65 + _random.NextDouble() * 25;
             });
         }
 
@@ -1070,8 +908,35 @@ namespace singalUI.ViewModels
         [RelayCommand]
         private void CaptureImage()
         {
-            // TODO: Implement image capture to file
-            Log("[CaptureImage] Single frame capture requested");
+            try
+            {
+                var cameraService = App.CameraService;
+                var (buffer, width, height, seq) = cameraService.GetLatestFrameSnapshot();
+
+                if (buffer == null || width <= 0 || height <= 0)
+                {
+                    Log("[CaptureImage] No frame available to save");
+                    CameraStatus = "No frame available";
+                    return;
+                }
+
+                string outputDir = Path.Combine(Environment.CurrentDirectory, "imgs");
+                Directory.CreateDirectory(outputDir);
+
+                string fileName = $"capture_{DateTime.Now:yyyyMMdd_HHmmss_fff}.png";
+                string filePath = Path.Combine(outputDir, fileName);
+
+                using var mat = new Mat(height, width, MatType.CV_8UC1, buffer);
+                Cv2.ImWrite(filePath, mat);
+
+                Log($"[CaptureImage] Saved frame {seq} to {filePath}");
+                CameraStatus = $"Captured: {fileName}";
+            }
+            catch (Exception ex)
+            {
+                Log($"[CaptureImage] Error: {ex.Message}");
+                CameraStatus = $"Capture failed: {ex.Message}";
+            }
         }
 
         [RelayCommand]
@@ -1080,23 +945,35 @@ namespace singalUI.ViewModels
             try
             {
                 Log("[RefreshConnection] Refreshing connections...");
+                CameraStatus = "Reconnecting...";
 
                 var cameraService = App.CameraService;
                 if (cameraService != null)
                 {
-                    // Stop any ongoing acquisition
-                    cameraService.StopAcquisition();
-                    IsAcquiring = false;
-
-                    // Re-initialize camera
-                    var success = await Task.Run(() => cameraService.Initialize());
+                    // Use the Reconnect method which properly cleans up and reinitializes
+                    var success = await Task.Run(() => cameraService.Reconnect());
+                    
                     CameraConnected = success;
-                    CameraStatus = success ? "Connected" : "Failed to connect";
+                    CameraStatus = success ? "Connected" : "Failed to connect - Check camera power and connection";
                     Log($"[RefreshConnection] Camera: {(success ? "Connected" : "Failed")}");
+                    
+                    if (success)
+                    {
+                        // Start acquisition if reconnection was successful
+                        await Task.Delay(200);
+                        cameraService.StartAcquisition();
+                        IsAcquiring = true;
+                        Log("[RefreshConnection] Acquisition started");
+                    }
+                    else
+                    {
+                        Log("[RefreshConnection] Tip: Ensure camera is powered on and connected before clicking reconnect");
+                    }
                 }
                 else
                 {
                     Log("[RefreshConnection] Camera service is null");
+                    CameraStatus = "Camera service not available";
                 }
 
             }
@@ -1189,6 +1066,36 @@ namespace singalUI.ViewModels
             catch (Exception ex)
             {
                 Log($"[ResetDefaults] Error: {ex.Message}");
+            }
+        }
+
+        [RelayCommand]
+        private void ApplySettings()
+        {
+            try
+            {
+                var cameraService = App.CameraService;
+                if (cameraService == null || !cameraService.IsConnected)
+                {
+                    Log("[ApplySettings] Camera not connected");
+                    CameraStatus = "Not connected";
+                    return;
+                }
+
+                Log($"[ApplySettings] Exposure={CameraParameters.Exposure}, Gain={CameraParameters.Gain}, FPS={CameraParameters.Fps}");
+
+                cameraService.SetExposure(CameraParameters.Exposure);
+                cameraService.SetGain(CameraParameters.Gain);
+                cameraService.SetFrameRate(CameraParameters.Fps);
+
+                CameraStatus = "Settings applied";
+                LogCameraConfigSnapshot("ApplySettings");
+                Log("[ApplySettings] Applied successfully");
+            }
+            catch (Exception ex)
+            {
+                Log($"[ApplySettings] Error: {ex.Message}");
+                CameraStatus = $"Error: {ex.Message}";
             }
         }
 
@@ -1473,6 +1380,128 @@ namespace singalUI.ViewModels
             }
         }
 
+        [RelayCommand]
+        private void LoadSelectedPatternConfig()
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(SelectedPatternConfig))
+                {
+                    Log("[LoadSelectedPatternConfig] No pattern config selected");
+                    return;
+                }
+
+                if (!_patternConfigFileMap.TryGetValue(SelectedPatternConfig, out var path) || !File.Exists(path))
+                {
+                    Log($"[LoadSelectedPatternConfig] Pattern config not found for selection: {SelectedPatternConfig}");
+                    return;
+                }
+
+                var json = File.ReadAllText(path);
+                var config = CameraConfig.FromJson(json);
+
+                if (config == null)
+                {
+                    Log("[LoadSelectedPatternConfig] Failed to parse config");
+                    return;
+                }
+
+                config.ApplyPatternToViewModel(this);
+                Log($"[LoadSelectedPatternConfig] Loaded pattern config: {SelectedPatternConfig}");
+            }
+            catch (Exception ex)
+            {
+                Log($"[LoadSelectedPatternConfig] Error: {ex.Message}");
+            }
+        }
+
+        private void LoadPatternConfigs()
+        {
+            try
+            {
+                var directory = EnsurePatternConfigDirectory();
+                AvailablePatternConfigs.Clear();
+                _patternConfigFileMap.Clear();
+
+                Log($"[LoadPatternConfigs] Searching directory: {directory}");
+                
+                if (!Directory.Exists(directory))
+                {
+                    Log($"[LoadPatternConfigs] Directory does not exist: {directory}");
+                    return;
+                }
+
+                var files = Directory.GetFiles(directory, "*.json");
+                Log($"[LoadPatternConfigs] Found {files.Length} JSON files");
+
+                foreach (var file in files.OrderBy(Path.GetFileName))
+                {
+                    Log($"[LoadPatternConfigs] Processing file: {file}");
+                    var displayName = GetPatternConfigDisplayName(file);
+                    var uniqueName = displayName;
+                    var duplicateIndex = 2;
+
+                    while (_patternConfigFileMap.ContainsKey(uniqueName))
+                    {
+                        uniqueName = $"{displayName} ({duplicateIndex})";
+                        duplicateIndex++;
+                    }
+
+                    _patternConfigFileMap[uniqueName] = file;
+                    AvailablePatternConfigs.Add(uniqueName);
+                    Log($"[LoadPatternConfigs] Added config: {uniqueName}");
+                }
+
+                if (AvailablePatternConfigs.Count > 0 && string.IsNullOrWhiteSpace(SelectedPatternConfig))
+                {
+                    SelectedPatternConfig = AvailablePatternConfigs[0];
+                }
+
+                Log($"[LoadPatternConfigs] Loaded {AvailablePatternConfigs.Count} pattern configs from {directory}");
+            }
+            catch (Exception ex)
+            {
+                Log($"[LoadPatternConfigs] Error: {ex.Message}");
+                Log($"[LoadPatternConfigs] Stack trace: {ex.StackTrace}");
+            }
+        }
+
+        private static string GetPatternConfigDisplayName(string filePath)
+        {
+            try
+            {
+                var json = File.ReadAllText(filePath);
+                var config = CameraConfig.FromJson(json);
+                if (!string.IsNullOrWhiteSpace(config?.Name))
+                {
+                    return config.Name;
+                }
+            }
+            catch
+            {
+                // Fall back to the filename if parsing fails.
+            }
+
+            return Path.GetFileNameWithoutExtension(filePath);
+        }
+
+        private string EnsurePatternConfigDirectory()
+        {
+            foreach (var candidate in PatternConfigDirectoryCandidates)
+            {
+                Log($"[EnsurePatternConfigDirectory] Checking: {candidate}");
+                if (Directory.Exists(candidate))
+                {
+                    Log($"[EnsurePatternConfigDirectory] Found: {candidate}");
+                    return candidate;
+                }
+            }
+
+            Log($"[EnsurePatternConfigDirectory] No existing directory found, creating: {PatternConfigDirectoryCandidates[0]}");
+            Directory.CreateDirectory(PatternConfigDirectoryCandidates[0]);
+            return PatternConfigDirectoryCandidates[0];
+        }
+
         // Stage Movement Commands
         [RelayCommand]
         private async Task MoveSingle()
@@ -1658,14 +1687,6 @@ namespace singalUI.ViewModels
 
         public void Dispose()
         {
-            try
-            {
-                _nanoMeasPreviewCts.Cancel();
-                _nanoMeasPreviewTask?.Wait(TimeSpan.FromSeconds(3));
-            }
-            catch { }
-
-            _nanoMeasPreviewCts.Dispose();
             CameraParameters.PropertyChanged -= OnCameraParametersPropertyChanged;
             StagePositionService.PositionChanged -= OnSharedStagePositionChanged;
         }

@@ -36,6 +36,7 @@
         <converters:SigmakokiVisibleInvertedConverter x:Key="SigmakokiVisibleInvertedConverter"/>
         <converters:ConnectionStatusColorConverter x:Key="ConnectionStatusColorConverter"/>
         <converters:SigmakokiRotationVisibleConverter x:Key="SigmakokiRotationVisibleConverter"/>
+        <converters:GreaterThanZeroConverter x:Key="GreaterThanZeroConverter"/>
     </Application.Resources>
 
     <Application.Styles>

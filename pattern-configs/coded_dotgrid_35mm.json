@@ -1,0 +1,13 @@
+{
+  "name": "coded_dotgrid_35mm",
+  "patternType": 1,
+  "checkerBoardColumns": 11,
+  "checkerBoardRows": 8,
+  "checkerBoardPitchX": 0.8,
+  "checkerBoardPitchY": 0.8,
+  "checkerBoardUnit": 0,
+  "patternHasCode": true,
+  "patternConfigType": "Coded Dot Grid",
+  "patternPitchSize": 0.8,
+  "patternCompatibleLenses": "35mm, 50mm"
+}

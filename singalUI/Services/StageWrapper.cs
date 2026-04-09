@@ -334,10 +334,25 @@ public partial class StageWrapper : ObservableObject
 
         // Get position BEFORE move
         double posBefore = Controller.GetPosition(axisIndex);
-        string unit = Controller is SigmakokiController ? "steps" : Controller is Hsc103RotationStageController ? "deg" : "mm";
-        Log($"Stage {Id}: Moving {axis} (index {axisIndex}) by {amount:F4} {unit}, current pos: {posBefore:F4}");
+        
+        // For Sigmakoki, amount is already in steps (converted by caller)
+        // For other controllers, amount is in mm
+        if (Controller is SigmakokiController)
+        {
+            Log($"Stage {Id}: Moving {axis} (index {axisIndex}) by {amount:F0} steps, current pos: {posBefore:F4} mm");
+        }
+        else
+        {
+            Log($"Stage {Id}: Moving {axis} (index {axisIndex}) by {amount:F4} mm, current pos: {posBefore:F4} mm");
+        }
 
         Controller.MoveRelative(axisIndex, amount);
+
+        // Small delay to ensure position is updated (especially for Sigmakoki)
+        if (Controller is SigmakokiController)
+        {
+            System.Threading.Thread.Sleep(100);
+        }
 
         // Get position AFTER move to verify
         double posAfter = Controller.GetPosition(axisIndex);

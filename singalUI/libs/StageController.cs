@@ -18,7 +18,11 @@ using PI;
     /// Get current position of an axis
     /// </summary>
     /// <param name="axisIndex">0-based axis index</param>
-    /// <returns>Current position in millimeters (linear) or degrees (rotation)</returns>
+    /// <returns>
+    /// Current position:
+    /// - PI Controller: nanometers (nm) for linear axes, microradians (µrad) for rotation axes
+    /// - SigmaKoki: micrometers (µm) for linear axes, degrees (°) for rotation axes
+    /// </returns>
     public abstract double GetPosition(int axisIndex);
 
     /// <summary>
@@ -56,6 +60,11 @@ internal static class StageSerialPortPlatform
     }
 }
 
+/// <summary>
+/// SigmaKoki controller implementation
+/// Units: MICROMETERS (µm) for linear axes, DEGREES (°) for rotation axes
+/// All position and movement values are in these units.
+/// </summary>
 public class SigmakokiController : StageController {
 
     private string[] axes = Array.Empty<string>();
