@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Hsc103Testbench</RootNamespace>
+    <AssemblyName>Hsc103Testbench</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="..\..\singalUI\PythonStage\**\*">
+      <Link>PythonStage\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\..\singalUI\libs\Hsc103RotationStageController.cs" Link="Hsc103RotationStageController.cs" />
+  </ItemGroup>
+</Project>

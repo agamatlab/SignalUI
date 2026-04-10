@@ -1,0 +1,33 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:singalUI.ViewModels"
+             x:Class="singalUI.Views.SettingsSliderControl"
+             x:DataType="vm:SettingsSliderViewModel">
+
+    <Design.DataContext>
+        <vm:SettingsSliderViewModel/>
+    </Design.DataContext>
+
+    <StackPanel Spacing="8">
+        <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Grid.Column="0"
+                       Text="{Binding Label}"
+                       FontSize="13"
+                       Foreground="#ffffff"/>
+            <TextBlock Grid.Column="1"
+                       Text="{Binding Value, StringFormat={}{0:F0}}"
+                       FontSize="13"
+                       FontWeight="Medium"
+                       Foreground="#ffffff"/>
+        </Grid>
+        <Border Background="#1a1a1a" CornerRadius="4" Padding="0,0,0,8" Margin="0,4,0,0">
+            <Slider Value="{Binding Value, Mode=TwoWay}"
+                    Minimum="{Binding Minimum}"
+                    Maximum="{Binding Maximum}"
+                    TickFrequency="{Binding TickFrequency}"
+                    Padding="0,0,0,15"
+                    Height="24"
+                    IsSnapToTickEnabled="{Binding SnapToTick}"/>
+        </Border>
+    </StackPanel>
+</UserControl>

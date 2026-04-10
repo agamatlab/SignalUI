@@ -1,0 +1,227 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <AssemblyName>NanoMeas</AssemblyName>
+        <OutputType>WinExe</OutputType>
+        <!-- Multi-target: On Windows build both net8.0 and net8.0-windows, on macOS/Linux only net8.0 -->
+        <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('Windows'))">net8.0;net8.0-windows10.0.19041.0</TargetFrameworks>
+        <TargetFramework Condition="!$([MSBuild]::IsOSPlatform('Windows'))">net8.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <!-- Use 64-bit PI DLL -->
+        <DefineConstants>X64</DefineConstants>
+    </PropertyGroup>
+
+    <!-- Windows-specific settings -->
+    <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-windows10.0.19041.0'">
+        <ApplicationManifest>app.manifest</ApplicationManifest>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('Windows')) == 'true'">
+        <DefineConstants>$(DefineConstants);WINDOWS_NATIVE_DEPS</DefineConstants>
+    </PropertyGroup>
+
+    <!-- PoseEstApi: singalUI/../../.. (nested SignalUI-dev) or singalUI/../.. (flat) -->
+    <PropertyGroup>
+        <_PoseEstNestedRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\..\PoseEstApi'))</_PoseEstNestedRoot>
+        <_PoseEstFlatRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\PoseEstApi'))</_PoseEstFlatRoot>
+        <PoseEstApiRoot Condition="Exists('$(_PoseEstNestedRoot)\NanoMeas_SDK_noblas_20260403\NanoMeas.dll')">$(_PoseEstNestedRoot)</PoseEstApiRoot>
+        <PoseEstApiRoot Condition="'$(PoseEstApiRoot)' == '' AND Exists('$(_PoseEstFlatRoot)\NanoMeas_SDK_noblas_20260403\NanoMeas.dll')">$(_PoseEstFlatRoot)</PoseEstApiRoot>
+        <PoseEstApiRoot Condition="'$(PoseEstApiRoot)' == ''">$(_PoseEstNestedRoot)</PoseEstApiRoot>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Folder Include="Models\" />
+        <Folder Include="Converters\" />
+        <Folder Include="Styles\" />
+        <Folder Include="Services\" />
+        <AvaloniaResource Include="Assets\**" />
+    </ItemGroup>
+
+    <!-- Copy pattern-configs directory to output -->
+    <ItemGroup>
+        <None Include="..\pattern-configs\*.json">
+            <Link>pattern-configs\%(Filename)%(Extension)</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Protobuf Include="Protos/stage_control.proto" GrpcServices="Client" />
+        <PackageReference Include="Avalonia" Version="11.3.11" />
+        <PackageReference Include="Avalonia.Desktop" Version="11.3.11" />
+        <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.11" />
+        <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.11" />
+        <!--Condition below is needed to remove Avalonia.Diagnostics package from build output in Release configuration.-->
+        <PackageReference Include="Avalonia.Diagnostics" Version="11.3.11">
+            <IncludeAssets Condition="'$(Configuration)' != 'Debug'">None</IncludeAssets>
+            <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
+        </PackageReference>
+        <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.1" />
+        <PackageReference Include="FluentIcons.Common" Version="2.0.317" />
+        <PackageReference Include="Google.Protobuf" Version="3.33.5" />
+        <PackageReference Include="Grpc.Net.Client" Version="2.76.0" />
+        <PackageReference Include="Grpc.Tools" Version="2.76.0">
+          <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+          <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
+        <PackageReference Include="HotAvalonia" Version="3.0.2" />
+        <!-- OpenCV for image processing -->
+        <PackageReference Include="OpenCvSharp4" Version="4.9.0.20240103" />
+        <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.9.0.20240103" Condition="'$(TargetFramework)' == 'net8.0-windows10.0.19041.0'" />
+        <PackageReference Include="OpenCvSharp4.runtime.osx.10.15-x64" Version="4.6.0.20230105" Condition="'$(TargetFramework)' == 'net8.0' AND $([MSBuild]::IsOSPlatform('OSX'))" />
+        <!-- System.Drawing.Common required by mv.impact.acquire -->
+        <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
+        <!-- Serial port communication for stage controller -->
+        <PackageReference Include="System.IO.Ports" Version="8.0.0" />
+    </ItemGroup>
+
+
+    <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows')) == 'true'">
+        <!-- Native DLLs - Copy to output directory root (DO NOT use <Reference> for native DLLs) -->
+        <None Include="libs\PoseEstApiWrapper.dll" Condition="Exists('libs\PoseEstApiWrapper.dll')">
+            <Link>PoseEstApiWrapper.dll</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Include="$(PoseEstApiRoot)\PoseEstApi\TestCppDll\PoseEstApiBridge.dll" Condition="Exists('$(PoseEstApiRoot)\PoseEstApi\TestCppDll\PoseEstApiBridge.dll')">
+            <Link>PoseEstApiBridge.dll</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Include="$(PoseEstApiRoot)\PoseEstApi\lib\opencv_world4130.dll" Condition="Exists('$(PoseEstApiRoot)\PoseEstApi\lib\opencv_world4130.dll')">
+            <Link>opencv_world4130.dll</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Include="$(PoseEstApiRoot)\PoseEstApi\TestCppDll\PoseEstApi.dll" Condition="Exists('$(PoseEstApiRoot)\PoseEstApi\TestCppDll\PoseEstApi.dll')">
+            <Link>PoseEstApi.dll</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Include="$(PoseEstApiRoot)\PoseEstApi\lib\libiomp5md.dll" Condition="Exists('$(PoseEstApiRoot)\PoseEstApi\lib\libiomp5md.dll')">
+            <Link>libiomp5md.dll</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <!-- HMF sequences: window_size 10 → 10+10_*.txt (CKB040040), 12 → 12+12_*.txt (CKB100100); see NanoMeasSdkNative.TryLoadArchiveHmfSequences -->
+        <None Include="$(PoseEstApiRoot)\code\10+10_G.txt" Condition="Exists('$(PoseEstApiRoot)\code\10+10_G.txt')">
+            <Link>Archive\10+10_G.txt</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Include="$(PoseEstApiRoot)\code\10+10_X.txt" Condition="Exists('$(PoseEstApiRoot)\code\10+10_X.txt')">
+            <Link>Archive\10+10_X.txt</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Include="$(PoseEstApiRoot)\code\10+10_Y.txt" Condition="Exists('$(PoseEstApiRoot)\code\10+10_Y.txt')">
+            <Link>Archive\10+10_Y.txt</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Include="$(PoseEstApiRoot)\code\12+12_G.txt" Condition="Exists('$(PoseEstApiRoot)\code\12+12_G.txt')">
+            <Link>Archive\12+12_G.txt</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Include="$(PoseEstApiRoot)\code\12+12_X.txt" Condition="Exists('$(PoseEstApiRoot)\code\12+12_X.txt')">
+            <Link>Archive\12+12_X.txt</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Include="$(PoseEstApiRoot)\code\12+12_Y.txt" Condition="Exists('$(PoseEstApiRoot)\code\12+12_Y.txt')">
+            <Link>Archive\12+12_Y.txt</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <!-- Native NanoMeas + fftw3 in NativeSDK\ — avoids NETSDK1152 clash with managed assembly NanoMeas.dll -->
+        <None Include="$(PoseEstApiRoot)\NanoMeas_SDK_noblas_20260403\NanoMeas.dll" Condition="Exists('$(PoseEstApiRoot)\NanoMeas_SDK_noblas_20260403\NanoMeas.dll')">
+            <Link>NativeSDK\NanoMeas.dll</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Include="$(PoseEstApiRoot)\NanoMeas_SDK_noblas_20260403\fftw3.dll" Condition="Exists('$(PoseEstApiRoot)\NanoMeas_SDK_noblas_20260403\fftw3.dll')">
+            <Link>NativeSDK\fftw3.dll</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Include="Archive\default_dll_parameters.txt">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <!-- PI GCS2 DLL - 64-bit version for x64 builds -->
+        <None Include="libs\PI_GCS2_DLL_x64.dll">
+            <Link>PI_GCS2_DLL_x64.dll</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <!-- PI GCS2 DLL - 32-bit version (backup) -->
+        <None Include="libs\PI_GCS2_DLL.dll">
+            <Link>PI_GCS2_DLL.dll</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <!-- HSC-103 rotation: Python + pyserial (see PythonStage/requirements.txt) -->
+        <None Include="PythonStage\**\*">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+    </ItemGroup>
+
+    <!-- NanoMeasCalib + bridge: optional until built; see PoseEstApi/RotPoseEstApi/native/RotCalibBridge -->
+    <Target Name="CopyRotCalibNative" AfterTargets="Build">
+        <PropertyGroup>
+            <_RotBridge>$(PoseEstApiRoot)\RotPoseEstApi\native\RotCalibBridge\bin\x64\$(Configuration)\RotCalibBridge.dll</_RotBridge>
+            <_NanoMeas>$(PoseEstApiRoot)\RotPoseEstApi\lib\NanoMeasCalib.dll</_NanoMeas>
+        </PropertyGroup>
+        <Copy Condition="Exists('$(_RotBridge)')"
+              SourceFiles="$(_RotBridge)"
+              DestinationFolder="$(OutputPath)"
+              SkipUnchangedFiles="true" />
+        <Copy Condition="Exists('$(_NanoMeas)')"
+              SourceFiles="$(_NanoMeas)"
+              DestinationFolder="$(OutputPath)"
+              SkipUnchangedFiles="true" />
+    </Target>
+
+    <!-- NanoMeas pose SDK: prefer noblas build, else secret; see PoseEstApi/NanoMeas_SDK_noblas_20260403/README.md -->
+    <Target Name="CopyNanoMeasSdkNative" AfterTargets="Build">
+        <PropertyGroup>
+            <_NanoMeasNoblas>$(PoseEstApiRoot)\NanoMeas_SDK_noblas_20260403</_NanoMeasNoblas>
+            <_NanoMeasSecret>$(PoseEstApiRoot)\NanoMeas_SDK_secret</_NanoMeasSecret>
+        </PropertyGroup>
+        <ItemGroup>
+            <_NanoMeasSdkFiles Include="$(_NanoMeasNoblas)\NanoMeas.dll" Condition="Exists('$(_NanoMeasNoblas)\NanoMeas.dll')" />
+            <_NanoMeasSdkFiles Include="$(_NanoMeasNoblas)\fftw3.dll" Condition="Exists('$(_NanoMeasNoblas)\fftw3.dll')" />
+            <_NanoMeasSdkFiles Include="$(_NanoMeasSecret)\NanoMeas.dll" Condition="!Exists('$(_NanoMeasNoblas)\NanoMeas.dll') AND Exists('$(_NanoMeasSecret)\NanoMeas.dll')" />
+            <_NanoMeasSdkFiles Include="$(_NanoMeasSecret)\fftw3.dll" Condition="!Exists('$(_NanoMeasNoblas)\fftw3.dll') AND Exists('$(_NanoMeasSecret)\fftw3.dll')" />
+        </ItemGroup>
+        <Copy SourceFiles="@(_NanoMeasSdkFiles)"
+              DestinationFolder="$(OutputPath)NativeSDK\"
+              SkipUnchangedFiles="true" />
+    </Target>
+    
+    <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows')) == 'true'">
+        <!-- Matrix Vision local assemblies -->
+        <Reference Include="mv.impact.acquire">
+            <HintPath>C:\Program Files\MATRIX VISION\mvIMPACT Acquire\bin\netstandard2.0\mv.impact.acquire.dll</HintPath>
+            <Private>true</Private>
+        </Reference>
+    </ItemGroup>
+
+    <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows')) == 'true'">
+        <!-- Copy Matrix Vision native DLLs to output -->
+        <None Include="C:\Program Files\MATRIX VISION\mvIMPACT Acquire\bin\x64\**\mv*.dll" Link="MatrixVision\%(RecursiveDir)%(Filename)%(Extension)">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Include="C:\Program Files\MATRIX VISION\mvIMPACT Acquire\bin\x64\mvGenTLProducer.cti">
+            <Link>mvGenTLProducer.cti</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+    </ItemGroup>
+
+    <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows')) != 'true'">
+      <Compile Remove="Services/Services/MatrixVisionCameraService.cs" />
+    </ItemGroup>
+
+    <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows')) == 'true'">
+      <Compile Remove="Services/Services/MatrixVisionCameraService.NonWindows.cs" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Compile Update="Views\ConfigView.axaml.cs">
+        <DependentUpon>ConfigView.axaml</DependentUpon>
+        <SubType>Code</SubType>
+      </Compile>
+      <Compile Update="libs\Sigmakoki.cs">
+        <DependentUpon>StageController.cs</DependentUpon>
+      </Compile>
+      <Compile Update="libs\Hsc103RotationStageController.cs">
+        <DependentUpon>StageController.cs</DependentUpon>
+      </Compile>
+    </ItemGroup>
+</Project>

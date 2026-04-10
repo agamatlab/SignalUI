@@ -1,0 +1,37 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:singalUI.ViewModels"
+             x:Class="singalUI.Views.TwoColumnInputControl"
+             x:DataType="vm:TwoColumnInputViewModel">
+
+    <Design.DataContext>
+        <vm:TwoColumnInputViewModel/>
+    </Design.DataContext>
+
+    <Grid ColumnDefinitions="*,*">
+        <StackPanel Grid.Column="0" Spacing="4">
+            <TextBlock Text="{Binding LeftLabel}"
+                       FontSize="12"
+                       Foreground="#ffffff"/>
+            <NumericUpDown Value="{Binding LeftValue, Mode=TwoWay}"
+                           Minimum="{Binding LeftMin}"
+                           Maximum="{Binding LeftMax}"
+                           Increment="{Binding LeftIncrement}"
+                           FormatString="{Binding LeftFormat}"
+                           FontSize="13"
+                           HorizontalAlignment="Stretch"/>
+        </StackPanel>
+        <StackPanel Grid.Column="1" Spacing="4" Margin="8,0,0,0">
+            <TextBlock Text="{Binding RightLabel}"
+                       FontSize="12"
+                       Foreground="#ffffff"/>
+            <NumericUpDown Value="{Binding RightValue, Mode=TwoWay}"
+                           Minimum="{Binding RightMin}"
+                           Maximum="{Binding RightMax}"
+                           Increment="{Binding RightIncrement}"
+                           FormatString="{Binding RightFormat}"
+                           FontSize="13"
+                           HorizontalAlignment="Stretch"/>
+        </StackPanel>
+    </Grid>
+</UserControl>

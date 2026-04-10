@@ -1,0 +1,63 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="singalUI.App"
+             xmlns:local="using:singalUI"
+             xmlns:converters="using:singalUI.Converters"
+             RequestedThemeVariant="Default">
+
+    <Application.DataTemplates>
+        <local:ViewLocator/>
+    </Application.DataTemplates>
+
+    <Application.Resources>
+        <converters:AxisToIndexConverter x:Key="AxisToIndexConverter"/>
+        <converters:BinningConverter x:Key="BinningConverter"/>
+        <converters:BinningToIndexConverter x:Key="BinningToIndexConverter"/>
+        <converters:ConnectedColorConverter x:Key="ConnectedColorConverter"/>
+        <converters:EnumToBoolConverter x:Key="EnumToBoolConverter"/>
+        <converters:SamplingModeVisibleConverter x:Key="SamplingModeVisibleConverter"/>
+        <converters:TriggeredModeVisibleConverter x:Key="TriggeredModeVisibleConverter"/>
+        <converters:InverseBoolConverter x:Key="InverseBoolConverter"/>
+        <converters:FocusLevelColorConverter x:Key="FocusLevelColorConverter"/>
+        <converters:FocusLevelWidthConverter x:Key="FocusLevelWidthConverter"/>
+        <converters:FocusLevelStarSplitConverter x:Key="FocusLevelStarSplitConverter"/>
+        <converters:ControllerToIndexConverter x:Key="ControllerToIndexConverter"/>
+        <converters:ControlModeVisibleConverter x:Key="ControlModeVisibleConverter"/>
+        <converters:UnitToIndexConverter x:Key="UnitToIndexConverter"/>
+        <converters:CompareToZeroConverter x:Key="CompareToZeroConverter"/>
+        <converters:BoolToArrowConverter x:Key="BoolToArrowConverter"/>
+        <converters:ModeLabelConverter x:Key="ModeLabelConverter"/>
+        <converters:StatusColorConverter x:Key="StatusColorConverter"/>
+        <converters:StageHardwareToIndexConverter x:Key="StageHardwareToIndexConverter"/>
+        <converters:AxesArrayToStringConverter x:Key="AxesArrayToStringConverter"/>
+        <converters:SigmakokiVisibleConverter x:Key="SigmakokiVisibleConverter"/>
+        <converters:SigmakokiControllerToIndexConverter x:Key="SigmakokiControllerToIndexConverter"/>
+        <converters:StageHardwareDisplayNameConverter x:Key="StageHardwareDisplayNameConverter"/>
+        <converters:SigmakokiVisibleInvertedConverter x:Key="SigmakokiVisibleInvertedConverter"/>
+        <converters:ConnectionStatusColorConverter x:Key="ConnectionStatusColorConverter"/>
+        <converters:SigmakokiRotationVisibleConverter x:Key="SigmakokiRotationVisibleConverter"/>
+        <converters:GreaterThanZeroConverter x:Key="GreaterThanZeroConverter"/>
+    </Application.Resources>
+
+    <Application.Styles>
+        <FluentTheme />
+        <Style Selector="TextBlock">
+            <Setter Property="Foreground" Value="#ffffff"/>
+        </Style>
+        <Style Selector="Button">
+            <Setter Property="Background" Value="#404040"/>
+            <Setter Property="BorderBrush" Value="#606060"/>
+            <Setter Property="Foreground" Value="#ffffff"/>
+        </Style>
+        <Style Selector="Button:disabled">
+            <Setter Property="Background" Value="#2f2f2f"/>
+            <Setter Property="BorderBrush" Value="#4a4a4a"/>
+            <Setter Property="Foreground" Value="#ffffff"/>
+            <Setter Property="Opacity" Value="1"/>
+        </Style>
+        <Style Selector="Button:disabled /template/ ContentPresenter">
+            <Setter Property="TextElement.Foreground" Value="#ffffff"/>
+            <Setter Property="Opacity" Value="1"/>
+        </Style>
+    </Application.Styles>
+</Application>

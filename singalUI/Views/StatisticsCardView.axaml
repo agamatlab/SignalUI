@@ -1,0 +1,53 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:singalUI.ViewModels"
+             x:Class="singalUI.Views.StatisticsCardView"
+             x:DataType="vm:StatisticsCardViewModel">
+
+    <Design.DataContext>
+        <vm:StatisticsCardViewModel/>
+    </Design.DataContext>
+
+    <StackPanel Spacing="8">
+        <ItemsControl ItemsSource="{Binding StatItems}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <Grid ColumnDefinitions="Auto,*">
+                        <TextBlock Grid.Column="0"
+                                   Text="{Binding Label}"
+                                   FontSize="14"
+                                   Foreground="#ffffff"
+                                   Margin="0,0,12,0"/>
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding Value}"
+                                   FontSize="14"
+                                   Foreground="#ffffff"/>
+                    </Grid>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <!-- Overall Stat (if present) -->
+        <Border IsVisible="{Binding HasOverall}"
+                Background="#303030"
+                BorderBrush="#505050"
+                BorderThickness="1"
+                CornerRadius="6"
+                Padding="12"
+                Margin="0,8,0,0">
+            <Grid ColumnDefinitions="Auto,*">
+                <TextBlock Grid.Column="0"
+                           Text="{Binding OverallLabel}"
+                           FontSize="14"
+                           FontWeight="SemiBold"
+                           Foreground="#ffffff"
+                           Margin="0,0,12,0"/>
+                <TextBlock Grid.Column="1"
+                           Text="{Binding OverallValue}"
+                           FontSize="14"
+                           FontWeight="SemiBold"
+                           Foreground="#ffffff"/>
+            </Grid>
+        </Border>
+    </StackPanel>
+</UserControl>
