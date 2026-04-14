@@ -4,7 +4,7 @@
         xmlns:v="using:singalUI.Views"
         x:Class="singalUI.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
-        Title="NanoMeas Calibrator 0.7.0"
+        Title="NanoMeas Calibrator 0.8.0"
         Width="1400"
         Height="900"
         MinWidth="800"
@@ -109,7 +109,7 @@
 
             <!-- Center Title -->
             <TextBlock Grid.Column="1"
-                       Text="NanoMeas Calibrator 0.7.0"
+                       Text="NanoMeas Calibrator 0.8.0"
                        Foreground="#666666"
                        FontFamily="Consolas,Courier New"
                        FontSize="11"

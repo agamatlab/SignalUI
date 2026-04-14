@@ -21,7 +21,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _cameraReady = true;
 
     [ObservableProperty]
-    private string _applicationVersion = "NanoMeas Calibrator 0.7.0";
+    private string _applicationVersion = "NanoMeas Calibrator 0.8.0";
 
     [ObservableProperty]
     private string _statusBarText = "System Ready";
@@ -122,6 +122,6 @@ public partial class MainWindowViewModel : ViewModelBase
         });
 
         if (picks.Count > 0)
-            Console.WriteLine($"[GlobalLoad] Path chosen: {picks[0].Path.LocalPath} (import wiring TBD)");
+            await singalUI.App.SharedAnalysisViewModel.LoadFromGlobalMenuAsync(picks[0].Path.LocalPath);
     }
 }

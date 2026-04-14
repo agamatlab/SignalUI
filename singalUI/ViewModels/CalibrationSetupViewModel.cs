@@ -10,6 +10,7 @@ using System.Linq;
 using Avalonia.Controls;
 using System.IO;
 using System.Diagnostics;
+using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -196,6 +197,8 @@ namespace singalUI.ViewModels
 
         // Position polling timer
         private Timer? _positionPollTimer;
+        private CancellationTokenSource? _samplingSequenceCts;
+        private readonly List<PoseEstimationResult> _capturedPoseResults = new();
 
         public CalibrationSetupViewModel()
         {
@@ -490,6 +493,7 @@ namespace singalUI.ViewModels
         /// </summary>
         public void Cleanup()
         {
+            _samplingSequenceCts?.Cancel();
             foreach (var wrapper in StageWrappers)
             {
                 wrapper.PropertyChanged -= OnWrapperPropertyChanged;
@@ -578,6 +582,12 @@ namespace singalUI.ViewModels
             _sequenceEndedByUserAbort = false;
             _sequenceAbortUiStopped = false;
             UpdateAbortSequenceButtonChrome();
+
+            if (SamplingMode != SamplingMode.Control)
+            {
+                await RunPoseSamplingSequenceAsync();
+                return;
+            }
 
             var enabledAxes = MotionRows.Where(r => r.IsEnabled).ToList();
             if (enabledAxes.Count == 0)
@@ -702,6 +712,274 @@ namespace singalUI.ViewModels
             }
         }
 
+        private async Task RunPoseSamplingSequenceAsync()
+        {
+            var cameraVm = CameraSetupViewModel.Instance;
+            if (cameraVm == null)
+            {
+                MovementStatus = "Camera tab is not initialized";
+                Log("[SamplingSequence] CameraSetupViewModel.Instance is null");
+                return;
+            }
+
+            _samplingSequenceCts?.Cancel();
+            _samplingSequenceCts = new CancellationTokenSource();
+            var token = _samplingSequenceCts.Token;
+            _capturedPoseResults.Clear();
+
+            int targetPoints = ResolveTargetPoints();
+            double timedIntervalSec = Math.Max(0.02, TimedInterval);
+            int triggeredDelayMs = Math.Max(0, (int)Math.Round(TriggeredDelay));
+            long lastPoseFrameSeq = -1;
+            string csvPath = BuildSequenceCsvPath();
+
+            IsSequenceRunning = true;
+            MovementStatus = $"Sampling pose: 0/{targetPoints}";
+            Log($"[SamplingSequence] START mode={SamplingMode}, targetPoints={targetPoints}, csv={csvPath}");
+
+            try
+            {
+                for (int step = 1; step <= targetPoints; step++)
+                {
+                    if (!IsSequenceRunning || token.IsCancellationRequested)
+                    {
+                        MovementStatus = "Sequence aborted";
+                        Log("[SamplingSequence] Aborted by user");
+                        break;
+                    }
+
+                    if (SamplingMode == SamplingMode.Timed && step > 1)
+                    {
+                        await Task.Delay(TimeSpan.FromSeconds(timedIntervalSec), token);
+                    }
+
+                    if (SamplingMode == SamplingMode.Triggered)
+                    {
+                        bool gotFrameAdvance = await WaitForNextPoseFrameAsync(cameraVm, lastPoseFrameSeq, token);
+                        if (!gotFrameAdvance)
+                        {
+                            Log("[SamplingSequence] Trigger wait timeout, using latest pose snapshot");
+                        }
+
+                        if (triggeredDelayMs > 0)
+                            await Task.Delay(triggeredDelayMs, token);
+                    }
+
+                    bool success = cameraVm.TryGetLatestPoseSnapshot(out var pose, out var poseFrameSeq, out var poseTsUtc)
+                                   && pose.Length >= 6;
+                    if (success)
+                        lastPoseFrameSeq = Math.Max(lastPoseFrameSeq, poseFrameSeq);
+
+                    var stage = CaptureStagePoseSnapshot();
+                    var result = BuildPoseEstimationResult(step, stage, pose, poseTsUtc, success);
+                    _capturedPoseResults.Add(result);
+
+                    if (result.Success)
+                    {
+                        PushSampleToVisualization(_capturedPoseResults);
+                    }
+
+                    MovementStatus = $"Sampling pose: {step}/{targetPoints}";
+                    Log($"[SamplingSequence] Step {step}/{targetPoints}, success={result.Success}, frame={poseFrameSeq}");
+                }
+
+                if (_capturedPoseResults.Count > 0)
+                {
+                    WritePoseResultsCsv(csvPath, _capturedPoseResults);
+                    MovementStatus = $"Sampling complete ({_capturedPoseResults.Count} points)";
+                    Log($"[SamplingSequence] COMPLETE points={_capturedPoseResults.Count}, csv={csvPath}");
+                }
+                else
+                {
+                    MovementStatus = "No sample was captured";
+                    Log("[SamplingSequence] No sample captured");
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                MovementStatus = "Sequence aborted";
+                Log("[SamplingSequence] Canceled");
+            }
+            catch (Exception ex)
+            {
+                MovementStatus = $"Sampling error: {ex.Message}";
+                Log($"[SamplingSequence] Error: {ex.Message}");
+            }
+            finally
+            {
+                IsSequenceRunning = false;
+                if (!_sequenceEndedByUserAbort)
+                    _sequenceAbortUiStopped = false;
+                UpdateAbortSequenceButtonChrome();
+            }
+        }
+
+        private int ResolveTargetPoints()
+        {
+            return SamplingMode switch
+            {
+                SamplingMode.Manual => 1,
+                SamplingMode.Timed => TimedPoints > 0
+                    ? TimedPoints
+                    : Math.Max(1, (int)Math.Round(Math.Max(0.1, TimedDuration) / Math.Max(0.02, TimedInterval))),
+                SamplingMode.Triggered => Math.Max(1, TimedPoints),
+                _ => 1
+            };
+        }
+
+        private async Task<bool> WaitForNextPoseFrameAsync(CameraSetupViewModel cameraVm, long previousFrameSeq, CancellationToken token)
+        {
+            var timeout = Stopwatch.StartNew();
+            while (!token.IsCancellationRequested && timeout.ElapsedMilliseconds < 5000)
+            {
+                if (cameraVm.TryGetLatestPoseSnapshot(out _, out var currentSeq, out _) && currentSeq > previousFrameSeq)
+                    return true;
+                await Task.Delay(20, token);
+            }
+
+            return false;
+        }
+
+        private static (double stageX, double stageY, double stageZ, double stageRx, double stageRy, double stageRz) CaptureStagePoseSnapshot()
+        {
+            static double ReadAxisDisplay(AxisType axisType)
+            {
+                var wrapper = StageManager.GetWrapperForAxis(axisType);
+                if (wrapper == null || !wrapper.IsConnected)
+                    return 0;
+
+                double controllerValue = wrapper.GetAxisPosition(axisType);
+                return axisType is AxisType.X or AxisType.Y or AxisType.Z
+                    ? controllerValue * 1000.0
+                    : controllerValue;
+            }
+
+            return (
+                ReadAxisDisplay(AxisType.X),
+                ReadAxisDisplay(AxisType.Y),
+                ReadAxisDisplay(AxisType.Z),
+                ReadAxisDisplay(AxisType.Rx),
+                ReadAxisDisplay(AxisType.Ry),
+                ReadAxisDisplay(AxisType.Rz));
+        }
+
+        private static PoseEstimationResult BuildPoseEstimationResult(
+            int step,
+            (double stageX, double stageY, double stageZ, double stageRx, double stageRy, double stageRz) stage,
+            double[] pose,
+            DateTime poseTsUtc,
+            bool success)
+        {
+            const double radToDeg = 180.0 / Math.PI;
+            double estX = success ? pose[3] : 0;
+            double estY = success ? pose[4] : 0;
+            double estZ = success ? pose[5] : 0;
+            double estRx = success ? pose[0] : 0;
+            double estRy = success ? pose[1] : 0;
+            double estRz = success ? pose[2] : 0;
+
+            // Stage X/Y/Z are in um while DLL translation is in mm.
+            double errorXUm = estX * 1000.0 - stage.stageX;
+            double errorYUm = estY * 1000.0 - stage.stageY;
+            double errorZUm = estZ * 1000.0 - stage.stageZ;
+            double errorRxDeg = estRx * radToDeg - stage.stageRx;
+            double errorRyDeg = estRy * radToDeg - stage.stageRy;
+            double errorRzDeg = estRz * radToDeg - stage.stageRz;
+
+            return new PoseEstimationResult
+            {
+                StepNumber = step,
+                Timestamp = poseTsUtc == DateTime.MinValue ? DateTime.Now : poseTsUtc.ToLocalTime(),
+                ImagePath = string.Empty,
+                StageX = stage.stageX,
+                StageY = stage.stageY,
+                StageZ = stage.stageZ,
+                StageRx = stage.stageRx,
+                StageRy = stage.stageRy,
+                StageRz = stage.stageRz,
+                EstimatedX = estX,
+                EstimatedY = estY,
+                EstimatedZ = estZ,
+                EstimatedRx = estRx,
+                EstimatedRy = estRy,
+                EstimatedRz = estRz,
+                ErrorX = errorXUm,
+                ErrorY = errorYUm,
+                ErrorZ = errorZUm,
+                ErrorRx = errorRxDeg,
+                ErrorRy = errorRyDeg,
+                ErrorRz = errorRzDeg,
+                Success = success,
+                ErrorMessage = success ? string.Empty : "No valid pose snapshot from camera"
+            };
+        }
+
+        private static string BuildSequenceCsvPath()
+        {
+            string root = Path.Combine(AppContext.BaseDirectory, "storage", "pose_sequences");
+            Directory.CreateDirectory(root);
+            return Path.Combine(root, $"stage_sequence_{DateTime.Now:yyyyMMdd_HHmmss}.csv");
+        }
+
+        private static void WritePoseResultsCsv(string path, IReadOnlyList<PoseEstimationResult> results)
+        {
+            var iv = CultureInfo.InvariantCulture;
+            var lines = new List<string>(results.Count + 1)
+            {
+                "StepNumber,Timestamp,ImagePath,StageX,StageY,StageZ,StageRx,StageRy,StageRz,EstimatedX,EstimatedY,EstimatedZ,EstimatedRx,EstimatedRy,EstimatedRz,ErrorX,ErrorY,ErrorZ,ErrorRx,ErrorRy,ErrorRz,Success,ErrorMessage"
+            };
+
+            foreach (var r in results)
+            {
+                string imagePath = $"\"{r.ImagePath.Replace("\"", "\"\"")}\"";
+                string errorMessage = $"\"{r.ErrorMessage.Replace("\"", "\"\"")}\"";
+                lines.Add(string.Join(",",
+                    r.StepNumber.ToString(iv),
+                    r.Timestamp.ToString("O", iv),
+                    imagePath,
+                    r.StageX.ToString("G17", iv),
+                    r.StageY.ToString("G17", iv),
+                    r.StageZ.ToString("G17", iv),
+                    r.StageRx.ToString("G17", iv),
+                    r.StageRy.ToString("G17", iv),
+                    r.StageRz.ToString("G17", iv),
+                    r.EstimatedX.ToString("G17", iv),
+                    r.EstimatedY.ToString("G17", iv),
+                    r.EstimatedZ.ToString("G17", iv),
+                    r.EstimatedRx.ToString("G17", iv),
+                    r.EstimatedRy.ToString("G17", iv),
+                    r.EstimatedRz.ToString("G17", iv),
+                    r.ErrorX.ToString("G17", iv),
+                    r.ErrorY.ToString("G17", iv),
+                    r.ErrorZ.ToString("G17", iv),
+                    r.ErrorRx.ToString("G17", iv),
+                    r.ErrorRy.ToString("G17", iv),
+                    r.ErrorRz.ToString("G17", iv),
+                    r.Success ? "True" : "False",
+                    errorMessage));
+            }
+
+            File.WriteAllLines(path, lines);
+        }
+
+        private static void PushSampleToVisualization(IReadOnlyList<PoseEstimationResult> results)
+        {
+            var vm = AnalysisViewModel.Instance ?? App.SharedAnalysisViewModel;
+            var dataForVisualization = results
+                .Where(r => r.Success)
+                .Select(r => (
+                    r.ErrorX, r.ErrorY, r.ErrorZ,
+                    r.ErrorRx, r.ErrorRy, r.ErrorRz,
+                    r.StageX, r.StageY, r.StageZ,
+                    r.StageRx, r.StageRy, r.StageRz,
+                    r.EstimatedX, r.EstimatedY, r.EstimatedZ,
+                    r.EstimatedRx, r.EstimatedRy, r.EstimatedRz))
+                .ToList();
+
+            if (dataForVisualization.Count > 0)
+                vm.LoadPoseEstimationResults(dataForVisualization);
+        }
+
         [RelayCommand]
         private void AbortSequence()
         {
@@ -709,6 +987,7 @@ namespace singalUI.ViewModels
             {
                 _sequenceEndedByUserAbort = true;
                 _sequenceAbortUiStopped = true;
+                _samplingSequenceCts?.Cancel();
                 Log("[AbortSequence] Aborting sequence...");
                 MovementStatus = "Aborting...";
                 IsSequenceRunning = false;
@@ -719,6 +998,7 @@ namespace singalUI.ViewModels
         [RelayCommand]
         private void SamplePoint()
         {
+            _ = RunPoseSamplingSequenceAsync();
         }
 
         // Helper methods for StageManager integration (replaces gRPC)

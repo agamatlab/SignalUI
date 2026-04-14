@@ -124,9 +124,9 @@
             <Link>Archive\12+12_Y.txt</Link>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
-        <!-- Native NanoMeas + fftw3 in NativeSDK\ — avoids NETSDK1152 clash with managed assembly NanoMeas.dll -->
+        <!-- Native NanoMeas + fftw3 in NativeSDK\; rename to NanoMeasNative.dll to avoid managed/ native name collision -->
         <None Include="$(PoseEstApiRoot)\NanoMeas_SDK_noblas_20260403\NanoMeas.dll" Condition="Exists('$(PoseEstApiRoot)\NanoMeas_SDK_noblas_20260403\NanoMeas.dll')">
-            <Link>NativeSDK\NanoMeas.dll</Link>
+            <Link>NativeSDK\NanoMeasNative.dll</Link>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
         <None Include="$(PoseEstApiRoot)\NanoMeas_SDK_noblas_20260403\fftw3.dll" Condition="Exists('$(PoseEstApiRoot)\NanoMeas_SDK_noblas_20260403\fftw3.dll')">

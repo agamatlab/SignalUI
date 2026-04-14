@@ -27,6 +27,14 @@ namespace singalUI.ViewModels
 {
     public partial class CameraSetupViewModel : ViewModelBase
     {
+        public static CameraSetupViewModel? Instance { get; private set; }
+
+        private readonly object _latestPoseLock = new();
+        private readonly double[] _latestPoseForSharing = new double[6];
+        private long _latestPoseFrameSeqForSharing;
+        private DateTime _latestPoseTimestampUtc = DateTime.MinValue;
+        private bool _latestPoseValidForSharing;
+
         private readonly DispatcherTimer _cameraFrameTimer;
         private readonly DispatcherTimer _liveCameraApplyTimer;
         private readonly CancellationTokenSource _nanoMeasPreviewCts = new();
@@ -287,6 +295,7 @@ namespace singalUI.ViewModels
 
         public CameraSetupViewModel()
         {
+            Instance = this;
             Console.WriteLine("[CameraSetupViewModel] Constructor START");
             // Initialize logging
             File.WriteAllText(_logFile, $"=== Log started at {DateTime.Now:O} ===\n");
@@ -387,6 +396,10 @@ namespace singalUI.ViewModels
         {
             IntPtr handle = IntPtr.Zero;
             int lastW = 0, lastH = 0, lastWindowN = -1;
+            string? lastLoggedLoadedDllPath = null;
+            int missingCreateEntryErrorCount = 0;
+            DateTime lastMissingCreateSummaryUtc = DateTime.MinValue;
+            bool missingCreateSuppressed = false;
             var poseBuf = new double[6];
             var poseAbsBuf = new double[6];
             Thread.Sleep(500);
@@ -395,6 +408,15 @@ namespace singalUI.ViewModels
                 try
                 {
                     NanoMeasSdkNative.EnsureNanoMeasNativeReady();
+                    string loadedDllPath = NanoMeasSdkNative.GetLoadedNanoMeasDllPath() ?? "(null)";
+                    string loadedDllCategory = NanoMeasSdkNative.GetLoadedNanoMeasDllCategory() ?? "(unknown)";
+                    if (!string.Equals(loadedDllPath, lastLoggedLoadedDllPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        lastLoggedLoadedDllPath = loadedDllPath;
+                        LogToError($"[NanoMeas preview] Loaded DLL path: {loadedDllPath} (source={loadedDllCategory})");
+                        if (!loadedDllPath.Contains(@"\NativeSDK\", StringComparison.OrdinalIgnoreCase))
+                            LogToError("[NanoMeas preview] WARNING: Loaded DLL is not under NativeSDK. A wrong NanoMeas.dll may be used.");
+                    }
                     var cfg = App.SharedConfigViewModel;
 
                     var camSvc = App.CameraService;
@@ -520,6 +542,11 @@ namespace singalUI.ViewModels
                     NanoMeasSdkNative.CopyPipelinePoseArrays(ref res, poseBuf, poseAbsBuf);
                     double[] p = SelectPoseForDisplay(poseBuf, poseAbsBuf, res.decode_success);
                     PostPosePreviewTexts(p);
+
+                    // Success path: clear repeated entry-point suppression state.
+                    missingCreateEntryErrorCount = 0;
+                    missingCreateSuppressed = false;
+                    lastMissingCreateSummaryUtc = DateTime.MinValue;
                 }
                 catch (OperationCanceledException)
                 {
@@ -532,7 +559,41 @@ namespace singalUI.ViewModels
                 }
                 catch (Exception ex)
                 {
-                    LogToError("[NanoMeas preview] " + ex.Message);
+                    bool isMissingCreateEntry =
+                        ex is EntryPointNotFoundException ||
+                        ex.Message.Contains("NanoMeas_Create", StringComparison.OrdinalIgnoreCase);
+
+                    if (isMissingCreateEntry)
+                    {
+                        missingCreateEntryErrorCount++;
+
+                        if (missingCreateEntryErrorCount <= 3)
+                        {
+                            LogToError("[NanoMeas preview] " + ex.Message);
+                            if (missingCreateEntryErrorCount == 3)
+                            {
+                                LogToError("[NanoMeas preview] Repeated NanoMeas_Create entry-point errors detected; suppressing repetitive lines.");
+                            }
+                        }
+                        else
+                        {
+                            var nowUtc = DateTime.UtcNow;
+                            if (!missingCreateSuppressed || (nowUtc - lastMissingCreateSummaryUtc).TotalSeconds >= 10)
+                            {
+                                missingCreateSuppressed = true;
+                                lastMissingCreateSummaryUtc = nowUtc;
+                                LogToError($"[NanoMeas preview] NanoMeas_Create entry-point error repeated {missingCreateEntryErrorCount} times (suppressed).");
+                            }
+                        }
+                    }
+                    else
+                    {
+                        missingCreateEntryErrorCount = 0;
+                        missingCreateSuppressed = false;
+                        lastMissingCreateSummaryUtc = DateTime.MinValue;
+                        LogToError("[NanoMeas preview] " + ex.Message);
+                    }
+
                     Thread.Sleep(600);
                 }
             }
@@ -576,6 +637,13 @@ namespace singalUI.ViewModels
             double rxDeg = snap[0] * radToDeg;
             double ryDeg = snap[1] * radToDeg;
             double rzDeg = snap[2] * radToDeg;
+            lock (_latestPoseLock)
+            {
+                Array.Copy(snap, _latestPoseForSharing, 6);
+                _latestPoseFrameSeqForSharing = _latestFrameSeq;
+                _latestPoseTimestampUtc = DateTime.UtcNow;
+                _latestPoseValidForSharing = !noPose;
+            }
             Dispatcher.UIThread.Post(() =>
             {
                 if (noPose)
@@ -710,8 +778,16 @@ namespace singalUI.ViewModels
                 FrameCount = seq;
                 _lastRenderedSeq = seq;
 
-                // Simulate focus level fluctuation
-                FocusLevel = 65 + _random.NextDouble() * 25;
+                // Real focus metric from current grayscale frame.
+                if (CameraConnected)
+                {
+                    var (normalized, _) = FocusCalculator.CalculateFFTFocus(buffer, width, height, downsampleFactor: 4);
+                    FocusLevel = normalized;
+                }
+                else
+                {
+                    FocusLevel = 0;
+                }
             }
             catch (Exception ex)
             {
@@ -867,8 +943,31 @@ namespace singalUI.ViewModels
                     CameraResolutionText = "";
                     _lastRenderedSeq = -1;
                     FocusLevel = 0;
+                    ClearSharedPoseSnapshot();
                 }
             });
+        }
+
+        public bool TryGetLatestPoseSnapshot(out double[] pose, out long frameSeq, out DateTime timestampUtc)
+        {
+            lock (_latestPoseLock)
+            {
+                pose = (double[])_latestPoseForSharing.Clone();
+                frameSeq = _latestPoseFrameSeqForSharing;
+                timestampUtc = _latestPoseTimestampUtc;
+                return _latestPoseValidForSharing;
+            }
+        }
+
+        private void ClearSharedPoseSnapshot()
+        {
+            lock (_latestPoseLock)
+            {
+                Array.Clear(_latestPoseForSharing, 0, _latestPoseForSharing.Length);
+                _latestPoseFrameSeqForSharing = 0;
+                _latestPoseTimestampUtc = DateTime.MinValue;
+                _latestPoseValidForSharing = false;
+            }
         }
 
         private void NotifyCurrentPositionChanged()
@@ -1007,9 +1106,7 @@ namespace singalUI.ViewModels
                 // Update reprojection error
                 ReprojectionError = 0.020 + _random.NextDouble() * 0.01;
 
-                if (CameraConnected)
-                    FocusLevel = 65 + _random.NextDouble() * 25;
-                else
+                if (!CameraConnected)
                     FocusLevel = 0;
             });
         }
@@ -1087,7 +1184,6 @@ namespace singalUI.ViewModels
                 Fps = 30,
                 Binning = BinningMode.Bin1x1
             };
-            FocusLevel = 95;
         }
 
         [RelayCommand]
