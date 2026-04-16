@@ -252,6 +252,42 @@ namespace singalUI.Services
         }
 
         /// <summary>
+        /// Reconnect to the camera (disconnect and reinitialize)
+        /// </summary>
+        public bool Reconnect()
+        {
+            try
+            {
+                StatusChanged?.Invoke("Reconnecting...");
+                
+                // Stop acquisition if running
+                StopAcquisition();
+                
+                // Disconnect
+                if (_device != null)
+                {
+                    _device.close();
+                    _device = null;
+                }
+                
+                _functionInterface = null;
+                IsConnected = false;
+                ConnectionChanged?.Invoke(false);
+                
+                // Wait a bit for cleanup
+                Thread.Sleep(500);
+                
+                // Reinitialize
+                return Initialize();
+            }
+            catch (Exception ex)
+            {
+                StatusChanged?.Invoke($"Reconnect failed: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
         /// Apply GenICam settings matching Python/Harvesters version
         /// Python: nm = ia.remote_device.node_map
         /// </summary>
@@ -410,21 +446,63 @@ namespace singalUI.Services
                 lock (_lock)
                 {
                     var acqCtrl = new AcquisitionControl(_device);
+                    
+                    // Ensure ExposureAuto is Off
                     if (acqCtrl.exposureAuto.isValid)
                     {
-                        try { acqCtrl.exposureAuto.write(0); } catch { }
+                        try 
+                        { 
+                            acqCtrl.exposureAuto.write(0); // 0 = Off
+                            Console.WriteLine($"[SetExposure] ExposureAuto set to Off");
+                        } 
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"[SetExposure] Failed to set ExposureAuto: {ex.Message}");
+                        }
                     }
 
                     if (acqCtrl.exposureTime.isValid)
                     {
-                        acqCtrl.exposureTime.write(exposureUs);
+                        // Check min/max limits
+                        double minExp = 0, maxExp = 0;
+                        try
+                        {
+                            if (acqCtrl.exposureTime.hasMinValue)
+                                minExp = acqCtrl.exposureTime.minValue;
+                            if (acqCtrl.exposureTime.hasMaxValue)
+                                maxExp = acqCtrl.exposureTime.maxValue;
+                            
+                            Console.WriteLine($"[SetExposure] Camera limits: min={minExp:F1}us, max={maxExp:F1}us");
+                        }
+                        catch { }
+
+                        // Clamp to valid range
+                        double clampedExposure = exposureUs;
+                        if (maxExp > 0 && exposureUs > maxExp)
+                        {
+                            clampedExposure = maxExp;
+                            Console.WriteLine($"[SetExposure] Clamping {exposureUs:F1}us to max {maxExp:F1}us");
+                        }
+                        if (minExp > 0 && exposureUs < minExp)
+                        {
+                            clampedExposure = minExp;
+                            Console.WriteLine($"[SetExposure] Clamping {exposureUs:F1}us to min {minExp:F1}us");
+                        }
+
+                        acqCtrl.exposureTime.write(clampedExposure);
                         double applied = acqCtrl.exposureTime.read();
+                        Console.WriteLine($"[SetExposure] Requested: {exposureUs:F1}us, Applied: {applied:F1}us");
                         StatusChanged?.Invoke($"Exposure applied: {applied:F1} us");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"[SetExposure] ERROR: exposureTime node is not valid!");
                     }
                 }
             }
             catch (Exception ex)
             {
+                Console.WriteLine($"[SetExposure] Exception: {ex.Message}");
                 StatusChanged?.Invoke($"Exposure apply failed: {ex.Message}");
             }
         }

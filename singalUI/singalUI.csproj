@@ -90,29 +90,29 @@
             <Link>libiomp5md.dll</Link>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
-        <!-- Runtime: N+N → hmf_temp_{G,X,Y}.txt → mirror to 12+12_* (bridge DLL path). Source: PoseEstApi\code 10+10. -->
+        <!-- Runtime: N+N → hmf_temp_{G,X,Y}.txt → mirror to 12+12_* (bridge DLL path). Source: code_WS_9-10 -->
         <!-- Ship 12+12_* and 10+10_* as named bundles; hmf_temp_* is created by the app when estimating pose. -->
-        <None Include="..\..\PoseEstApi\code\10+10_G.txt">
+        <None Include="..\..\code_WS_9-10\10+10_G.txt">
             <Link>Archive\12+12_G.txt</Link>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
-        <None Include="..\..\PoseEstApi\code\10+10_X.txt">
+        <None Include="..\..\code_WS_9-10\10+10_X.txt">
             <Link>Archive\12+12_X.txt</Link>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
-        <None Include="..\..\PoseEstApi\code\10+10_Y.txt">
+        <None Include="..\..\code_WS_9-10\10+10_Y.txt">
             <Link>Archive\12+12_Y.txt</Link>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
-        <None Include="..\..\PoseEstApi\code\10+10_G.txt">
+        <None Include="..\..\code_WS_9-10\10+10_G.txt">
             <Link>Archive\10+10_G.txt</Link>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
-        <None Include="..\..\PoseEstApi\code\10+10_X.txt">
+        <None Include="..\..\code_WS_9-10\10+10_X.txt">
             <Link>Archive\10+10_X.txt</Link>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
-        <None Include="..\..\PoseEstApi\code\10+10_Y.txt">
+        <None Include="..\..\code_WS_9-10\10+10_Y.txt">
             <Link>Archive\10+10_Y.txt</Link>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>

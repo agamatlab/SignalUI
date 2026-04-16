@@ -632,10 +632,10 @@ namespace singalUI.ViewModels
 
             if (exposureChanged)
             {
+                Console.WriteLine($"[TryApply] Setting exposure to {effectiveExposure:F1}µs (base={exposure:F1}µs, illum={illumination:F0}%)");
                 cameraService.SetExposure(effectiveExposure);
                 _lastAppliedExposure = exposure;
                 _lastAppliedEffectiveExposure = effectiveExposure;
-                Console.WriteLine($"[Illumination] Applied: exposure={exposure:F1}µs × illumination={illumination:F0}% = effective={effectiveExposure:F1}µs");
             }
 
             if (gainChanged)
