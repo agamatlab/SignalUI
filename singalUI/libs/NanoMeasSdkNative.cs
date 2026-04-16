@@ -9,26 +9,32 @@ using System.Text;
 namespace singalUI.libs;
 
 /// <summary>
-/// P/Invoke for <c>NanoMeas.dll</c> (see <c>PoseEstApi/NanoMeas_SDK_secret/include/nanomeas_api.h</c>).
+/// P/Invoke for native NanoMeas SDK (see <c>PoseEstApi/NanoMeas_SDK_secret/include/nanomeas_api.h</c>).
 /// On Windows, the native library is preloaded via <see cref="LoadLibraryExW"/> with
 /// <c>LOAD_WITH_ALTERED_SEARCH_PATH</c> so <c>fftw3.dll</c> / MKL in the same folder resolve.
-/// Search order: <c>NANOMEAS_SDK_DIR</c>, next to the app, <c>NanoMeas_SDK_secret\</c> under the app,
-/// <c>..\..\PoseEstApi\NanoMeas_SDK_secret\</c> from the app base (e.g. published <c>out\</c> next to repo).
+/// Search order: <c>NANOMEAS_SDK_DIR</c>, developer paths for <c>NanoMeas_SDK_noblas_*</c> / <c>NanoMeas_SDK_secret</c>,
+/// next to the executable, then repo-relative <c>PoseEstApi\...</c> from the app base (published <c>out\</c>).
 /// </summary>
 public static unsafe class NanoMeasSdkNative
 {
     public const int NanoMeasOk = 0;
 
-    private const string DllName = "NanoMeas.dll";
+    private const string DllName = "NanoMeasNative.dll";
+    private const string UpstreamDllName = "NanoMeas.dll";
 
     private const uint LoadWithAlteredSearchPath = 0x00000008;
 
     private static readonly object LoadLock = new();
     private static bool _preloadDone;
     private static string? _loadedFromPath;
+    private static string? _loadedFromCategory;
 
     [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode, ExactSpelling = true)]
     private static extern IntPtr LoadLibraryExW(string lpLibFileName, IntPtr hFile, uint dwFlags);
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Ansi, ExactSpelling = true)]
+    private static extern IntPtr GetProcAddress(IntPtr hModule, string lpProcName);
+    [DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true)]
+    private static extern bool FreeLibrary(IntPtr hModule);
 
     /// <summary>Call before any NanoMeas P/Invoke (e.g. before starting a background pose task).</summary>
     public static void EnsureNanoMeasNativeReady()
@@ -42,68 +48,93 @@ public static unsafe class NanoMeasSdkNative
                 throw new PlatformNotSupportedException("NanoMeas native DLL is only supported on Windows.");
 
             var log = new StringBuilder();
-            string? dllPath = null;
-            foreach (var p in EnumerateNanoMeasDllCandidates())
+            foreach (var (category, p) in EnumerateNanoMeasDllCandidates())
             {
-                log.AppendLine(File.Exists(p) ? $"  OK  {p}" : $"  —   {p} (missing)");
-                if (dllPath == null && File.Exists(p))
-                    dllPath = p;
+                if (!File.Exists(p))
+                {
+                    log.AppendLine($"  —   [{category}] {p} (missing)");
+                    continue;
+                }
+
+                string fullPath = Path.IsPathRooted(p) ? p : Path.GetFullPath(p);
+                IntPtr module = LoadLibraryExW(fullPath, IntPtr.Zero, LoadWithAlteredSearchPath);
+                if (module == IntPtr.Zero)
+                {
+                    int loadErr = Marshal.GetLastWin32Error();
+                    log.AppendLine($"  !!  [{category}] {fullPath} (LoadLibraryEx failed: {loadErr} {new Win32Exception(loadErr).Message})");
+                    continue;
+                }
+
+                IntPtr createPtr = GetProcAddress(module, "NanoMeas_Create");
+                if (createPtr == IntPtr.Zero)
+                {
+                    int procErr = Marshal.GetLastWin32Error();
+                    log.AppendLine($"  xx  [{category}] {fullPath} (missing export NanoMeas_Create; GetProcAddress={procErr})");
+                    _ = FreeLibrary(module);
+                    continue;
+                }
+
+                _loadedFromPath = fullPath;
+                _loadedFromCategory = category;
+                _preloadDone = true;
+                return;
             }
 
-            if (dllPath == null)
-            {
-                throw new DllNotFoundException(
-                    "NanoMeas.dll not found. Checked paths:\n" + log +
-                    "Set environment variable NANOMEAS_SDK_DIR to the folder that contains NanoMeas.dll, " +
-                    "or copy NanoMeas.dll + fftw3.dll (+ MKL per README) next to the executable.");
-            }
-
-            if (!Path.IsPathRooted(dllPath))
-                dllPath = Path.GetFullPath(dllPath);
-
-            IntPtr module = LoadLibraryExW(dllPath, IntPtr.Zero, LoadWithAlteredSearchPath);
-            if (module == IntPtr.Zero)
-            {
-                int err = Marshal.GetLastWin32Error();
-                throw new DllNotFoundException(
-                    $"LoadLibraryEx failed for \"{dllPath}\" — Win32 {err}: {new Win32Exception(err).Message}. " +
-                    "Install VC++ runtime if needed; ensure fftw3.dll and any MKL/OpenBLAS DLLs from the SDK sit in the same folder as NanoMeas.dll.\n" +
-                    log);
-            }
-
-            _loadedFromPath = dllPath;
-            _preloadDone = true;
+            throw new DllNotFoundException(
+                "No usable NanoMeas native DLL found (must export NanoMeas_Create). Checked paths:\n" + log +
+                "Set NANOMEAS_SDK_DIR to a valid SDK folder, or ensure NativeSDK\\NanoMeasNative.dll + fftw3.dll exist next to the executable.");
         }
     }
 
     /// <summary>Full path used after a successful <see cref="EnsureNanoMeasNativeReady"/>; otherwise null.</summary>
     public static string? GetLoadedNanoMeasDllPath() => _loadedFromPath;
+    public static string? GetLoadedNanoMeasDllCategory() => _loadedFromCategory;
 
-    private static IEnumerable<string> EnumerateNanoMeasDllCandidates()
+    private static IEnumerable<(string Category, string Path)> EnumerateNanoMeasDllCandidates()
     {
         string fileName = DllName;
+        string upstreamFileName = UpstreamDllName;
+        string baseDir = AppContext.BaseDirectory;
+
+        // Published layout first: avoids loading wrong developer-side DLLs.
+        yield return ("NativeSDK", Path.Combine(baseDir, "NativeSDK", fileName));
+        yield return ("NativeSDK-UpstreamName", Path.Combine(baseDir, "NativeSDK", upstreamFileName));
+        yield return ("AppBase", Path.Combine(baseDir, fileName));
+        yield return ("AppBase-UpstreamName", Path.Combine(baseDir, upstreamFileName));
+        yield return ("AppBaseNoblasSubdir", Path.Combine(baseDir, "NanoMeas_SDK_noblas_20260403", upstreamFileName));
+        yield return ("AppBaseSecretSubdir", Path.Combine(baseDir, "NanoMeas_SDK_secret", upstreamFileName));
+
+        // Explicit environment override.
         string? env = Environment.GetEnvironmentVariable("NANOMEAS_SDK_DIR");
         if (!string.IsNullOrWhiteSpace(env))
-            yield return Path.Combine(env.Trim().Trim('"'), fileName);
+        {
+            string envDir = env.Trim().Trim('"');
+            yield return ("Env:NANOMEAS_SDK_DIR-Alias", Path.Combine(envDir, fileName));
+            yield return ("Env:NANOMEAS_SDK_DIR-Upstream", Path.Combine(envDir, upstreamFileName));
+        }
 
-        // User-preferred SDK layout (developer machine); NANOMEAS_SDK_DIR wins above.
+        // Developer machine fallbacks.
+        const string preferredNoblas =
+            @"F:\adhoc_peisenlab_6dofdemo\6_dof_demo\agha\PoseEstApi\NanoMeas_SDK_noblas_20260403\NanoMeas.dll";
+        if (File.Exists(preferredNoblas))
+            yield return ("DevAbsoluteNoblas", preferredNoblas);
+
         const string preferredSecret =
             @"F:\adhoc_peisenlab_6dofdemo\6_dof_demo\agha\PoseEstApi\NanoMeas_SDK_secret\NanoMeas.dll";
         if (File.Exists(preferredSecret))
-            yield return preferredSecret;
+            yield return ("DevAbsoluteSecret", preferredSecret);
 
-        string baseDir = AppContext.BaseDirectory;
-        yield return Path.Combine(baseDir, fileName);
-        yield return Path.Combine(baseDir, "NanoMeas_SDK_secret", fileName);
+        // Published: repo-root sibling PoseEstApi (e.g. out\ next to agha\)
+        yield return ("RepoSiblingNoblas", Path.GetFullPath(Path.Combine(baseDir, "..", "..", "PoseEstApi", "NanoMeas_SDK_noblas_20260403", fileName)));
+        yield return ("RepoSiblingSecret", Path.GetFullPath(Path.Combine(baseDir, "..", "..", "PoseEstApi", "NanoMeas_SDK_secret", fileName)));
 
-        // Published: SignalUI\out\ → ..\..\PoseEstApi\NanoMeas_SDK_secret
-        yield return Path.GetFullPath(Path.Combine(baseDir, "..", "..", "PoseEstApi", "NanoMeas_SDK_secret", fileName));
+        // Dev: singalUI\bin\...\ → 5×.. → repo sibling PoseEstApi
+        yield return ("DevRepoSiblingNoblas", Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..", "..", "PoseEstApi", "NanoMeas_SDK_noblas_20260403", fileName)));
+        yield return ("DevRepoSiblingSecret", Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..", "..", "PoseEstApi", "NanoMeas_SDK_secret", fileName)));
 
-        // Dev (no RID): singalUI\bin\Debug\net8.0-windows...\ → 5×.. → repo sibling PoseEstApi
-        yield return Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..", "..", "PoseEstApi", "NanoMeas_SDK_secret", fileName));
-
-        // Dev / publish with win-x64: ...\net8.0-windows...\win-x64\ → 6×.. → PoseEstApi
-        yield return Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..", "..", "..", "PoseEstApi", "NanoMeas_SDK_secret", fileName));
+        // Dev with win-x64 subfolder: 6×.. → PoseEstApi
+        yield return ("DevWinRidSiblingNoblas", Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..", "..", "..", "PoseEstApi", "NanoMeas_SDK_noblas_20260403", fileName)));
+        yield return ("DevWinRidSiblingSecret", Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..", "..", "..", "PoseEstApi", "NanoMeas_SDK_secret", fileName)));
     }
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
@@ -245,7 +276,8 @@ public static unsafe class NanoMeasSdkNative
     }
 
     /// <summary>
-    /// Loads HMF 0/1 sequences from <c>Archive\{n}+{n}_Y.txt</c> (→ seq_x) and <c>_X.txt</c> (→ seq_y) next to the app.
+    /// Loads HMF 0/1 sequences from <c>Archive\{n}+{n}_Y.txt</c> (→ seq_x) and <c>_X.txt</c> (→ seq_y) under <see cref="AppContext.BaseDirectory"/>.
+    /// <c>n</c> matches <see cref="NanoMeasGridParamsNative.window_size"/> (e.g. pattern CKB040040 → 10 → <c>10+10_*.txt</c>, CKB100100 → 12 → <c>12+12_*.txt</c>).
     /// </summary>
     public static bool TryLoadArchiveHmfSequences(int windowRounded, out int[] seqX, out int[] seqY, out string? error)
     {

@@ -518,12 +518,6 @@
                             </Border>
                             <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center" Spacing="2">
                                 <TextBlock Text="Pose estimation results"
-                                           IsVisible="{Binding ShowSixDofConfig}"
-                                           FontSize="16"
-                                           FontWeight="SemiBold"
-                                           Foreground="#ffffff"/>
-                                <TextBlock Text="Rotation calib — NanoMeas.dll (log)"
-                                           IsVisible="{Binding ShowRotationCalibPanel}"
                                            FontSize="16"
                                            FontWeight="SemiBold"
                                            Foreground="#ffffff"/>
@@ -730,11 +724,6 @@
                                    IsVisible="{Binding IsPoseEstimationRunning}"
                                    FontSize="12"
                                    Foreground="#ffcc80"
-                                   TextWrapping="Wrap"/>
-                        <TextBlock Text="Rotation mode: Run rotation calibration runs NanoMeas.dll on the newest .\storage\session_* with ≥12 PNGs; full pose [Rx,Ry,Rz,tx,ty,tz] is printed to the error log."
-                                   IsVisible="{Binding ShowRotationCalibPanel}"
-                                   FontSize="11"
-                                   Foreground="#aaaaaa"
                                    TextWrapping="Wrap"/>
 
                         <Button Content="Get Error Information"

@@ -21,6 +21,15 @@
         <DefineConstants>$(DefineConstants);WINDOWS_NATIVE_DEPS</DefineConstants>
     </PropertyGroup>
 
+    <!-- PoseEstApi: singalUI/../../.. (nested SignalUI-dev) or singalUI/../.. (flat) -->
+    <PropertyGroup>
+        <_PoseEstNestedRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\..\PoseEstApi'))</_PoseEstNestedRoot>
+        <_PoseEstFlatRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\PoseEstApi'))</_PoseEstFlatRoot>
+        <PoseEstApiRoot Condition="Exists('$(_PoseEstNestedRoot)\NanoMeas_SDK_noblas_20260403\NanoMeas.dll')">$(_PoseEstNestedRoot)</PoseEstApiRoot>
+        <PoseEstApiRoot Condition="'$(PoseEstApiRoot)' == '' AND Exists('$(_PoseEstFlatRoot)\NanoMeas_SDK_noblas_20260403\NanoMeas.dll')">$(_PoseEstFlatRoot)</PoseEstApiRoot>
+        <PoseEstApiRoot Condition="'$(PoseEstApiRoot)' == ''">$(_PoseEstNestedRoot)</PoseEstApiRoot>
+    </PropertyGroup>
+
     <ItemGroup>
         <Folder Include="Models\" />
         <Folder Include="Converters\" />
@@ -70,50 +79,58 @@
 
     <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows')) == 'true'">
         <!-- Native DLLs - Copy to output directory root (DO NOT use <Reference> for native DLLs) -->
-        <None Include="libs\PoseEstApiWrapper.dll">
+        <None Include="libs\PoseEstApiWrapper.dll" Condition="Exists('libs\PoseEstApiWrapper.dll')">
             <Link>PoseEstApiWrapper.dll</Link>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
-        <None Include="..\..\PoseEstApi\PoseEstApi\TestCppDll\PoseEstApiBridge.dll">
+        <None Include="$(PoseEstApiRoot)\PoseEstApi\TestCppDll\PoseEstApiBridge.dll" Condition="Exists('$(PoseEstApiRoot)\PoseEstApi\TestCppDll\PoseEstApiBridge.dll')">
             <Link>PoseEstApiBridge.dll</Link>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
-        <None Include="..\..\PoseEstApi\PoseEstApi\lib\opencv_world4130.dll">
+        <None Include="$(PoseEstApiRoot)\PoseEstApi\lib\opencv_world4130.dll" Condition="Exists('$(PoseEstApiRoot)\PoseEstApi\lib\opencv_world4130.dll')">
             <Link>opencv_world4130.dll</Link>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
-        <None Include="..\..\PoseEstApi\PoseEstApi\TestCppDll\PoseEstApi.dll">
+        <None Include="$(PoseEstApiRoot)\PoseEstApi\TestCppDll\PoseEstApi.dll" Condition="Exists('$(PoseEstApiRoot)\PoseEstApi\TestCppDll\PoseEstApi.dll')">
             <Link>PoseEstApi.dll</Link>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
-        <None Include="..\..\PoseEstApi\PoseEstApi\lib\libiomp5md.dll">
+        <None Include="$(PoseEstApiRoot)\PoseEstApi\lib\libiomp5md.dll" Condition="Exists('$(PoseEstApiRoot)\PoseEstApi\lib\libiomp5md.dll')">
             <Link>libiomp5md.dll</Link>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
-        <!-- Runtime: N+N → hmf_temp_{G,X,Y}.txt → mirror to 12+12_* (bridge DLL path). Source: code_WS_9-10 -->
-        <!-- Ship 12+12_* and 10+10_* as named bundles; hmf_temp_* is created by the app when estimating pose. -->
-        <None Include="..\..\code_WS_9-10\10+10_G.txt">
-            <Link>Archive\12+12_G.txt</Link>
-            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-        </None>
-        <None Include="..\..\code_WS_9-10\10+10_X.txt">
-            <Link>Archive\12+12_X.txt</Link>
-            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-        </None>
-        <None Include="..\..\code_WS_9-10\10+10_Y.txt">
-            <Link>Archive\12+12_Y.txt</Link>
-            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-        </None>
-        <None Include="..\..\code_WS_9-10\10+10_G.txt">
+        <!-- HMF sequences: window_size 10 → 10+10_*.txt (CKB040040), 12 → 12+12_*.txt (CKB100100); see NanoMeasSdkNative.TryLoadArchiveHmfSequences -->
+        <None Include="$(PoseEstApiRoot)\code\10+10_G.txt" Condition="Exists('$(PoseEstApiRoot)\code\10+10_G.txt')">
             <Link>Archive\10+10_G.txt</Link>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
-        <None Include="..\..\code_WS_9-10\10+10_X.txt">
+        <None Include="$(PoseEstApiRoot)\code\10+10_X.txt" Condition="Exists('$(PoseEstApiRoot)\code\10+10_X.txt')">
             <Link>Archive\10+10_X.txt</Link>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
-        <None Include="..\..\code_WS_9-10\10+10_Y.txt">
+        <None Include="$(PoseEstApiRoot)\code\10+10_Y.txt" Condition="Exists('$(PoseEstApiRoot)\code\10+10_Y.txt')">
             <Link>Archive\10+10_Y.txt</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Include="$(PoseEstApiRoot)\code\12+12_G.txt" Condition="Exists('$(PoseEstApiRoot)\code\12+12_G.txt')">
+            <Link>Archive\12+12_G.txt</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Include="$(PoseEstApiRoot)\code\12+12_X.txt" Condition="Exists('$(PoseEstApiRoot)\code\12+12_X.txt')">
+            <Link>Archive\12+12_X.txt</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Include="$(PoseEstApiRoot)\code\12+12_Y.txt" Condition="Exists('$(PoseEstApiRoot)\code\12+12_Y.txt')">
+            <Link>Archive\12+12_Y.txt</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <!-- Native NanoMeas + fftw3 in NativeSDK\; rename to NanoMeasNative.dll to avoid managed/ native name collision -->
+        <None Include="$(PoseEstApiRoot)\NanoMeas_SDK_noblas_20260403\NanoMeas.dll" Condition="Exists('$(PoseEstApiRoot)\NanoMeas_SDK_noblas_20260403\NanoMeas.dll')">
+            <Link>NativeSDK\NanoMeasNative.dll</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Include="$(PoseEstApiRoot)\NanoMeas_SDK_noblas_20260403\fftw3.dll" Condition="Exists('$(PoseEstApiRoot)\NanoMeas_SDK_noblas_20260403\fftw3.dll')">
+            <Link>NativeSDK\fftw3.dll</Link>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
         <None Include="Archive\default_dll_parameters.txt">
@@ -138,8 +155,8 @@
     <!-- NanoMeasCalib + bridge: optional until built; see PoseEstApi/RotPoseEstApi/native/RotCalibBridge -->
     <Target Name="CopyRotCalibNative" AfterTargets="Build">
         <PropertyGroup>
-            <_RotBridge>..\..\PoseEstApi\RotPoseEstApi\native\RotCalibBridge\bin\x64\$(Configuration)\RotCalibBridge.dll</_RotBridge>
-            <_NanoMeas>..\..\PoseEstApi\RotPoseEstApi\lib\NanoMeasCalib.dll</_NanoMeas>
+            <_RotBridge>$(PoseEstApiRoot)\RotPoseEstApi\native\RotCalibBridge\bin\x64\$(Configuration)\RotCalibBridge.dll</_RotBridge>
+            <_NanoMeas>$(PoseEstApiRoot)\RotPoseEstApi\lib\NanoMeasCalib.dll</_NanoMeas>
         </PropertyGroup>
         <Copy Condition="Exists('$(_RotBridge)')"
               SourceFiles="$(_RotBridge)"
@@ -151,17 +168,20 @@
               SkipUnchangedFiles="true" />
     </Target>
 
-    <!-- NanoMeas SDK (rotation calib): copy when present; see PoseEstApi/NanoMeas_SDK_secret/README.md -->
+    <!-- NanoMeas pose SDK: prefer noblas build, else secret; see PoseEstApi/NanoMeas_SDK_noblas_20260403/README.md -->
     <Target Name="CopyNanoMeasSdkNative" AfterTargets="Build">
         <PropertyGroup>
-            <_NanoMeasSdkDir>..\..\PoseEstApi\NanoMeas_SDK_secret</_NanoMeasSdkDir>
+            <_NanoMeasNoblas>$(PoseEstApiRoot)\NanoMeas_SDK_noblas_20260403</_NanoMeasNoblas>
+            <_NanoMeasSecret>$(PoseEstApiRoot)\NanoMeas_SDK_secret</_NanoMeasSecret>
         </PropertyGroup>
         <ItemGroup>
-            <_NanoMeasSdkFiles Include="$(_NanoMeasSdkDir)\NanoMeas.dll" Condition="Exists('$(_NanoMeasSdkDir)\NanoMeas.dll')" />
-            <_NanoMeasSdkFiles Include="$(_NanoMeasSdkDir)\fftw3.dll" Condition="Exists('$(_NanoMeasSdkDir)\fftw3.dll')" />
+            <_NanoMeasSdkFiles Include="$(_NanoMeasNoblas)\NanoMeas.dll" Condition="Exists('$(_NanoMeasNoblas)\NanoMeas.dll')" />
+            <_NanoMeasSdkFiles Include="$(_NanoMeasNoblas)\fftw3.dll" Condition="Exists('$(_NanoMeasNoblas)\fftw3.dll')" />
+            <_NanoMeasSdkFiles Include="$(_NanoMeasSecret)\NanoMeas.dll" Condition="!Exists('$(_NanoMeasNoblas)\NanoMeas.dll') AND Exists('$(_NanoMeasSecret)\NanoMeas.dll')" />
+            <_NanoMeasSdkFiles Include="$(_NanoMeasSecret)\fftw3.dll" Condition="!Exists('$(_NanoMeasNoblas)\fftw3.dll') AND Exists('$(_NanoMeasSecret)\fftw3.dll')" />
         </ItemGroup>
         <Copy SourceFiles="@(_NanoMeasSdkFiles)"
-              DestinationFolder="$(OutputPath)"
+              DestinationFolder="$(OutputPath)NativeSDK\"
               SkipUnchangedFiles="true" />
     </Target>
     

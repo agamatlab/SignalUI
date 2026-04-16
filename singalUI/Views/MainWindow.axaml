@@ -4,7 +4,7 @@
         xmlns:v="using:singalUI.Views"
         x:Class="singalUI.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
-        Title="NanoMeas Calibrator 0.7.0"
+        Title="NanoMeas Calibrator 0.8.0"
         Width="1400"
         Height="900"
         MinWidth="800"
@@ -19,24 +19,10 @@
 
     <Grid RowDefinitions="Auto,*,Auto">
         <!-- Menu Bar - Classic Microsoft Word Style -->
-        <Grid Grid.Row="0" Background="#2a2a2a" ColumnDefinitions="Auto,Auto,*,Auto">
-            <ComboBox Grid.Column="0"
-                      MinWidth="200"
-                      MaxWidth="280"
-                      Margin="8,4,12,4"
-                      VerticalAlignment="Center"
-                      FontSize="12"
-                      FontFamily="Segoe UI,Arial"
-                      Foreground="#e0e0e0"
-                      Background="#1a1a1a"
-                      BorderBrush="#404040"
-                      SelectedIndex="{Binding CalibrationModeIndex}">
-                <ComboBoxItem Content="6-DoF stage calibration"/>
-                <ComboBoxItem Content="XY-rot stage (rotation calib)"/>
-            </ComboBox>
-            <!-- Menu Tabs: Camera → Stage → Analysis (chevron overlay hints workflow) -->
+        <Grid Grid.Row="0" Background="#2a2a2a" ColumnDefinitions="Auto,*,Auto">
+            <!-- Menu Tabs: Camera → Stage → Visualization (chevron overlay hints workflow) -->
             <Grid Name="TabBarContainer"
-                  Grid.Column="1"
+                  Grid.Column="0"
                   VerticalAlignment="Center"
                   ClipToBounds="True">
                 <StackPanel Name="TabButtonStack"
@@ -82,7 +68,7 @@
                                VerticalAlignment="Center"/>
                 </Border>
 
-                <!-- Analysis Tab -->
+                <!-- Visualization Tab -->
                 <Border Name="AnalysisTab"
                         Background="Transparent"
                         BorderThickness="0"
@@ -94,7 +80,7 @@
                             <Setter Property="Background" Value="#3a3a3a"/>
                         </Style>
                     </Border.Styles>
-                    <TextBlock Text="Analysis"
+                    <TextBlock Text="Visualization"
                                FontSize="14"
                                FontFamily="Segoe UI,Arial"
                                Foreground="#e0e0e0"
@@ -122,16 +108,16 @@
             </Grid>
 
             <!-- Center Title -->
-            <TextBlock Grid.Column="2"
-                       Text="NanoMeas Calibrator 0.7.0"
+            <TextBlock Grid.Column="1"
+                       Text="NanoMeas Calibrator 0.8.0"
                        Foreground="#666666"
                        FontFamily="Consolas,Courier New"
                        FontSize="11"
                        HorizontalAlignment="Center"
                        VerticalAlignment="Center"/>
 
-            <!-- Global SAVE / LOAD (same on every tab) -->
-            <StackPanel Grid.Column="3"
+            <!-- Global SAVE / OPEN (same on every tab) -->
+            <StackPanel Grid.Column="2"
                         Orientation="Horizontal"
                         Spacing="8"
                         VerticalAlignment="Center"
@@ -182,7 +168,7 @@
                                   Fill="#ffffff"
                                   Stretch="Uniform"/>
                         </Border>
-                        <TextBlock Text="LOAD" VerticalAlignment="Center"/>
+                        <TextBlock Text="OPEN" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Button>
             </StackPanel>

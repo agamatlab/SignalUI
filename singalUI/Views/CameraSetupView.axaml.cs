@@ -118,14 +118,13 @@ public partial class CameraSetupView : UserControl
 
     private void OnCameraViewLayoutUpdated(object? sender, EventArgs e)
     {
-        // Focus meter track width calculation disabled (feature not in current version)
-        // if (ViewModel == null) return;
-        // var tb = this.FindControl<TextBlock>("FocusMeterLabelMeasure");
-        // if (tb == null) return;
-        // double w = tb.Bounds.Width;
-        // if (w <= 0) return;
-        // double target = w * 2;
-        // if (System.Math.Abs(ViewModel.FocusMeterTrackWidth - target) > 0.5)
-        //     ViewModel.FocusMeterTrackWidth = target;
+        if (ViewModel == null) return;
+        var tb = this.FindControl<TextBlock>("FocusLevelLabelMeasure");
+        if (tb == null) return;
+        double w = tb.Bounds.Width;
+        if (w <= 0) return;
+        double target = w * 2;
+        if (System.Math.Abs(ViewModel.FocusMeterTrackWidth - target) > 0.5)
+            ViewModel.FocusMeterTrackWidth = target;
     }
 }

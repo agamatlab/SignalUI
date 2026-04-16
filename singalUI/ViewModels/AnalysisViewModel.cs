@@ -4,6 +4,8 @@ using singalUI.Models;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -103,6 +105,7 @@ namespace singalUI.ViewModels
         
         // Store current session data
         private Models.PoseEstimationSession? _currentSession = null;
+        private List<(double errorX, double errorY, double errorZ, double errorRx, double errorRy, double errorRz, double stageX, double stageY, double stageZ, double stageRx, double stageRy, double stageRz, double estX, double estY, double estZ, double estRx, double estRy, double estRz)> _latestLoadedResults = new();
 
         public bool IsSix2DMode => SelectedPlotLayout == 0;
 
@@ -352,7 +355,18 @@ namespace singalUI.ViewModels
         [RelayCommand]
         private void ExportCsv()
         {
-            // TODO: Implement CSV export
+            try
+            {
+                string exportDir = Path.Combine(AppContext.BaseDirectory, "storage", "exports");
+                Directory.CreateDirectory(exportDir);
+                string path = Path.Combine(exportDir, $"analysis_export_{DateTime.Now:yyyyMMdd_HHmmss}.csv");
+                _ = SaveFromGlobalMenuAsync(path);
+                LogError($"[ExportCsv] Exported to {path}");
+            }
+            catch (Exception ex)
+            {
+                LogError($"[ExportCsv] Error: {ex.Message}");
+            }
         }
 
         [RelayCommand]
@@ -373,8 +387,14 @@ namespace singalUI.ViewModels
             // TODO: Implement report generation
         }
 
+        [RelayCommand]
+        private void RunStageCalibration()
+        {
+            LogError("Run stage calibration requested (stub — connect 6-DoF batch pipeline here).");
+        }
+
         /// <summary>
-        /// Load pose estimation results into the Analysis tab
+        /// Load pose estimation results into the Visualization tab
         /// </summary>
         public void LoadPoseEstimationResults(List<(double errorX, double errorY, double errorZ, double errorRx, double errorRy, double errorRz, double stageX, double stageY, double stageZ, double stageRx, double stageRy, double stageRz, double estX, double estY, double estZ, double estRx, double estRy, double estRz)> results)
         {
@@ -393,6 +413,8 @@ namespace singalUI.ViewModels
                 LogError("[LoadPoseEstimationResults] No results to load");
                 return;
             }
+
+            _latestLoadedResults = results.ToList();
 
             // Clear any status message since we have data
             HasStatusMessage = false;
@@ -625,20 +647,7 @@ namespace singalUI.ViewModels
                 if (_currentSession.SuccessfulResults > 0)
                 {
                     LogError($"[LoadPreviewData] Loaded {_currentSession.SuccessfulResults} successful results from CSV");
-                    
-                    // Convert to format expected by LoadPoseEstimationResults
-                    var dataForLoading = _currentSession.Results
-                        .Where(r => r.Success)
-                        .Select(r => (
-                            r.ErrorX, r.ErrorY, r.ErrorZ, 
-                            r.ErrorRx, r.ErrorRy, r.ErrorRz, 
-                            r.StageX, r.StageY, r.StageZ,
-                            r.StageRx, r.StageRy, r.StageRz,
-                            r.EstimatedX, r.EstimatedY, r.EstimatedZ,
-                            r.EstimatedRx, r.EstimatedRy, r.EstimatedRz
-                        )).ToList();
-                    
-                    LoadPoseEstimationResults(dataForLoading);
+                    LoadPoseEstimationResults(ConvertSessionResultsToAnalysisData(_currentSession.Results));
                     
                     // Update session info
                     CurrentSessionPath = PreviewDataFolder;
@@ -724,8 +733,149 @@ namespace singalUI.ViewModels
         /// </summary>
         public async Task SaveFromGlobalMenuAsync(string filePath)
         {
-            await Task.CompletedTask;
-            LogError($"Save to {filePath} - Feature not yet implemented in this version");
+            await Task.Run(() =>
+            {
+                var results = BuildExportResults();
+                if (results.Count == 0)
+                {
+                    LogError("[SaveFromGlobalMenu] No results available to export");
+                    return;
+                }
+
+                WritePoseResultsCsv(filePath, results);
+                LogError($"[SaveFromGlobalMenu] Exported {results.Count} rows to {filePath}");
+            });
+        }
+
+        public async Task LoadFromGlobalMenuAsync(string filePath)
+        {
+            await Task.Run(() =>
+            {
+                if (!File.Exists(filePath))
+                {
+                    LogError($"[LoadFromGlobalMenu] File not found: {filePath}");
+                    return;
+                }
+
+                string ext = Path.GetExtension(filePath).ToLowerInvariant();
+                if (ext != ".csv")
+                {
+                    LogError($"[LoadFromGlobalMenu] Unsupported format: {ext}. Please load CSV.");
+                    return;
+                }
+
+                _currentSession = PoseEstimationSession.LoadFromCsv(filePath);
+                var successful = _currentSession.Results.Where(r => r.Success).ToList();
+                var data = ConvertSessionResultsToAnalysisData(successful);
+                LoadPoseEstimationResults(data);
+
+                CurrentSessionPath = filePath;
+                CurrentSessionName = _currentSession.SessionName;
+                CurrentSessionResultCount = successful.Count;
+                HasPreviewData = true;
+                PreviewImageCount = successful.Count;
+                PreviewDataPoints = successful.Count;
+                PreviewDate = _currentSession.SessionDate.ToString("yyyy-MM-dd HH:mm");
+                LogError($"[LoadFromGlobalMenu] Loaded {successful.Count} rows from {filePath}");
+            });
+        }
+
+        private List<PoseEstimationResult> BuildExportResults()
+        {
+            if (_currentSession != null && _currentSession.Results.Count > 0)
+                return _currentSession.Results.ToList();
+
+            if (_latestLoadedResults.Count == 0)
+                return new List<PoseEstimationResult>();
+
+            var results = new List<PoseEstimationResult>(_latestLoadedResults.Count);
+            int step = 1;
+            foreach (var r in _latestLoadedResults)
+            {
+                results.Add(new PoseEstimationResult
+                {
+                    StepNumber = step++,
+                    Timestamp = DateTime.Now,
+                    ImagePath = "",
+                    StageX = r.stageX,
+                    StageY = r.stageY,
+                    StageZ = r.stageZ,
+                    StageRx = r.stageRx,
+                    StageRy = r.stageRy,
+                    StageRz = r.stageRz,
+                    EstimatedX = r.estX,
+                    EstimatedY = r.estY,
+                    EstimatedZ = r.estZ,
+                    EstimatedRx = r.estRx,
+                    EstimatedRy = r.estRy,
+                    EstimatedRz = r.estRz,
+                    ErrorX = r.errorX,
+                    ErrorY = r.errorY,
+                    ErrorZ = r.errorZ,
+                    ErrorRx = r.errorRx,
+                    ErrorRy = r.errorRy,
+                    ErrorRz = r.errorRz,
+                    Success = true,
+                    ErrorMessage = ""
+                });
+            }
+
+            return results;
+        }
+
+        private static List<(double errorX, double errorY, double errorZ, double errorRx, double errorRy, double errorRz, double stageX, double stageY, double stageZ, double stageRx, double stageRy, double stageRz, double estX, double estY, double estZ, double estRx, double estRy, double estRz)> ConvertSessionResultsToAnalysisData(IEnumerable<PoseEstimationResult> results)
+        {
+            return results
+                .Where(r => r.Success)
+                .Select(r => (
+                    r.ErrorX, r.ErrorY, r.ErrorZ,
+                    r.ErrorRx, r.ErrorRy, r.ErrorRz,
+                    r.StageX, r.StageY, r.StageZ,
+                    r.StageRx, r.StageRy, r.StageRz,
+                    r.EstimatedX, r.EstimatedY, r.EstimatedZ,
+                    r.EstimatedRx, r.EstimatedRy, r.EstimatedRz))
+                .ToList();
+        }
+
+        private static void WritePoseResultsCsv(string filePath, IReadOnlyList<PoseEstimationResult> results)
+        {
+            var iv = CultureInfo.InvariantCulture;
+            var lines = new List<string>(results.Count + 1)
+            {
+                "StepNumber,Timestamp,ImagePath,StageX,StageY,StageZ,StageRx,StageRy,StageRz,EstimatedX,EstimatedY,EstimatedZ,EstimatedRx,EstimatedRy,EstimatedRz,ErrorX,ErrorY,ErrorZ,ErrorRx,ErrorRy,ErrorRz,Success,ErrorMessage"
+            };
+
+            foreach (var r in results)
+            {
+                string img = $"\"{(r.ImagePath ?? string.Empty).Replace("\"", "\"\"")}\"";
+                string msg = $"\"{(r.ErrorMessage ?? string.Empty).Replace("\"", "\"\"")}\"";
+                lines.Add(string.Join(",",
+                    r.StepNumber.ToString(iv),
+                    r.Timestamp.ToString("O", iv),
+                    img,
+                    r.StageX.ToString("G17", iv),
+                    r.StageY.ToString("G17", iv),
+                    r.StageZ.ToString("G17", iv),
+                    r.StageRx.ToString("G17", iv),
+                    r.StageRy.ToString("G17", iv),
+                    r.StageRz.ToString("G17", iv),
+                    r.EstimatedX.ToString("G17", iv),
+                    r.EstimatedY.ToString("G17", iv),
+                    r.EstimatedZ.ToString("G17", iv),
+                    r.EstimatedRx.ToString("G17", iv),
+                    r.EstimatedRy.ToString("G17", iv),
+                    r.EstimatedRz.ToString("G17", iv),
+                    r.ErrorX.ToString("G17", iv),
+                    r.ErrorY.ToString("G17", iv),
+                    r.ErrorZ.ToString("G17", iv),
+                    r.ErrorRx.ToString("G17", iv),
+                    r.ErrorRy.ToString("G17", iv),
+                    r.ErrorRz.ToString("G17", iv),
+                    r.Success ? "True" : "False",
+                    msg));
+            }
+
+            File.WriteAllLines(filePath, lines);
         }
     }
 }

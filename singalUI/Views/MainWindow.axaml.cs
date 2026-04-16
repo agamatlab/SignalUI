@@ -148,7 +148,7 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Continuous L→R chevron over the tab strip (non-interactive hint for Camera → … → Analysis).
+    /// Continuous L→R chevron over the tab strip (non-interactive hint for Camera → … → Visualization).
     /// </summary>
     private void UpdateTabChevronAnimation()
     {
