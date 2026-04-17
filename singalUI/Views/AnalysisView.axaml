@@ -77,6 +77,19 @@
                 BorderThickness="2"
                 CornerRadius="0">
             <Grid>
+                <Border IsVisible="{Binding HelpModeActive}"
+                        Background="#1f2b1f"
+                        BorderBrush="#58ff9a"
+                        BorderThickness="0,0,0,1"
+                        Padding="10,8"
+                        VerticalAlignment="Top"
+                        HorizontalAlignment="Stretch"
+                        ZIndex="5">
+                    <TextBlock Text="Visualization modes: use 2D for per-axis trend cards, switch to 3D for spatial point/mesh view, and use Grid/Points/Mesh toggles to control rendering."
+                               FontSize="12"
+                               Foreground="#d6ffd9"
+                               TextWrapping="Wrap"/>
+                </Border>
                 <!-- Empty State (No data and no status message) -->
                 <Border IsVisible="{Binding !HasData}"
                         HorizontalAlignment="Center"
@@ -202,7 +215,21 @@
                         HorizontalAlignment="Stretch"/>
             </Border>
 
-            <Border Grid.Row="1" Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="20" Margin="8,8,16,12">
+            <Border Grid.Row="1"
+                    IsVisible="{Binding HelpModeActive}"
+                    Background="#1f2b1f"
+                    BorderBrush="#58ff9a"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="10,8"
+                    Margin="8,8,16,12">
+                <TextBlock Text="Tip: top-right OPEN loads CSV into this tab; SAVE exports current plotted results."
+                           FontSize="12"
+                           Foreground="#d6ffd9"
+                           TextWrapping="Wrap"/>
+            </Border>
+
+            <Border Grid.Row="2" Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="20" Margin="8,8,16,12">
                 <ScrollViewer>
                     <StackPanel Spacing="16">
                         <Grid ColumnDefinitions="Auto,*">
@@ -234,7 +261,7 @@
             </Border>
 
             <!-- Preview Mode -->
-            <Border Grid.Row="2" Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="20" Margin="8,0,16,12">
+            <Border Grid.Row="3" Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="20" Margin="8,0,16,12">
                 <StackPanel Spacing="12">
                     <Grid ColumnDefinitions="Auto,*">
                         <Border Grid.Column="0" Width="20" Height="20" VerticalAlignment="Center">
@@ -298,7 +325,7 @@
                 </StackPanel>
             </Border>
 
-            <Border Grid.Row="3" Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="20" Margin="8,0,16,12">
+            <Border Grid.Row="4" Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="20" Margin="8,0,16,12">
                 <StackPanel Spacing="12">
                     <Grid ColumnDefinitions="Auto,*">
                         <Border Grid.Column="0" Width="20" Height="20" VerticalAlignment="Center">
@@ -315,7 +342,7 @@
             </Border>
 
             <!-- Error Log -->
-            <Border Grid.Row="4" Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="20" Margin="8,0,16,12">
+            <Border Grid.Row="5" Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="20" Margin="8,0,16,12">
                 <StackPanel Spacing="16">
                     <!-- Section Header -->
                     <Grid ColumnDefinitions="Auto,*">

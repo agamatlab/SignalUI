@@ -16,6 +16,12 @@ namespace singalUI.Models
         private string _label = string.Empty;
 
         [ObservableProperty]
+        private string _builtInRange = "-";
+
+        [ObservableProperty]
+        private string _resolution = "-";
+
+        [ObservableProperty]
         private string _unit = string.Empty;
 
         [ObservableProperty]
@@ -59,16 +65,20 @@ namespace singalUI.Models
 
         partial void OnStepSizeChanged(double value)
         {
-            if (NumSteps > 0)
-            {
-                Range = Round(StepSize * NumSteps, 6);
-            }
+            RecalculateNumStepsFromRangeAndStepSize();
             OnPropertyChanged(nameof(CalculatedEndPosition));
+            OnPropertyChanged(nameof(AutoStepSize));
         }
 
         partial void OnNumStepsChanged(int value)
         {
-            Range = Round(StepSize * NumSteps, 6);
+            OnPropertyChanged(nameof(CalculatedEndPosition));
+            OnPropertyChanged(nameof(AutoStepSize));
+        }
+
+        partial void OnRangeChanged(double value)
+        {
+            RecalculateNumStepsFromRangeAndStepSize();
             OnPropertyChanged(nameof(CalculatedEndPosition));
             OnPropertyChanged(nameof(AutoStepSize));
         }
@@ -87,6 +97,20 @@ namespace singalUI.Models
         private double Round(double value, int places)
         {
             return Math.Round(value, places);
+        }
+
+        private void RecalculateNumStepsFromRangeAndStepSize()
+        {
+            double safeStep = Math.Abs(StepSize);
+            if (safeStep <= 1e-12)
+            {
+                NumSteps = 1;
+                return;
+            }
+
+            double safeRange = Math.Max(0, Range);
+            int points = (int)Math.Floor(safeRange / safeStep) + 1;
+            NumSteps = Math.Max(1, points);
         }
     }
 

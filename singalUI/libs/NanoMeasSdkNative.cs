@@ -211,6 +211,14 @@ public static unsafe class NanoMeasSdkNative
     /// Must match <c>NanoMeasPipelineResult</c> in native API (embedded <c>double[6]</c> arrays).
     /// Fixed buffers are blittable: native writes into this memory directly (no failed <c>ByValArray</c> copy-back).
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Each of <see cref="pose"/> and <see cref="pose_abs"/> is a six-DOF vector, not a 4×4 matrix.
+    /// Indices (same for both buffers): 0 = Rx, 1 = Ry, 2 = Rz (radians); 3 = X, 4 = Y, 5 = Z (millimeters).
+    /// Euler axis order and relation to a homogeneous transform are defined by the native SDK (see upstream <c>nanomeas_api.h</c>);
+    /// managed code uses these scalars as-is.
+    /// </para>
+    /// </remarks>
     [StructLayout(LayoutKind.Sequential)]
     public unsafe struct NanoMeasPipelineResultNative
     {
@@ -258,7 +266,10 @@ public static unsafe class NanoMeasSdkNative
     /// <summary>Stack-allocated result struct (native fills <see cref="NanoMeasPipelineResultNative.pose"/> in place).</summary>
     public static NanoMeasPipelineResultNative CreatePipelineResult() => default;
 
-    /// <summary>Copies fixed-buffer fields into managed arrays after <see cref="NanoMeas_ProcessFrame_Track_U8"/>.</summary>
+    /// <summary>
+    /// Copies <see cref="NanoMeasPipelineResultNative.pose"/> and <see cref="NanoMeasPipelineResultNative.pose_abs"/> into managed buffers
+    /// after <see cref="NanoMeas_ProcessFrame_Track_U8"/> (element order: Rx, Ry, Rz rad; X, Y, Z mm).
+    /// </summary>
     public static unsafe void CopyPipelinePoseArrays(ref NanoMeasPipelineResultNative r, double[] poseOut, double[] poseAbsOut)
     {
         if (poseOut.Length < 6 || poseAbsOut.Length < 6)

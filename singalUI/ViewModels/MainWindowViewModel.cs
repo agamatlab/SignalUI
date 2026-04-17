@@ -4,27 +4,14 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Platform.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using singalUI.Models;
 using System;
 using System.Threading.Tasks;
+using singalUI.Services;
 
 namespace singalUI.ViewModels;
 
 public partial class MainWindowViewModel : ViewModelBase
 {
-    public MainWindowViewModel()
-    {
-        _calibrationModeIndex = (int)singalUI.App.CalibrationAppMode;
-    }
-
-    [ObservableProperty]
-    private int _calibrationModeIndex;
-
-    partial void OnCalibrationModeIndexChanged(int value)
-    {
-        singalUI.App.CalibrationAppMode = (CalibrationAppMode)value;
-    }
-
     [ObservableProperty]
     private string _activeTab = "camera";
 
@@ -35,15 +22,24 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _cameraReady = true;
 
     [ObservableProperty]
-    private string _applicationVersion = "NanoMeas Calibrator 0.7.0";
+    private string _applicationVersion = "NanoMeas Calibrator 0.8.0";
 
     [ObservableProperty]
     private string _statusBarText = "System Ready";
+
+    [ObservableProperty]
+    private bool _helpModeActive = false;
 
     private static TopLevel? ShellTopLevel() =>
         Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime d
             ? d.MainWindow
             : null;
+
+    public MainWindowViewModel()
+    {
+        HelpModeActive = HelpModeService.IsEnabled;
+        HelpModeService.HelpModeChanged += OnHelpModeChanged;
+    }
 
     // Session Name from shared store
     public string SessionName
@@ -65,7 +61,7 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             "setup" => "Viewing Calibration Setup",
             "camera" => "Live Camera Feed Active - Adjusting Setup",
-            "analysis" => "Data Visualization Mode",
+            "analysis" => "Visualization — plots and 3D view",
             "config" => "Pose Estimation Configuration",
             _ => "System Ready"
         };
@@ -136,6 +132,17 @@ public partial class MainWindowViewModel : ViewModelBase
         });
 
         if (picks.Count > 0)
-            Console.WriteLine($"[GlobalLoad] Path chosen: {picks[0].Path.LocalPath} (import wiring TBD)");
+            await singalUI.App.SharedAnalysisViewModel.LoadFromGlobalMenuAsync(picks[0].Path.LocalPath);
+    }
+
+    [RelayCommand]
+    private void ToggleHelpMode()
+    {
+        HelpModeService.Toggle();
+    }
+
+    private void OnHelpModeChanged(bool enabled)
+    {
+        HelpModeActive = enabled;
     }
 }

@@ -8,6 +8,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using singalUI.Services;
 
 namespace singalUI.ViewModels
 {
@@ -93,6 +94,9 @@ namespace singalUI.ViewModels
         
         [ObservableProperty]
         private bool _hasStatusMessage = false;
+
+        [ObservableProperty]
+        private bool _helpModeActive = false;
         
         [ObservableProperty]
         private string _currentSessionPath = "";
@@ -120,9 +124,16 @@ namespace singalUI.ViewModels
         public AnalysisViewModel()
         {
             Instance = this; // Set static instance for cross-ViewModel access
+            HelpModeActive = HelpModeService.IsEnabled;
+            HelpModeService.HelpModeChanged += OnHelpModeChanged;
             SelectedPlotLayout = 0;
             // Don't generate mock data - wait for real pose estimation results
             LogError("AnalysisViewModel initialized - Waiting for pose estimation data");
+        }
+
+        private void OnHelpModeChanged(bool enabled)
+        {
+            HelpModeActive = enabled;
         }
 
         partial void OnSelectedPlotLayoutChanged(int value)
@@ -780,19 +791,19 @@ namespace singalUI.ViewModels
             });
         }
 
-        private List<Models.PoseEstimationResult> BuildExportResults()
+        private List<PoseEstimationResult> BuildExportResults()
         {
             if (_currentSession != null && _currentSession.Results.Count > 0)
                 return _currentSession.Results.ToList();
 
             if (_latestLoadedResults.Count == 0)
-                return new List<Models.PoseEstimationResult>();
+                return new List<PoseEstimationResult>();
 
-            var results = new List<Models.PoseEstimationResult>(_latestLoadedResults.Count);
+            var results = new List<PoseEstimationResult>(_latestLoadedResults.Count);
             int step = 1;
             foreach (var r in _latestLoadedResults)
             {
-                results.Add(new Models.PoseEstimationResult
+                results.Add(new PoseEstimationResult
                 {
                     StepNumber = step++,
                     Timestamp = DateTime.Now,
@@ -823,7 +834,7 @@ namespace singalUI.ViewModels
             return results;
         }
 
-        private static List<(double errorX, double errorY, double errorZ, double errorRx, double errorRy, double errorRz, double stageX, double stageY, double stageZ, double stageRx, double stageRy, double stageRz, double estX, double estY, double estZ, double estRx, double estRy, double estRz)> ConvertSessionResultsToAnalysisData(IEnumerable<Models.PoseEstimationResult> results)
+        private static List<(double errorX, double errorY, double errorZ, double errorRx, double errorRy, double errorRz, double stageX, double stageY, double stageZ, double stageRx, double stageRy, double stageRz, double estX, double estY, double estZ, double estRx, double estRy, double estRz)> ConvertSessionResultsToAnalysisData(IEnumerable<PoseEstimationResult> results)
         {
             return results
                 .Where(r => r.Success)
@@ -837,7 +848,7 @@ namespace singalUI.ViewModels
                 .ToList();
         }
 
-        private static void WritePoseResultsCsv(string filePath, IReadOnlyList<Models.PoseEstimationResult> results)
+        private static void WritePoseResultsCsv(string filePath, IReadOnlyList<PoseEstimationResult> results)
         {
             var iv = CultureInfo.InvariantCulture;
             var lines = new List<string>(results.Count + 1)

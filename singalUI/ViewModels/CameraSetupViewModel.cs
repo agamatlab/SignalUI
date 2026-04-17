@@ -252,7 +252,13 @@ namespace singalUI.ViewModels
         [ObservableProperty]
         private string _errorLog = "";
 
-        /// <summary>Display strings for pose preview (numbers or "-" when last result had no pose).</summary>
+        [ObservableProperty]
+        private bool _helpModeActive;
+
+        /// <summary>
+        /// Display strings for the camera tab pose preview (numbers or "-" when the last result had no pose).
+        /// Values come from the native six-vector: X,Y,Z = indices 3–5 (mm); Rx,Ry,Rz = 0–2 (shown as degrees°′″ after rad→deg).
+        /// </summary>
         [ObservableProperty] private string _posePreviewXText = "-";
         [ObservableProperty] private string _posePreviewYText = "-";
         [ObservableProperty] private string _posePreviewZText = "-";
@@ -296,6 +302,8 @@ namespace singalUI.ViewModels
         public CameraSetupViewModel()
         {
             Instance = this;
+            HelpModeActive = HelpModeService.IsEnabled;
+            HelpModeService.HelpModeChanged += OnHelpModeChanged;
             Console.WriteLine("[CameraSetupViewModel] Constructor START");
             // Initialize logging
             File.WriteAllText(_logFile, $"=== Log started at {DateTime.Now:O} ===\n");
@@ -343,8 +351,11 @@ namespace singalUI.ViewModels
             _nanoMeasPreviewTask = Task.Run(() => NanoMeasLivePreviewLoop(_nanoMeasPreviewCts.Token));
 
             var cfg = App.SharedConfigViewModel;
-            SelectedPatternType = Math.Clamp(cfg.CameraPatternPresetIndex, 0, 1);
+            // Camera tab default: first pattern option (index 0).
+            cfg.CameraPatternPresetIndex = 0;
+            SelectedPatternType = 0;
             _suppressCameraPatternPresetApply = false;
+            ApplyCheckerboardDllPreset(0);
 
             Console.WriteLine("[CameraSetupViewModel] Constructor END");
             LogToError("CameraSetupViewModel initialized - Error log ready");
@@ -391,6 +402,7 @@ namespace singalUI.ViewModels
         /// <summary>
         /// One frame at a time: under <c>./storage/temp_capture</c>, remove previous PNG, save the frame used for this run, run NanoMeas on the same U8 buffer,
         /// post pose to the UI, then repeat with a new frame. PNG on disk matches what was fed to the DLL for that cycle.
+        /// After <see cref="NanoMeasSdkNative.NanoMeas_ProcessFrame_Track_U8"/>, copies <c>pose</c>/<c>pose_abs</c> and picks one for display when relative <c>pose</c> is zero but decode succeeded.
         /// </summary>
         private void NanoMeasLivePreviewLoop(CancellationToken ct)
         {
@@ -617,6 +629,10 @@ namespace singalUI.ViewModels
             return true;
         }
 
+        /// <summary>
+        /// Chooses which native six-vector to show: prefer <paramref name="pose"/>; if it is all near-zero and
+        /// <paramref name="decodeSuccess"/> is non-zero, use <paramref name="poseAbs"/> when it is non-zero (same index layout as <paramref name="pose"/>).
+        /// </summary>
         private static double[] SelectPoseForDisplay(double[] pose, double[] poseAbs, int decodeSuccess)
         {
             if (!IsAllNearZero(pose))
@@ -626,6 +642,9 @@ namespace singalUI.ViewModels
             return pose;
         }
 
+        /// <summary>
+        /// Maps a six-DOF array (Rx,Ry,Rz rad; X,Y,Z mm) to <see cref="PosePreviewXText"/> … <see cref="PosePreviewRzText"/> and the shared latest-pose snapshot.
+        /// </summary>
         private void PostPosePreviewTexts(double[] p)
         {
             // Snapshot: worker thread reuses poseBuf; UI post runs later.
@@ -657,14 +676,25 @@ namespace singalUI.ViewModels
                 }
                 else
                 {
-                    PosePreviewXText = snap[3].ToString("F3", iv);
-                    PosePreviewYText = snap[4].ToString("F3", iv);
-                    PosePreviewZText = snap[5].ToString("F3", iv);
-                    PosePreviewRxText = rxDeg.ToString("F3", iv);
-                    PosePreviewRyText = ryDeg.ToString("F3", iv);
-                    PosePreviewRzText = rzDeg.ToString("F3", iv);
+                    PosePreviewXText = snap[3].ToString("F9", iv);
+                    PosePreviewYText = snap[4].ToString("F9", iv);
+                    PosePreviewZText = snap[5].ToString("F9", iv);
+                    PosePreviewRxText = FormatDegreesMinutesSeconds(rxDeg, iv);
+                    PosePreviewRyText = FormatDegreesMinutesSeconds(ryDeg, iv);
+                    PosePreviewRzText = FormatDegreesMinutesSeconds(rzDeg, iv);
                 }
             });
+        }
+
+        private static string FormatDegreesMinutesSeconds(double angleDeg, IFormatProvider provider)
+        {
+            string sign = angleDeg < 0 ? "-" : string.Empty;
+            double absDeg = Math.Abs(angleDeg);
+            int deg = (int)Math.Floor(absDeg);
+            double minFull = (absDeg - deg) * 60.0;
+            int min = (int)Math.Floor(minFull);
+            double sec = (minFull - min) * 60.0;
+            return $"{sign}{deg}\u00B0 {min}' {sec.ToString("F1", provider)}\"";
         }
 
         private void WireUpCameraService()
@@ -686,6 +716,8 @@ namespace singalUI.ViewModels
                 // Update initial connection state
                 CameraConnected = cameraService.IsConnected;
                 CameraStatus = cameraService.IsConnected ? "Connected" : "Disconnected";
+                if (cameraService.IsConnected)
+                    SyncCameraParametersFromHardware("InitialWireUp");
                 if (!cameraService.IsConnected)
                     FocusLevel = 0;
 
@@ -935,6 +967,8 @@ namespace singalUI.ViewModels
                 CameraConnected = connected;
                 CameraStatus = connected ? "Connected" : "Disconnected";
                 IsAcquiring = false;
+                if (connected)
+                    SyncCameraParametersFromHardware("ConnectionChanged");
 
                 if (!connected)
                 {
@@ -948,6 +982,42 @@ namespace singalUI.ViewModels
             });
         }
 
+        private void SyncCameraParametersFromHardware(string source)
+        {
+            try
+            {
+                var cameraService = App.CameraService;
+                if (cameraService == null || !cameraService.IsConnected)
+                    return;
+
+                if (!cameraService.TryReadAppliedParameters(out var exposureUs, out var gainDb, out var fps))
+                    return;
+
+                if (!double.IsNaN(exposureUs) && exposureUs > 0)
+                    CameraParameters.Exposure = Math.Round(exposureUs, 1);
+                if (!double.IsNaN(gainDb))
+                    CameraParameters.Gain = gainDb;
+                if (!double.IsNaN(fps) && fps > 0)
+                    CameraParameters.Fps = fps;
+
+                // Prevent immediate redundant write-back after syncing from hardware.
+                _lastAppliedExposure = CameraParameters.Exposure;
+                _lastAppliedEffectiveExposure = CameraParameters.Exposure;
+                _lastAppliedGain = CameraParameters.Gain;
+                _lastAppliedFps = CameraParameters.Fps;
+
+                Log($"[SyncFromCamera:{source}] Exposure={CameraParameters.Exposure:F1}us Gain={CameraParameters.Gain:F2}dB FPS={CameraParameters.Fps:F2}");
+            }
+            catch (Exception ex)
+            {
+                Log($"[SyncFromCamera:{source}] Error: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Returns a copy of the latest pose from the NanoMeas preview path when valid.
+        /// <paramref name="pose"/> length is 6 with indices 0–2 = Rx,Ry,Rz (radians), 3–5 = X,Y,Z (mm), matching native <c>pose</c>/<c>pose_abs</c>.
+        /// </summary>
         public bool TryGetLatestPoseSnapshot(out double[] pose, out long frameSeq, out DateTime timestampUtc)
         {
             lock (_latestPoseLock)
@@ -1211,6 +1281,8 @@ namespace singalUI.ViewModels
                     var success = await Task.Run(() => cameraService.Initialize());
                     CameraConnected = success;
                     CameraStatus = success ? "Connected" : "Failed to connect";
+                    if (success)
+                        SyncCameraParametersFromHardware("RefreshConnection");
                     Log($"[RefreshConnection] Camera: {(success ? "Connected" : "Failed")}");
                 }
                 else
@@ -1787,6 +1859,12 @@ namespace singalUI.ViewModels
             _nanoMeasPreviewCts.Dispose();
             CameraParameters.PropertyChanged -= OnCameraParametersPropertyChanged;
             StagePositionService.PositionChanged -= OnSharedStagePositionChanged;
+            HelpModeService.HelpModeChanged -= OnHelpModeChanged;
+        }
+
+        private void OnHelpModeChanged(bool enabled)
+        {
+            HelpModeActive = enabled;
         }
     }
 }
