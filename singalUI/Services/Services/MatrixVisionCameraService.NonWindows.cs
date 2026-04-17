@@ -16,6 +16,7 @@ public class MatrixVisionCameraService : IDisposable
     public event Action<bool>? ConnectionChanged;
 
     public bool IsConnected { get; private set; }
+    public bool IsAcquiring { get; private set; }
     public string CameraSerial { get; set; } = "";
     public int ImageWidth { get; private set; }
     public int ImageHeight { get; private set; }
@@ -69,11 +70,13 @@ public class MatrixVisionCameraService : IDisposable
 
     public void StartAcquisition()
     {
+        IsAcquiring = false;
         StatusChanged?.Invoke(UnsupportedMessage);
     }
 
     public void StopAcquisition()
     {
+        IsAcquiring = false;
     }
 
     public void Dispose()
