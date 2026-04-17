@@ -260,6 +260,10 @@ namespace singalUI.ViewModels
         [ObservableProperty]
         private double _focusLevel = 72;
 
+        /// <summary>Horizontal width of the focus meter track; set from view (2× measured "Focus Level" label width).</summary>
+        [ObservableProperty]
+        private double _focusMeterTrackWidth = 200;
+
         // Stage Movement Controls
         [ObservableProperty]
         private string _selectedAxis = "1"; // "1" = X, "2" = Y, "3" = Z

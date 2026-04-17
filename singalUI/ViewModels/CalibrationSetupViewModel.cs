@@ -67,6 +67,12 @@ namespace singalUI.ViewModels
         public double EstimatedRx { get; set; }
         public double EstimatedRy { get; set; }
         public double EstimatedRz { get; set; }
+        public double ErrorX { get; set; }
+        public double ErrorY { get; set; }
+        public double ErrorZ { get; set; }
+        public double ErrorRx { get; set; }
+        public double ErrorRy { get; set; }
+        public double ErrorRz { get; set; }
         public bool Success { get; set; }
         public string ErrorMessage { get; set; } = "";
         public DateTime Timestamp { get; set; }

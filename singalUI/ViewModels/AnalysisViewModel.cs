@@ -780,19 +780,19 @@ namespace singalUI.ViewModels
             });
         }
 
-        private List<PoseEstimationResult> BuildExportResults()
+        private List<Models.PoseEstimationResult> BuildExportResults()
         {
             if (_currentSession != null && _currentSession.Results.Count > 0)
                 return _currentSession.Results.ToList();
 
             if (_latestLoadedResults.Count == 0)
-                return new List<PoseEstimationResult>();
+                return new List<Models.PoseEstimationResult>();
 
-            var results = new List<PoseEstimationResult>(_latestLoadedResults.Count);
+            var results = new List<Models.PoseEstimationResult>(_latestLoadedResults.Count);
             int step = 1;
             foreach (var r in _latestLoadedResults)
             {
-                results.Add(new PoseEstimationResult
+                results.Add(new Models.PoseEstimationResult
                 {
                     StepNumber = step++,
                     Timestamp = DateTime.Now,
@@ -823,7 +823,7 @@ namespace singalUI.ViewModels
             return results;
         }
 
-        private static List<(double errorX, double errorY, double errorZ, double errorRx, double errorRy, double errorRz, double stageX, double stageY, double stageZ, double stageRx, double stageRy, double stageRz, double estX, double estY, double estZ, double estRx, double estRy, double estRz)> ConvertSessionResultsToAnalysisData(IEnumerable<PoseEstimationResult> results)
+        private static List<(double errorX, double errorY, double errorZ, double errorRx, double errorRy, double errorRz, double stageX, double stageY, double stageZ, double stageRx, double stageRy, double stageRz, double estX, double estY, double estZ, double estRx, double estRy, double estRz)> ConvertSessionResultsToAnalysisData(IEnumerable<Models.PoseEstimationResult> results)
         {
             return results
                 .Where(r => r.Success)
@@ -837,7 +837,7 @@ namespace singalUI.ViewModels
                 .ToList();
         }
 
-        private static void WritePoseResultsCsv(string filePath, IReadOnlyList<PoseEstimationResult> results)
+        private static void WritePoseResultsCsv(string filePath, IReadOnlyList<Models.PoseEstimationResult> results)
         {
             var iv = CultureInfo.InvariantCulture;
             var lines = new List<string>(results.Count + 1)
