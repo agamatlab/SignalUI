@@ -1,0 +1,13 @@
+{
+  "name": "checkerboard_50mm",
+  "patternType": 0,
+  "checkerBoardColumns": 9,
+  "checkerBoardRows": 6,
+  "checkerBoardPitchX": 1.0,
+  "checkerBoardPitchY": 1.0,
+  "checkerBoardUnit": 0,
+  "patternHasCode": false,
+  "patternConfigType": "Checker Board",
+  "patternPitchSize": 1.0,
+  "patternCompatibleLenses": "50mm, 85mm"
+}

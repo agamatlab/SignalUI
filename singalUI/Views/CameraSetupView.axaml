@@ -1,0 +1,258 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:singalUI.ViewModels"
+             xmlns:v="using:singalUI.Views"
+             x:Class="singalUI.Views.CameraSetupView"
+             x:DataType="vm:CameraSetupViewModel"
+             x:Name="RootControl"
+             x:CompileBindings="True"
+             Background="#0d0d0d">
+
+    <Design.DataContext>
+        <vm:CameraSetupViewModel/>
+    </Design.DataContext>
+
+    <Grid RowDefinitions="*" ColumnDefinitions="*,380">
+        <!-- Main Content Area - Camera Preview -->
+        <Border Grid.Row="0" Grid.Column="0"
+                Background="#151515"
+                BorderBrush="#333333"
+                BorderThickness="2"
+                Margin="16,16,8,16"
+                CornerRadius="0">
+            <Grid>
+                <Grid RowDefinitions="Auto,*,Auto">
+                <!-- Camera header: focus meter + resolution + connection -->
+                <Grid Grid.Row="0">
+                <Border
+                        Background="#1c1c1c"
+                        BorderBrush="#333333"
+                        BorderThickness="0,0,0,2"
+                        Padding="12,8"
+                        CornerRadius="0">
+                    <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto,Auto" VerticalAlignment="Center">
+                        <Border Grid.Column="0" Width="20" Height="20" Margin="0,0,12,0" VerticalAlignment="Center">
+                            <Path Data="M4 6h2l1.5-2h5l1.5 2h2c1.1 0 2 .9 2 2v10c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V8c0-1.1.9-2 2-2zm6 11c2.2 0 4-1.8 4-4s-1.8-4-4-4-4 1.8-4 4 1.8 4 4 4zm0-6c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2z"
+                                  Fill="#999999"
+                                  Stretch="Uniform"/>
+                        </Border>
+                        <TextBlock x:Name="FocusLevelLabelMeasure"
+                                   Grid.Column="1"
+                                   Text="Focus Level"
+                                   FontSize="13"
+                                   Foreground="#ffffff"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,12,0"/>
+                        <TextBlock Grid.Column="2"
+                                   Text="{Binding FocusLevel, StringFormat={}{0:F0}%}"
+                                   FontSize="13"
+                                   FontWeight="Medium"
+                                   Foreground="#ffffff"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,16,0"/>
+                        <Border Grid.Column="3"
+                                Height="18"
+                                VerticalAlignment="Center"
+                                HorizontalAlignment="Left"
+                                Width="{Binding FocusMeterTrackWidth}"
+                                Background="#0d0d0d"
+                                BorderBrush="#333333"
+                                BorderThickness="1"
+                                CornerRadius="0"
+                                ClipToBounds="True"
+                                Padding="2">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="{Binding FocusLevel, Converter={StaticResource FocusLevelStarSplitConverter}}"/>
+                                    <ColumnDefinition Width="{Binding FocusLevel, Converter={StaticResource FocusLevelStarSplitConverter}, ConverterParameter=Remainder}"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" Background="#ffffff"/>
+                                <Border Grid.Column="1" Background="#0d0d0d"/>
+                            </Grid>
+                        </Border>
+                        <Button Grid.Column="4"
+                                Content="Brightness distribution"
+                                Command="{Binding OpenBrightnessDistributionCommand}"
+                                Margin="12,0,12,0"
+                                Padding="10,4"
+                                FontSize="12"
+                                Foreground="#e0e0e0"
+                                Background="#2a2a2a"
+                                BorderBrush="#404040"
+                                BorderThickness="1"
+                                VerticalAlignment="Center"/>
+                        <Border Grid.Column="6"
+                                Margin="0,0,16,0"
+                                Padding="10,4"
+                                Background="#cc000000"
+                                CornerRadius="2"
+                                IsVisible="{Binding ShowCameraResolutionOverlay}">
+                            <TextBlock Text="{Binding CameraResolutionText}"
+                                       FontSize="13"
+                                       FontWeight="Medium"
+                                       Foreground="#ffffff"
+                                       VerticalAlignment="Center"/>
+                        </Border>
+                        <StackPanel Grid.Column="7" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                            <Ellipse Width="12" Height="12"
+                                     VerticalAlignment="Center"
+                                     Fill="{Binding CameraConnected, Converter={StaticResource ConnectedColorConverter}}"/>
+                            <TextBlock Text="Camera:"
+                                       FontSize="14"
+                                       Foreground="#ffffff"
+                                       VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding CameraStatus}"
+                                       FontSize="14"
+                                       FontWeight="Medium"
+                                       Foreground="#ffffff"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+                <Border x:Name="HelpAnchorCamera"
+                        Width="1"
+                        Height="1"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Bottom"
+                        Margin="0,0,12,4"
+                        IsHitTestVisible="False"/>
+                </Grid>
+
+                <Border Grid.Row="1"
+                        x:Name="CameraPreviewViewport"
+                        Background="#0a0a0a"
+                        CornerRadius="0"
+                        ClipToBounds="True">
+                    <Grid ClipToBounds="True">
+                        <Image x:Name="CameraPreviewImage"
+                               Source="{Binding CameraFrame}"
+                               Stretch="Uniform"
+                               ClipToBounds="True"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               RenderTransformOrigin="0.5,0.5">
+                            <Image.RenderTransform>
+                                <TransformGroup>
+                                    <ScaleTransform ScaleX="{Binding ZoomLevel}" ScaleY="{Binding ZoomLevel}"/>
+                                    <TranslateTransform X="{Binding PanX}" Y="{Binding PanY}"/>
+                                </TransformGroup>
+                            </Image.RenderTransform>
+                        </Image>
+                    </Grid>
+                </Border>
+
+                <Border Grid.Row="2"
+                        Background="#0f0f0f"
+                        BorderBrush="#333333"
+                        BorderThickness="0,2,0,0"
+                        Padding="12,10"
+                        CornerRadius="0">
+                    <Grid ColumnDefinitions="*,*,*" RowDefinitions="Auto,Auto" ColumnSpacing="18" RowSpacing="8">
+                        <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="X (mm):" FontSize="18" FontWeight="Bold" Foreground="#aaaaaa" FontFamily="Consolas,Courier New"/>
+                            <TextBlock Text="{Binding PosePreviewXText}" FontSize="18" FontWeight="Medium" Foreground="#dddddd" FontFamily="Consolas,Courier New"/>
+                        </StackPanel>
+                        <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="Y (mm):" FontSize="18" FontWeight="Bold" Foreground="#aaaaaa" FontFamily="Consolas,Courier New"/>
+                            <TextBlock Text="{Binding PosePreviewYText}" FontSize="18" FontWeight="Medium" Foreground="#dddddd" FontFamily="Consolas,Courier New"/>
+                        </StackPanel>
+                        <StackPanel Grid.Row="0" Grid.Column="2" Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="Z (mm):" FontSize="18" FontWeight="Bold" Foreground="#aaaaaa" FontFamily="Consolas,Courier New"/>
+                            <TextBlock Text="{Binding PosePreviewZText}" FontSize="18" FontWeight="Medium" Foreground="#dddddd" FontFamily="Consolas,Courier New"/>
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="Rx:" FontSize="18" FontWeight="Bold" Foreground="#aaaaaa" FontFamily="Consolas,Courier New"/>
+                            <TextBlock Text="{Binding PosePreviewRxText}" FontSize="18" FontWeight="Medium" Foreground="#dddddd" FontFamily="Consolas,Courier New"/>
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="Ry:" FontSize="18" FontWeight="Bold" Foreground="#aaaaaa" FontFamily="Consolas,Courier New"/>
+                            <TextBlock Text="{Binding PosePreviewRyText}" FontSize="18" FontWeight="Medium" Foreground="#dddddd" FontFamily="Consolas,Courier New"/>
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="2" Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="Rz:" FontSize="18" FontWeight="Bold" Foreground="#aaaaaa" FontFamily="Consolas,Courier New"/>
+                            <TextBlock Text="{Binding PosePreviewRzText}" FontSize="18" FontWeight="Medium" Foreground="#dddddd" FontFamily="Consolas,Courier New"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+
+                <v:HelpBubble IsOpen="{Binding HelpBubblesOpen}"
+                              PlacementTarget="{Binding #HelpAnchorCamera}"
+                              Placement="Bottom"
+                              BubbleMaxWidth="440"
+                              HelpText="Focus Level (0–100%): Focus = 50%·L₁₀₀ + 50%·F₁₀₀.&#x0a;L₁₀₀: variance of the 3×3 Laplacian on the center 60% ROI of a half-sized frame, then log₁₀-mapped to 0–100 (threshold below 1000 → 0).&#x0a;F₁₀₀: mean magnitude of the 2D FFT spectrum where radial distance exceeds 60% of the spectrum half-extent (high-frequency ring), log₁₀-mapped to 0–100 (below 10 → 0).&#x0a;&#x0a;Camera Preview: live image for framing, focus, zoom/pan.&#x0a;Pose Preview: latest DLL output (X/Y/Z mm, Rx/Ry/Rz deg)."/>
+            </Grid>
+        </Border>
+
+        <!-- Right Panel -->
+        <StackPanel Grid.Row="0" Grid.Column="1" Margin="8,16,16,16" Spacing="12">
+            <v:CollapsiblePanelView>
+                <v:CollapsiblePanelView.DataContext>
+                    <vm:CollapsiblePanelViewModel
+                        Title="Camera"
+                        IconPath="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L5.09 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.04.64.09.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"
+                        IsExpanded="true"/>
+                </v:CollapsiblePanelView.DataContext>
+                <v:CollapsiblePanelView.Content>
+                    <StackPanel Spacing="18">
+                        <ComboBox SelectedIndex="0" FontSize="13" Padding="8,6" HorizontalAlignment="Stretch">
+                            <ComboBoxItem Content="mvBlueCOUGAR-X / 1x"/>
+                        </ComboBox>
+
+                        <CheckBox IsChecked="{Binding AutoExposure}" Content="Auto Exposure (maximize focus)" FontSize="13" Foreground="#ffffff"/>
+
+                        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto" RowSpacing="8" ColumnSpacing="10">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Exposure (us)" FontSize="13" Foreground="#ffffff" VerticalAlignment="Center"/>
+                            <NumericUpDown Grid.Row="0" Grid.Column="1"
+                                           Value="{Binding CameraParameters.Exposure, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                           Minimum="100" Maximum="100000" Increment="100" FormatString="F0"
+                                           FontSize="13" HorizontalAlignment="Stretch"
+                                           IsEnabled="{Binding AutoExposure, Converter={StaticResource InverseBoolConverter}}"/>
+                        </Grid>
+                    </StackPanel>
+                </v:CollapsiblePanelView.Content>
+            </v:CollapsiblePanelView>
+
+            <v:CollapsiblePanelView>
+                <v:CollapsiblePanelView.DataContext>
+                    <vm:CollapsiblePanelViewModel
+                        Title="Pattern"
+                        IconPath="M4 4h16v16H4V4zm2 2v12h12V6H6zm2 2h8v8H8V8z"
+                        IsExpanded="true"/>
+                </v:CollapsiblePanelView.DataContext>
+                <v:CollapsiblePanelView.Content>
+                    <ComboBox SelectedIndex="{Binding SelectedPatternType, FallbackValue=0}" FontSize="13" Padding="8,6" HorizontalAlignment="Stretch">
+                        <ComboBoxItem Content="CKB040040-0010-HMF1006"/>
+                        <ComboBoxItem Content="CKB100100-0010-HMF1206"/>
+                    </ComboBox>
+                </v:CollapsiblePanelView.Content>
+            </v:CollapsiblePanelView>
+
+            <Border Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="20" Margin="0,0,0,8">
+                <Button Content="Capture Current Image"
+                        Command="{Binding CaptureImageCommand}"
+                        Padding="16,12"
+                        FontSize="14"
+                        FontWeight="SemiBold"
+                        Foreground="#ffffff"
+                        Background="#2e7d32"
+                        BorderBrush="#1b5e20"
+                        HorizontalAlignment="Stretch"/>
+            </Border>
+
+            <Border Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,0,0,0">
+                <ScrollViewer MaxHeight="150" HorizontalScrollBarVisibility="Auto">
+                    <TextBox Text="{Binding ErrorLog}"
+                             IsReadOnly="True"
+                             AcceptsReturn="True"
+                             TextWrapping="Wrap"
+                             BorderThickness="0"
+                             FontSize="11"
+                             Foreground="#ffffff"
+                             FontFamily="Consolas,Courier New"
+                             Background="Transparent"/>
+                </ScrollViewer>
+            </Border>
+        </StackPanel>
+    </Grid>
+</UserControl>

@@ -1,0 +1,227 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:singalUI.ViewModels"
+        xmlns:v="using:singalUI.Views"
+        x:Class="singalUI.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="NanoMeas Calibrator 0.8.0"
+        Width="1400"
+        Height="900"
+        MinWidth="800"
+        MinHeight="950"
+        WindowStartupLocation="CenterScreen"
+        SystemDecorations="Full"
+        Background="#0d0d0d">
+
+    <Design.DataContext>
+        <vm:MainWindowViewModel/>
+    </Design.DataContext>
+
+    <Grid RowDefinitions="Auto,*,Auto">
+        <!-- Menu Bar - Classic Microsoft Word Style -->
+        <Grid Grid.Row="0" Background="#2a2a2a" ColumnDefinitions="Auto,*,Auto">
+            <!-- Menu Tabs: Camera → Stage → Visualization (chevron overlay hints workflow) -->
+            <Grid Name="TabBarContainer"
+                  Grid.Column="0"
+                  VerticalAlignment="Center"
+                  ClipToBounds="True">
+                <StackPanel Name="TabButtonStack"
+                            Orientation="Horizontal"
+                            Spacing="0">
+                <!-- Camera Tab -->
+                <Border Name="CameraTab"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Padding="0"
+                        Cursor="Hand"
+                        PointerPressed="NavigateToCamera">
+                    <Border.Styles>
+                        <Style Selector="Border:pointerover">
+                            <Setter Property="Background" Value="#3a3a3a"/>
+                        </Style>
+                    </Border.Styles>
+                    <TextBlock Text="Camera"
+                               FontSize="14"
+                               FontFamily="Segoe UI,Arial"
+                               Foreground="#e0e0e0"
+                               Padding="20,8,20,8"
+                               VerticalAlignment="Center"/>
+                </Border>
+
+                <!-- Setup Tab -->
+                <Border Name="SetupTab"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Padding="0"
+                        Cursor="Hand"
+                        PointerPressed="NavigateToSetup">
+                    <Border.Styles>
+                        <Style Selector="Border:pointerover">
+                            <Setter Property="Background" Value="#3a3a3a"/>
+                        </Style>
+                    </Border.Styles>
+                    <TextBlock Text="Stage"
+                               FontSize="14"
+                               FontFamily="Segoe UI,Arial"
+                               Foreground="#e0e0e0"
+                               Padding="20,8,20,8"
+                               VerticalAlignment="Center"/>
+                </Border>
+
+                <!-- Visualization Tab -->
+                <Border Name="AnalysisTab"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Padding="0"
+                        Cursor="Hand"
+                        PointerPressed="NavigateToAnalysis">
+                    <Border.Styles>
+                        <Style Selector="Border:pointerover">
+                            <Setter Property="Background" Value="#3a3a3a"/>
+                        </Style>
+                    </Border.Styles>
+                    <TextBlock Text="Visualization"
+                               FontSize="14"
+                               FontFamily="Segoe UI,Arial"
+                               Foreground="#e0e0e0"
+                               Padding="20,8,20,8"
+                               VerticalAlignment="Center"/>
+                </Border>
+                </StackPanel>
+
+                <Canvas Name="TabChevronCanvas"
+                        ZIndex="1"
+                        IsHitTestVisible="False"
+                        HorizontalAlignment="Stretch"
+                        VerticalAlignment="Stretch"
+                        Background="Transparent"
+                        ClipToBounds="True">
+                    <Path Name="TabChevronPath"
+                          Data="M 0,-7 L 18,18 L 0,43"
+                          Stroke="#5a5a5a"
+                          StrokeThickness="5"
+                          StrokeLineCap="Round"
+                          StrokeJoin="Round"
+                          Fill="Transparent"
+                          IsHitTestVisible="False"/>
+                </Canvas>
+            </Grid>
+
+            <!-- Center Title -->
+            <TextBlock Grid.Column="1"
+                       Text="NanoMeas Calibrator 0.8.0"
+                       Foreground="#666666"
+                       FontFamily="Consolas,Courier New"
+                       FontSize="11"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"/>
+
+            <!-- Global SAVE / OPEN / HELP (same on every tab) -->
+            <StackPanel Grid.Column="2"
+                        Orientation="Vertical"
+                        Spacing="4"
+                        VerticalAlignment="Center"
+                        HorizontalAlignment="Right"
+                        Margin="0,0,12,0">
+                <Grid>
+                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                <Button x:Name="SaveButton"
+                        Command="{Binding GlobalSaveCommand}"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Foreground="#e0e0e0"
+                        FontSize="14"
+                        FontFamily="Segoe UI,Arial"
+                        Padding="16,8"
+                        Cursor="Hand"
+                        CornerRadius="0"
+                        ToolTip.Tip="Saves analysis data as CSV, JSON, or other formats (same as former Analysis export).">
+                    <Button.Styles>
+                        <Style Selector="Button:pointerover">
+                            <Setter Property="Background" Value="#3a3a3a"/>
+                        </Style>
+                    </Button.Styles>
+                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <Border Width="16" Height="16">
+                            <Path Data="M 58,21.657 C 58,20.066 57.368,18.539 56.243,17.414 53.947,15.119 48.881,10.053 46.586,7.757 45.461,6.632 43.934,6 42.343,6 36.958,6 19.846,6 12,6 8.686,6 6,8.686 6,12 c 0,9.04 0,30.96 0,40 0,3.314 2.686,6 6,6 9.04,0 30.96,0 40,0 3.314,0 6,-2.686 6,-6 z M 48,54 V 36 C 48,35.47 47.789,34.961 47.414,34.586 47.039,34.211 46.53,34 46,34 41.561,34 22.439,34 18,34 17.47,34 16.961,34.211 16.586,34.586 16.211,34.961 16,35.47 16,36 V 54 Z M 18,10 v 6 c 0,0.53 0.211,1.039 0.586,1.414 C 18.961,17.789 19.47,18 20,18 c 3.732,0 15.268,0 19,0 0.53,0 1.039,-0.211 1.414,-0.586 C 40.789,17.039 41,16.53 41,16 v -6 z"
+                                  Fill="#ffffff"
+                                  Stretch="Uniform"/>
+                        </Border>
+                        <TextBlock Text="SAVE" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Button x:Name="OpenButton"
+                        Command="{Binding GlobalLoadCommand}"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Foreground="#e0e0e0"
+                        FontSize="14"
+                        FontFamily="Segoe UI,Arial"
+                        Padding="16,8"
+                        Cursor="Hand"
+                        CornerRadius="0"
+                        ToolTip.Tip="Loads png image captured elsewhere, or loads calculation result for visualization.">
+                    <Button.Styles>
+                        <Style Selector="Button:pointerover">
+                            <Setter Property="Background" Value="#3a3a3a"/>
+                        </Style>
+                    </Button.Styles>
+                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <Border Width="16" Height="16">
+                            <Path Data="M 25,43 H 14 C 10.686,43 8,40.314 8,37 8,31.054 8,19.946 8,14 c 0,-3.314 2.686,-6 6,-6 8.367,0 27.633,0 36,0 3.314,0 6,2.686 6,6 0,5.946 0,17.054 0,23 0,3.314 -2.686,6 -6,6 H 38.999 v 9 c 0,1.061 -0.421,2.078 -1.171,2.828 C 37.078,55.579 36.06,56 34.999,56 33.257,56 30.742,56 29,56 27.939,56 26.921,55.579 26.171,54.828 25.421,54.078 25,53.061 25,52 Z M 38.999,39 H 50 c 1.105,0 2,-0.895 2,-2 0,-5.946 0,-17.054 0,-23 0,-1.105 -0.895,-2 -2,-2 -8.367,0 -27.633,0 -36,0 -1.105,0 -2,0.895 -2,2 0,5.946 0,17.054 0,23 0,1.105 0.895,2 2,2 h 11 v -6 h -6 c -0.809,0 -1.538,-0.487 -1.848,-1.235 -0.309,-0.747 -0.138,-1.607 0.434,-2.179 l 12.999,-13 C 30.96,16.211 31.469,16 31.999,16 c 0.531,0 1.039,0.211 1.414,0.586 l 13,13 c 0.572,0.572 0.744,1.432 0.434,2.179 -0.31,0.748 -1.039,1.235 -1.848,1.235 0,0 -3.63,0 -6,0 z"
+                                  Fill="#ffffff"
+                                  Stretch="Uniform"/>
+                        </Border>
+                        <TextBlock Text="OPEN" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Button Command="{Binding ToggleHelpModeCommand}"
+                        Classes="help-toggle"
+                        Classes.help-active="{Binding HelpModeActive}"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Foreground="#e0e0e0"
+                        FontSize="14"
+                        FontFamily="Segoe UI,Arial"
+                        Padding="16,8"
+                        Cursor="Hand"
+                        CornerRadius="0">
+                    <Button.Styles>
+                        <Style Selector="Button.help-toggle:pointerover">
+                            <Setter Property="Background" Value="#3a3a3a"/>
+                        </Style>
+                        <Style Selector="Button.help-toggle.help-active">
+                            <Setter Property="Background" Value="#1f2b1f"/>
+                            <Setter Property="Foreground" Value="#d6ffd9"/>
+                        </Style>
+                    </Button.Styles>
+                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <TextBlock Text="?" FontWeight="Bold" VerticalAlignment="Center"/>
+                        <TextBlock Text="HELP" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Border x:Name="HelpAnchorMainMenu"
+                        Width="1"
+                        Height="1"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Bottom"
+                        IsHitTestVisible="False"/>
+                </StackPanel>
+                </Grid>
+
+                <v:HelpBubble IsOpen="{Binding HelpModeActive}"
+                              PlacementTarget="{Binding #HelpAnchorMainMenu}"
+                              Placement="Bottom"
+                              HelpText="SAVE: Export current visualization/result data (CSV/JSON/PNG).&#x0a;&#x0a;OPEN: Load previously saved CSV result for plotting in Visualization tab."/>
+            </StackPanel>
+        </Grid>
+
+        <!-- Content Area -->
+        <Carousel Name="MainCarousel" Grid.Row="1">
+            <v:CameraSetupView/>
+            <v:CalibrationSetupView/>
+            <v:AnalysisView/>
+        </Carousel>
+    </Grid>
+
+</Window>

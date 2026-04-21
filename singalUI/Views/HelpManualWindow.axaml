@@ -1,0 +1,51 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:singalUI.ViewModels"
+        x:Class="singalUI.Views.HelpManualWindow"
+        x:DataType="vm:HelpManualViewModel"
+        Title="NanoMeas Calibrator — Help"
+        Width="480"
+        MinWidth="360"
+        MinHeight="400"
+        WindowStartupLocation="Manual"
+        ShowInTaskbar="False"
+        Background="#0d0d0d"
+        SystemDecorations="Full">
+
+    <Design.DataContext>
+        <vm:HelpManualViewModel/>
+    </Design.DataContext>
+
+    <Grid ColumnDefinitions="180,*" Margin="0">
+        <Border Grid.Column="0" Background="#1a1a1a" BorderBrush="#404040" BorderThickness="0,0,1,0" Padding="8,12">
+            <ListBox ItemsSource="{Binding Sections}"
+                     SelectedItem="{Binding SelectedSection}"
+                     Background="Transparent"
+                     BorderThickness="0">
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:HelpManualSection">
+                        <TextBlock Text="{Binding Title}"
+                                   FontSize="13"
+                                   Foreground="#e0e0e0"
+                                   TextWrapping="Wrap"
+                                   Padding="4,6"/>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </Border>
+
+        <ScrollViewer Grid.Column="1" Padding="16,14">
+            <StackPanel Spacing="12">
+                <TextBlock Text="{Binding SelectedSection.Title}"
+                           FontSize="18"
+                           FontWeight="SemiBold"
+                           Foreground="#ffffff"/>
+                <TextBlock Text="{Binding SelectedSection.Body}"
+                           FontSize="13"
+                           Foreground="#d0d0d0"
+                           TextWrapping="Wrap"
+                           LineHeight="22"/>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Window>

@@ -1,0 +1,28 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="singalUI.Views.HelpBubble"
+             x:Name="Root"
+             Width="0"
+             Height="0"
+             MinWidth="0"
+             MinHeight="0"
+             IsHitTestVisible="False">
+    <!-- Zero-size host; Popup renders in overlay layer -->
+    <Panel>
+        <Popup x:Name="PART_Popup"
+               IsLightDismissEnabled="False"
+               WindowManagerAddShadowHint="True">
+            <Border x:Name="BubbleBorder"
+                    Background="#1f2b1f"
+                    BorderBrush="#58ff9a"
+                    BorderThickness="1"
+                    CornerRadius="10"
+                    Padding="12,10">
+                <TextBlock x:Name="BubbleText"
+                           FontSize="12"
+                           Foreground="#d6ffd9"
+                           TextWrapping="Wrap"/>
+            </Border>
+        </Popup>
+    </Panel>
+</UserControl>

@@ -1,0 +1,414 @@
+// Stage Control gRPC Service Definition
+// Provides comprehensive control for PI E-712 stage controller
+
+syntax = "proto3";
+
+package stagecontrol;
+
+// Main stage control service
+service StageControl {
+  // Connection Management
+  rpc Connect(ConnectRequest) returns (ConnectResponse);
+  rpc Disconnect(DisconnectRequest) returns (DisconnectResponse);
+  rpc GetStatus(StatusRequest) returns (StatusResponse);
+
+  // Axis Management
+  rpc GetAxesInfo(AxesInfoRequest) returns (AxesInfoResponse);
+  rpc SelectAxis(SelectAxisRequest) returns (SelectAxisResponse);
+
+  // Movement Commands
+  rpc MoveSingle(MoveSingleRequest) returns (MoveSingleResponse);
+  rpc MoveMultiple(MoveMultipleRequest) returns (stream MoveProgress);
+  rpc MoveToAbsolute(MoveToAbsoluteRequest) returns (MoveToAbsoluteResponse);
+  rpc MoveRelative(MoveRelativeRequest) returns (MoveRelativeResponse);
+  rpc StopMovement(StopRequest) returns (StopResponse);
+
+  // Position Streaming
+  rpc StreamPositions(PositionStreamRequest) returns (stream PositionData);
+  rpc GetCurrentPosition(GetPositionRequest) returns (PositionResponse);
+
+  // Reference/Homing
+  rpc ReferenceAll(ReferenceRequest) returns (ReferenceResponse);
+  rpc ReferenceAxis(ReferenceAxisRequest) returns (ReferenceResponse);
+
+  // Servo Control
+  rpc SetServo(SetServoRequest) returns (SetServoResponse);
+  rpc GetServoStatus(GetServoRequest) returns (GetServoResponse);
+
+  // Limits and Configuration
+  rpc GetLimits(GetLimitsRequest) returns (GetLimitsResponse);
+  rpc SetStepSize(SetStepSizeRequest) returns (SetStepSizeResponse);
+  rpc GetStepSize(GetStepSizeRequest) returns (GetStepSizeResponse);
+
+  // Multi-Stage Control
+  rpc ConfigureStages(ConfigureStagesRequest) returns (ConfigureStagesResponse);
+  rpc GetStagesConfig(GetStagesConfigRequest) returns (GetStagesConfigResponse);
+  rpc MoveStagesSequence(MoveStagesSequenceRequest) returns (MoveStagesSequenceResponse);
+
+  // System Commands
+  rpc GetSystemInfo(SystemInfoRequest) returns (SystemInfoResponse);
+  rpc ResetSystem(ResetRequest) returns (ResetResponse);
+  rpc EmergencyStop(EmergencyStopRequest) returns (EmergencyStopResponse);
+
+  // Debug and Diagnostics
+  rpc GetDiagnostics(DiagnosticsRequest) returns (DiagnosticsResponse);
+  rpc EnableDebug(EnableDebugRequest) returns (EnableDebugResponse);
+  rpc GetDebugLog(DebugLogRequest) returns (stream DebugLogEntry);
+}
+
+// Connection Messages
+message ConnectRequest {
+  string device_mask = 1;  // e.g., "E-712"
+  int32 timeout_ms = 2;    // Connection timeout
+}
+
+message ConnectResponse {
+  bool success = 1;
+  string message = 2;
+  string device_id = 3;
+  string idn = 4;
+  repeated string axes = 5;
+}
+
+message DisconnectRequest {
+  bool keep_servo_on = 1;
+}
+
+message DisconnectResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// Status Messages
+message StatusRequest {}
+
+message StatusResponse {
+  bool connected = 1;
+  repeated string axes = 2;
+  map<string, double> positions = 3;
+  map<string, bool> servo_on = 4;
+  map<string, bool> referenced = 5;
+  int32 error_code = 6;
+  string error_message = 7;
+}
+
+// Axis Information
+message AxesInfoRequest {}
+
+message AxesInfoResponse {
+  repeated AxisInfo axes = 1;
+}
+
+message AxisInfo {
+  string axis_id = 1;
+  string name = 2;
+  double min_position = 3;
+  double max_position = 4;
+  double current_position = 5;
+  bool servo_on = 6;
+  bool referenced = 7;
+  bool is_moving = 8;
+}
+
+// Axis Selection
+message SelectAxisRequest {
+  string axis_id = 1;
+}
+
+message SelectAxisResponse {
+  bool success = 1;
+  string message = 2;
+  string selected_axis = 3;
+}
+
+// Single Movement
+message MoveSingleRequest {
+  string axis_id = 1;
+  double step_size = 2;
+  int32 num_steps = 3;
+  bool wait_for_completion = 4;
+  double timeout_seconds = 5;
+}
+
+message MoveSingleResponse {
+  bool success = 1;
+  string message = 2;
+  double start_position = 3;
+  double end_position = 4;
+  double actual_distance = 5;
+  double elapsed_time = 6;
+}
+
+// Multiple Movements
+message MoveMultipleRequest {
+  repeated MoveOperation moves = 1;
+  bool sequential = 2;  // true = execute one at a time, false = parallel
+  double timeout_seconds = 3;
+}
+
+message MoveOperation {
+  string axis_id = 1;
+  double distance = 2;
+  double step_size = 3;
+}
+
+message MoveProgress {
+  int32 current_step = 1;
+  int32 total_steps = 2;
+  string axis_id = 3;
+  double current_position = 4;
+  double target_position = 5;
+  double progress_percent = 6;
+  bool is_complete = 7;
+  string status = 8;
+}
+
+// Absolute Movement
+message MoveToAbsoluteRequest {
+  string axis_id = 1;
+  double target_position = 2;
+  bool wait_for_completion = 3;
+  double timeout_seconds = 4;
+}
+
+message MoveToAbsoluteResponse {
+  bool success = 1;
+  string message = 2;
+  double start_position = 3;
+  double end_position = 4;
+}
+
+// Relative Movement
+message MoveRelativeRequest {
+  string axis_id = 1;
+  double distance = 2;
+  bool wait_for_completion = 3;
+  double timeout_seconds = 4;
+}
+
+message MoveRelativeResponse {
+  bool success = 1;
+  string message = 2;
+  double start_position = 3;
+  double end_position = 4;
+  double actual_distance = 5;
+}
+
+// Stop Movement
+message StopRequest {
+  repeated string axis_ids = 1;  // Empty means all axes
+}
+
+message StopResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// Position Streaming
+message PositionStreamRequest {
+  int32 update_interval_ms = 1;
+  repeated string axes = 2;  // Empty means all axes
+}
+
+message PositionData {
+  double timestamp = 1;
+  map<string, double> positions = 2;
+  map<string, bool> servo_on = 3;
+  map<string, bool> referenced = 4;
+  map<string, bool> on_target = 5;
+}
+
+// Get Current Position
+message GetPositionRequest {
+  repeated string axes = 1;  // Empty means all axes
+}
+
+message PositionResponse {
+  bool success = 1;
+  map<string, double> positions = 2;
+  double timestamp = 3;
+}
+
+// Reference/Homing
+message ReferenceRequest {
+  bool all_axes = 1;
+}
+
+message ReferenceAxisRequest {
+  string axis_id = 1;
+}
+
+message ReferenceResponse {
+  bool success = 1;
+  string message = 2;
+  repeated string referenced_axes = 3;
+}
+
+// Servo Control
+message SetServoRequest {
+  repeated string axis_ids = 1;
+  bool enable = 2;
+}
+
+message SetServoResponse {
+  bool success = 1;
+  string message = 2;
+  map<string, bool> servo_states = 3;
+}
+
+message GetServoRequest {
+  repeated string axes = 1;  // Empty means all axes
+}
+
+message GetServoResponse {
+  map<string, bool> servo_on = 1;
+}
+
+// Limits
+message GetLimitsRequest {
+  repeated string axes = 1;  // Empty means all axes
+}
+
+message GetLimitsResponse {
+  map<string, double> min_limits = 1;
+  map<string, double> max_limits = 2;
+}
+
+// Step Size
+message SetStepSizeRequest {
+  string axis_id = 1;
+  double step_size = 2;
+}
+
+message SetStepSizeResponse {
+  bool success = 1;
+  string message = 2;
+  double step_size = 3;
+}
+
+message GetStepSizeRequest {
+  string axis_id = 1;
+}
+
+message GetStepSizeResponse {
+  double step_size = 1;
+}
+
+// Multi-Stage Configuration
+message ConfigureStagesRequest {
+  int32 num_stages = 1;
+  repeated StageConfig stages = 2;
+}
+
+message StageConfig {
+  string stage_id = 1;
+  string device_id = 2;
+  repeated string axes = 3;
+  map<string, string> axis_mapping = 4;  // virtual -> physical axis
+}
+
+message ConfigureStagesResponse {
+  bool success = 1;
+  string message = 2;
+  int32 configured_stages = 3;
+}
+
+message GetStagesConfigRequest {}
+
+message GetStagesConfigResponse {
+  repeated StageConfig stages = 1;
+}
+
+// Multi-Stage Movement Sequence
+message MoveStagesSequenceRequest {
+  repeated StageMoveOperation moves = 1;
+  bool wait_for_completion = 2;
+}
+
+message StageMoveOperation {
+  string stage_id = 1;
+  string axis_id = 2;
+  double distance = 3;
+  double step_size = 4;
+}
+
+message MoveStagesSequenceResponse {
+  bool success = 1;
+  string message = 2;
+  int32 completed_moves = 3;
+}
+
+// System Info
+message SystemInfoRequest {}
+
+message SystemInfoResponse {
+  string device_id = 1;
+  string idn = 2;
+  string firmware_version = 3;
+  repeated string available_axes = 4;
+  map<string, string> parameters = 5;
+}
+
+// Reset
+message ResetRequest {
+  bool reset_controller = 1;
+  bool reset_axes = 2;
+}
+
+message ResetResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// Emergency Stop
+message EmergencyStopRequest {
+  bool stop_all = 1;
+  repeated string axis_ids = 2;
+}
+
+message EmergencyStopResponse {
+  bool success = 1;
+  string message = 2;
+  map<string, bool> stopped_axes = 3;
+}
+
+// Diagnostics
+message DiagnosticsRequest {}
+
+message DiagnosticsResponse {
+  bool system_healthy = 1;
+  repeated DiagnosticIssue issues = 2;
+  map<string, string> metrics = 3;
+}
+
+message DiagnosticIssue {
+  string severity = 1;  // INFO, WARNING, ERROR, CRITICAL
+  string component = 2;
+  string message = 3;
+  string timestamp = 4;
+}
+
+// Debug
+message EnableDebugRequest {
+  bool enable = 1;
+  string log_level = 2;  // DEBUG, INFO, WARNING, ERROR
+  int32 max_log_entries = 3;
+}
+
+message EnableDebugResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message DebugLogRequest {
+  int32 num_entries = 1;
+  string level_filter = 2;
+}
+
+message DebugLogEntry {
+  string timestamp = 1;
+  string level = 2;
+  string component = 3;
+  string message = 4;
+  map<string, string> metadata = 5;
+}

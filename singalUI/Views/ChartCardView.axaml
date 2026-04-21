@@ -1,0 +1,11 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:singalUI.ViewModels"
+             x:Class="singalUI.Views.ChartCardView"
+             x:DataType="vm:ChartCardViewModel"
+             Background="Transparent">
+
+    <Design.DataContext>
+        <vm:ChartCardViewModel/>
+    </Design.DataContext>
+</UserControl>
