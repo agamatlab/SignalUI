@@ -123,6 +123,7 @@
                         VerticalAlignment="Center"
                         HorizontalAlignment="Right"
                         Margin="0,0,12,0">
+                <Grid>
                 <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
                 <Button x:Name="SaveButton"
                         Command="{Binding GlobalSaveCommand}"
@@ -199,27 +200,19 @@
                         <TextBlock Text="HELP" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Button>
-                </StackPanel>
-
-                <Border IsVisible="{Binding HelpModeActive}"
-                        Background="#252525"
-                        BorderBrush="#58ff9a"
-                        BorderThickness="1"
-                        CornerRadius="6"
-                        Padding="8,6"
+                <Border x:Name="HelpAnchorMainMenu"
+                        Width="1"
+                        Height="1"
                         HorizontalAlignment="Right"
-                        MaxWidth="520">
-                    <StackPanel Spacing="4">
-                        <TextBlock Text="SAVE: Export current visualization/result data (CSV/JSON/PNG)."
-                                   FontSize="12"
-                                   Foreground="#d6ffd9"
-                                   TextWrapping="Wrap"/>
-                        <TextBlock Text="OPEN: Load previously saved CSV result for plotting in Visualization tab."
-                                   FontSize="12"
-                                   Foreground="#d6ffd9"
-                                   TextWrapping="Wrap"/>
-                    </StackPanel>
-                </Border>
+                        VerticalAlignment="Bottom"
+                        IsHitTestVisible="False"/>
+                </StackPanel>
+                </Grid>
+
+                <v:HelpBubble IsOpen="{Binding HelpModeActive}"
+                              PlacementTarget="{Binding #HelpAnchorMainMenu}"
+                              Placement="Bottom"
+                              HelpText="SAVE: Export current visualization/result data (CSV/JSON/PNG).&#x0a;&#x0a;OPEN: Load previously saved CSV result for plotting in Visualization tab."/>
             </StackPanel>
         </Grid>
 

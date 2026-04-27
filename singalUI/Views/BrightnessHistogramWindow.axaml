@@ -1,0 +1,61 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="singalUI.Views.BrightnessHistogramWindow"
+        Title="Brightness distribution"
+        Width="440"
+        Height="300"
+        MinWidth="360"
+        MinHeight="260"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Background="#0d0d0d"
+        SystemDecorations="Full">
+
+    <Border Background="#151515"
+            BorderBrush="#404040"
+            BorderThickness="1"
+            Margin="12"
+            CornerRadius="8"
+            Padding="16,14">
+        <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="10">
+            <TextBlock Text="Brightness distribution"
+                       FontSize="16"
+                       FontWeight="SemiBold"
+                       Foreground="#e8e8e8"/>
+            <TextBlock x:Name="PixelCountText"
+                       Grid.Row="1"
+                       FontSize="12"
+                       Foreground="#a0a0a0"/>
+            <Border x:Name="ChartBorder"
+                    Grid.Row="2"
+                    MinHeight="140"
+                    Background="#0d0d0d"
+                    BorderBrush="#333333"
+                    BorderThickness="1"
+                    CornerRadius="4"
+                    Padding="8,8,8,4"
+                    ClipToBounds="True">
+                <Canvas x:Name="HistogramCanvas"
+                        HorizontalAlignment="Stretch"
+                        VerticalAlignment="Stretch"/>
+            </Border>
+            <Grid Grid.Row="3" ColumnDefinitions="Auto,*,Auto">
+                <TextBlock Text="0"
+                           FontSize="11"
+                           Foreground="#888888"
+                           VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1"
+                           Text="Grayscale (0–255)"
+                           FontSize="11"
+                           Foreground="#707070"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="2"
+                           Text="255"
+                           FontSize="11"
+                           Foreground="#888888"
+                           VerticalAlignment="Center"/>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>

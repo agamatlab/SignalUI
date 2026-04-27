@@ -71,6 +71,10 @@ namespace singalUI.ViewModels
         [ObservableProperty]
         private bool _helpModeActive;
 
+        /// <summary>True when help mode is on and the Stage tab is selected.</summary>
+        [ObservableProperty]
+        private bool _helpBubblesOpen;
+
         [ObservableProperty]
         private double _timedDuration = 60;
 
@@ -208,11 +212,14 @@ namespace singalUI.ViewModels
         private Timer? _positionPollTimer;
         private CancellationTokenSource? _samplingSequenceCts;
         private readonly List<PoseEstimationResult> _capturedPoseResults = new();
+        private int _sequenceSessionNumber;
 
         public CalibrationSetupViewModel()
         {
             HelpModeActive = HelpModeService.IsEnabled;
             HelpModeService.HelpModeChanged += OnHelpModeChanged;
+            HelpModeService.ActiveMainTabChanged += OnActiveMainTabChanged;
+            SyncHelpBubblesOpen();
 
             // Initialize static StageManager with default stages FIRST
             StageManager.InitializeDefaultStages();
@@ -533,6 +540,7 @@ namespace singalUI.ViewModels
         {
             _samplingSequenceCts?.Cancel();
             HelpModeService.HelpModeChanged -= OnHelpModeChanged;
+            HelpModeService.ActiveMainTabChanged -= OnActiveMainTabChanged;
             foreach (var wrapper in StageWrappers)
             {
                 wrapper.PropertyChanged -= OnWrapperPropertyChanged;
@@ -541,9 +549,18 @@ namespace singalUI.ViewModels
             StopPositionPolling();
         }
 
+        private void OnActiveMainTabChanged() => SyncHelpBubblesOpen();
+
+        private void SyncHelpBubblesOpen()
+        {
+            HelpBubblesOpen = HelpModeActive &&
+                              string.Equals(HelpModeService.ActiveMainTab, HelpModeService.TabStage, StringComparison.Ordinal);
+        }
+
         private void OnHelpModeChanged(bool enabled)
         {
             HelpModeActive = enabled;
+            SyncHelpBubblesOpen();
         }
 
         [RelayCommand]
@@ -643,11 +660,19 @@ namespace singalUI.ViewModels
             IsSequenceRunning = true;
             int totalAxes = enabledAxes.Count;
             int currentAxis = 0;
+            int sampleStep = 0;
+            long lastPoseFrameSeq = -1;
+            var cameraVm = CameraSetupViewModel.Instance;
+            _capturedPoseResults.Clear();
+            int sessionNo = Interlocked.Increment(ref _sequenceSessionNumber);
+            string csvPath = BuildSequenceCsvPath(sessionNo);
 
             try
             {
                 Log($"========== StartSequence {(MovementModeAbsolute ? "ABSOLUTE" : "RELATIVE")} ==========");
-                Log($"[StartSequence] Total axes: {totalAxes}");
+                Log($"[StartSequence] Total axes: {totalAxes}, session={sessionNo}, csv={csvPath}");
+                if (cameraVm == null)
+                    Log("[StartSequence] CameraSetupViewModel.Instance is null; sequence will run without pose sampling.");
 
                 foreach (var axisConfig in enabledAxes)
                 {
@@ -694,6 +719,24 @@ namespace singalUI.ViewModels
 
                             MovementStatus = $"{axisConfig.Label}: Step {step + 1}/{stepCount}";
                             Log($"  Step {step + 1}/{stepCount} +{stepSizeUi:F2} {u}");
+                            if (cameraVm != null)
+                            {
+                                var capture = await CaptureSecondPoseAbsAfterMoveAsync(cameraVm, lastPoseFrameSeq, CancellationToken.None);
+                                lastPoseFrameSeq = Math.Max(lastPoseFrameSeq, capture.frameSeq);
+                                sampleStep++;
+                                var stage = CaptureStagePoseSnapshot();
+                                var result = BuildPoseEstimationResult(sampleStep, stage, capture.pose, capture.timestampUtc, capture.success);
+                                _capturedPoseResults.Add(result);
+                                if (result.Success)
+                                {
+                                    PushSampleToVisualization(_capturedPoseResults);
+                                    Log($"  Pose sample {sampleStep} captured from pose_abs frame={capture.frameSeq}");
+                                }
+                                else
+                                {
+                                    Log($"  Pose sample {sampleStep} failed (pose_abs frame timeout)");
+                                }
+                            }
                             await Task.Delay(50);
                         }
 
@@ -729,6 +772,24 @@ namespace singalUI.ViewModels
 
                             MovementStatus = $"{axisConfig.Label}: Step {step + 1}/{stepCount}";
                             Log($"  Step {step + 1}/{stepCount} +{stepSizeUi:F2} {u}");
+                            if (cameraVm != null)
+                            {
+                                var capture = await CaptureSecondPoseAbsAfterMoveAsync(cameraVm, lastPoseFrameSeq, CancellationToken.None);
+                                lastPoseFrameSeq = Math.Max(lastPoseFrameSeq, capture.frameSeq);
+                                sampleStep++;
+                                var stage = CaptureStagePoseSnapshot();
+                                var result = BuildPoseEstimationResult(sampleStep, stage, capture.pose, capture.timestampUtc, capture.success);
+                                _capturedPoseResults.Add(result);
+                                if (result.Success)
+                                {
+                                    PushSampleToVisualization(_capturedPoseResults);
+                                    Log($"  Pose sample {sampleStep} captured from pose_abs frame={capture.frameSeq}");
+                                }
+                                else
+                                {
+                                    Log($"  Pose sample {sampleStep} failed (pose_abs frame timeout)");
+                                }
+                            }
                             await Task.Delay(50);
                         }
 
@@ -739,6 +800,8 @@ namespace singalUI.ViewModels
                 }
 
                 MovementStatus = $"Sequence completed ({totalAxes} axes)";
+                WritePoseResultsCsv(csvPath, _capturedPoseResults);
+                Log($"[StartSequence] Saved CSV with {_capturedPoseResults.Count} samples: {csvPath}");
                 Log($"[StartSequence] === COMPLETED ===");
             }
             catch (Exception ex)
@@ -774,11 +837,12 @@ namespace singalUI.ViewModels
             double timedIntervalSec = Math.Max(0.02, TimedInterval);
             int triggeredDelayMs = Math.Max(0, (int)Math.Round(TriggeredDelay));
             long lastPoseFrameSeq = -1;
-            string csvPath = BuildSequenceCsvPath();
+            int sessionNo = Interlocked.Increment(ref _sequenceSessionNumber);
+            string csvPath = BuildSequenceCsvPath(sessionNo);
 
             IsSequenceRunning = true;
             MovementStatus = $"Sampling pose: 0/{targetPoints}";
-            Log($"[SamplingSequence] START mode={SamplingMode}, targetPoints={targetPoints}, csv={csvPath}");
+            Log($"[SamplingSequence] START mode={SamplingMode}, session={sessionNo}, targetPoints={targetPoints}, csv={csvPath}");
 
             try
             {
@@ -808,7 +872,7 @@ namespace singalUI.ViewModels
                             await Task.Delay(triggeredDelayMs, token);
                     }
 
-                    bool success = cameraVm.TryGetLatestPoseSnapshot(out var pose, out var poseFrameSeq, out var poseTsUtc)
+                    bool success = cameraVm.TryGetLatestPoseAbsSnapshot(out var pose, out var poseFrameSeq, out var poseTsUtc)
                                    && pose.Length >= 6;
                     if (success)
                         lastPoseFrameSeq = Math.Max(lastPoseFrameSeq, poseFrameSeq);
@@ -826,16 +890,16 @@ namespace singalUI.ViewModels
                     Log($"[SamplingSequence] Step {step}/{targetPoints}, success={result.Success}, frame={poseFrameSeq}");
                 }
 
+                WritePoseResultsCsv(csvPath, _capturedPoseResults);
                 if (_capturedPoseResults.Count > 0)
                 {
-                    WritePoseResultsCsv(csvPath, _capturedPoseResults);
                     MovementStatus = $"Sampling complete ({_capturedPoseResults.Count} points)";
                     Log($"[SamplingSequence] COMPLETE points={_capturedPoseResults.Count}, csv={csvPath}");
                 }
                 else
                 {
                     MovementStatus = "No sample was captured";
-                    Log("[SamplingSequence] No sample captured");
+                    Log($"[SamplingSequence] No sample captured, empty CSV saved: {csvPath}");
                 }
             }
             catch (OperationCanceledException)
@@ -875,12 +939,38 @@ namespace singalUI.ViewModels
             var timeout = Stopwatch.StartNew();
             while (!token.IsCancellationRequested && timeout.ElapsedMilliseconds < 5000)
             {
-                if (cameraVm.TryGetLatestPoseSnapshot(out _, out var currentSeq, out _) && currentSeq > previousFrameSeq)
+                if (cameraVm.TryGetLatestPoseAbsSnapshot(out _, out var currentSeq, out _) && currentSeq > previousFrameSeq)
                     return true;
                 await Task.Delay(20, token);
             }
 
             return false;
+        }
+
+        private async Task<(bool success, double[] pose, long frameSeq, DateTime timestampUtc)> CaptureSecondPoseAbsAfterMoveAsync(
+            CameraSetupViewModel cameraVm,
+            long previousFrameSeq,
+            CancellationToken token)
+        {
+            long latestSeq = previousFrameSeq;
+            int advances = 0;
+            var timeout = Stopwatch.StartNew();
+            while (!token.IsCancellationRequested && IsSequenceRunning && timeout.ElapsedMilliseconds < 7000)
+            {
+                if (cameraVm.TryGetLatestPoseAbsSnapshot(out var poseAbs, out var currentSeq, out var tsUtc) && currentSeq > latestSeq)
+                {
+                    latestSeq = currentSeq;
+                    advances++;
+                    if (advances >= 2)
+                    {
+                        bool ok = poseAbs.Length >= 6;
+                        return (ok, ok ? poseAbs : new double[6], currentSeq, ok ? tsUtc : DateTime.MinValue);
+                    }
+                }
+                await Task.Delay(20, token);
+            }
+
+            return (false, new double[6], latestSeq, DateTime.MinValue);
         }
 
         private static (double stageX, double stageY, double stageZ, double stageRx, double stageRy, double stageRz) CaptureStagePoseSnapshot()
@@ -953,20 +1043,39 @@ namespace singalUI.ViewModels
                 ErrorRy = errorRyDeg,
                 ErrorRz = errorRzDeg,
                 Success = success,
-                ErrorMessage = success ? string.Empty : "No valid pose snapshot from camera"
+                ErrorMessage = success ? string.Empty : "No valid pose_abs snapshot from camera"
             };
         }
 
-        private static string BuildSequenceCsvPath()
+        private string BuildSequenceCsvPath(int sessionNo)
         {
-            string root = Path.Combine(AppContext.BaseDirectory, "storage", "pose_sequences");
+            string root = Path.Combine(AppContext.BaseDirectory, "storage");
             Directory.CreateDirectory(root);
-            return Path.Combine(root, $"stage_sequence_{DateTime.Now:yyyyMMdd_HHmmss}.csv");
+
+            var enabledRows = MotionRows.Where(r => r.IsEnabled).ToList();
+            var primaryRow = enabledRows.FirstOrDefault();
+            double stepSize = 0;
+            double totalRange = 0;
+            if (primaryRow != null)
+            {
+                stepSize = Math.Abs(MovementModeAbsolute ? primaryRow.AutoStepSize : primaryRow.StepSize);
+                totalRange = Math.Abs(primaryRow.Range);
+            }
+            else
+            {
+                stepSize = Math.Abs(MoveStepSize);
+                totalRange = Math.Abs(MoveStepSize * Math.Max(1, MoveNumSteps));
+            }
+
+            string stepToken = stepSize.ToString("0.###", CultureInfo.InvariantCulture).Replace('.', 'p');
+            string rangeToken = totalRange.ToString("0.###", CultureInfo.InvariantCulture).Replace('.', 'p');
+            return Path.Combine(root, $"session_{sessionNo}_{DateTime.Now:yyyyMMdd_HHmmss}_step_{stepToken}_range_{rangeToken}.csv");
         }
 
         private static void WritePoseResultsCsv(string path, IReadOnlyList<PoseEstimationResult> results)
         {
             var iv = CultureInfo.InvariantCulture;
+            Directory.CreateDirectory(Path.GetDirectoryName(path) ?? AppContext.BaseDirectory);
             var lines = new List<string>(results.Count + 1)
             {
                 "StepNumber,Timestamp,ImagePath,StageX,StageY,StageZ,StageRx,StageRy,StageRz,EstimatedX,EstimatedY,EstimatedZ,EstimatedRx,EstimatedRy,EstimatedRz,ErrorX,ErrorY,ErrorZ,ErrorRx,ErrorRy,ErrorRz,Success,ErrorMessage"

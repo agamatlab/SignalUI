@@ -3,6 +3,7 @@ using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Threading;
+using singalUI.Services;
 using singalUI.ViewModels;
 using System;
 
@@ -61,6 +62,14 @@ public partial class MainWindow : Window
             _tabChevronAnimStartUtc = DateTime.UtcNow;
             _tabChevronTimer.Tick += (_, _) => UpdateTabChevronAnimation();
             _tabChevronTimer.Start();
+
+            HelpManualWindowPresenter.Attach(this);
+            HelpModeService.HelpModeChanged += OnHelpModeChangedMain;
+            OnHelpModeChangedMain(HelpModeService.IsEnabled);
+
+            if (DataContext is MainWindowViewModel vmInit)
+                HelpModeService.SetActiveMainTab(vmInit.ActiveTab);
+
             Console.WriteLine("[MainWindow] Constructor END");
         }
         catch (Exception ex)
@@ -69,6 +78,11 @@ public partial class MainWindow : Window
             Console.WriteLine($"[MainWindow] Stack trace: {ex.StackTrace}");
             throw;
         }
+    }
+
+    private void OnHelpModeChangedMain(bool enabled)
+    {
+        HelpManualWindowPresenter.SetVisible(enabled);
     }
 
     private void NavigateToCamera(object sender, Avalonia.Input.PointerPressedEventArgs e)
@@ -102,6 +116,8 @@ public partial class MainWindow : Window
 
         // Update tab states
         UpdateTabStates(index);
+
+        HelpModeService.SetActiveMainTab(viewName);
     }
 
     private void UpdateTabStates(int activeIndex)

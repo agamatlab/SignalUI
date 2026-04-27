@@ -20,15 +20,17 @@
                 BorderThickness="2"
                 Margin="16,16,8,16"
                 CornerRadius="0">
-            <Grid RowDefinitions="Auto,Auto,*,Auto">
+            <Grid>
+                <Grid RowDefinitions="Auto,*,Auto">
                 <!-- Camera header: focus meter + resolution + connection -->
-                <Border Grid.Row="0"
+                <Grid Grid.Row="0">
+                <Border
                         Background="#1c1c1c"
                         BorderBrush="#333333"
                         BorderThickness="0,0,0,2"
                         Padding="12,8"
                         CornerRadius="0">
-                    <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto" VerticalAlignment="Center">
+                    <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto,Auto" VerticalAlignment="Center">
                         <Border Grid.Column="0" Width="20" Height="20" Margin="0,0,12,0" VerticalAlignment="Center">
                             <Path Data="M4 6h2l1.5-2h5l1.5 2h2c1.1 0 2 .9 2 2v10c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V8c0-1.1.9-2 2-2zm6 11c2.2 0 4-1.8 4-4s-1.8-4-4-4-4 1.8-4 4 1.8 4 4 4zm0-6c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2z"
                                   Fill="#999999"
@@ -68,7 +70,18 @@
                                 <Border Grid.Column="1" Background="#0d0d0d"/>
                             </Grid>
                         </Border>
-                        <Border Grid.Column="5"
+                        <Button Grid.Column="4"
+                                Content="Brightness distribution"
+                                Command="{Binding OpenBrightnessDistributionCommand}"
+                                Margin="12,0,12,0"
+                                Padding="10,4"
+                                FontSize="12"
+                                Foreground="#e0e0e0"
+                                Background="#2a2a2a"
+                                BorderBrush="#404040"
+                                BorderThickness="1"
+                                VerticalAlignment="Center"/>
+                        <Border Grid.Column="6"
                                 Margin="0,0,16,0"
                                 Padding="10,4"
                                 Background="#cc000000"
@@ -80,7 +93,7 @@
                                        Foreground="#ffffff"
                                        VerticalAlignment="Center"/>
                         </Border>
-                        <StackPanel Grid.Column="6" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                        <StackPanel Grid.Column="7" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
                             <Ellipse Width="12" Height="12"
                                      VerticalAlignment="Center"
                                      Fill="{Binding CameraConnected, Converter={StaticResource ConnectedColorConverter}}"/>
@@ -96,30 +109,16 @@
                         </StackPanel>
                     </Grid>
                 </Border>
+                <Border x:Name="HelpAnchorCamera"
+                        Width="1"
+                        Height="1"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Bottom"
+                        Margin="0,0,12,4"
+                        IsHitTestVisible="False"/>
+                </Grid>
 
                 <Border Grid.Row="1"
-                        IsVisible="{Binding HelpModeActive}"
-                        Background="#1f2b1f"
-                        BorderBrush="#58ff9a"
-                        BorderThickness="0,0,0,1"
-                        Padding="10,8">
-                    <StackPanel Spacing="4">
-                        <TextBlock Text="Focus Level: calculated from FFT + gradient metrics in FocusCalculator.CalculateFFTFocus."
-                                   FontSize="12"
-                                   Foreground="#d6ffd9"
-                                   TextWrapping="Wrap"/>
-                        <TextBlock Text="Camera Preview window: live image for framing/focus/zoom-pan check before capture."
-                                   FontSize="12"
-                                   Foreground="#d6ffd9"
-                                   TextWrapping="Wrap"/>
-                        <TextBlock Text="Pose Preview box: shows latest DLL output (X/Y/Z in mm, Rx/Ry/Rz in deg)."
-                                   FontSize="12"
-                                   Foreground="#d6ffd9"
-                                   TextWrapping="Wrap"/>
-                    </StackPanel>
-                </Border>
-
-                <Border Grid.Row="2"
                         x:Name="CameraPreviewViewport"
                         Background="#0a0a0a"
                         CornerRadius="0"
@@ -142,7 +141,7 @@
                     </Grid>
                 </Border>
 
-                <Border Grid.Row="3"
+                <Border Grid.Row="2"
                         Background="#0f0f0f"
                         BorderBrush="#333333"
                         BorderThickness="0,2,0,0"
@@ -176,6 +175,13 @@
                     </Grid>
                 </Border>
             </Grid>
+
+                <v:HelpBubble IsOpen="{Binding HelpBubblesOpen}"
+                              PlacementTarget="{Binding #HelpAnchorCamera}"
+                              Placement="Bottom"
+                              BubbleMaxWidth="440"
+                              HelpText="Focus Level (0–100%): Focus = 50%·L₁₀₀ + 50%·F₁₀₀.&#x0a;L₁₀₀: variance of the 3×3 Laplacian on the center 60% ROI of a half-sized frame, then log₁₀-mapped to 0–100 (threshold below 1000 → 0).&#x0a;F₁₀₀: mean magnitude of the 2D FFT spectrum where radial distance exceeds 60% of the spectrum half-extent (high-frequency ring), log₁₀-mapped to 0–100 (below 10 → 0).&#x0a;&#x0a;Camera Preview: live image for framing, focus, zoom/pan.&#x0a;Pose Preview: latest DLL output (X/Y/Z mm, Rx/Ry/Rz deg)."/>
+            </Grid>
         </Border>
 
         <!-- Right Panel -->
@@ -193,14 +199,15 @@
                             <ComboBoxItem Content="mvBlueCOUGAR-X / 1x"/>
                         </ComboBox>
 
-                        <CheckBox IsChecked="{Binding AutoFocus}" Content="Auto Exposure" FontSize="13" Foreground="#ffffff"/>
+                        <CheckBox IsChecked="{Binding AutoExposure}" Content="Auto Exposure (maximize focus)" FontSize="13" Foreground="#ffffff"/>
 
                         <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto" RowSpacing="8" ColumnSpacing="10">
                             <TextBlock Grid.Row="0" Grid.Column="0" Text="Exposure (us)" FontSize="13" Foreground="#ffffff" VerticalAlignment="Center"/>
                             <NumericUpDown Grid.Row="0" Grid.Column="1"
                                            Value="{Binding CameraParameters.Exposure, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                            Minimum="100" Maximum="100000" Increment="100" FormatString="F0"
-                                           FontSize="13" HorizontalAlignment="Stretch"/>
+                                           FontSize="13" HorizontalAlignment="Stretch"
+                                           IsEnabled="{Binding AutoExposure, Converter={StaticResource InverseBoolConverter}}"/>
                         </Grid>
                     </StackPanel>
                 </v:CollapsiblePanelView.Content>

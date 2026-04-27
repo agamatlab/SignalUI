@@ -38,7 +38,8 @@
                     <CheckBox Content="Rz" IsChecked="{Binding ShowRz}" FontSize="14" Foreground="#ffffff"/>
                 </StackPanel>
 
-                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12">
+                <Grid Grid.Column="2">
+                <StackPanel Orientation="Horizontal" Spacing="12">
                     <Border Background="#202020"
                             BorderBrush="#505050"
                             BorderThickness="1"
@@ -66,6 +67,13 @@
                             Foreground="#ffffff"
                             BorderBrush="#505050"/>
                 </StackPanel>
+                <Border x:Name="HelpAnchorVizToolbar"
+                        Width="1"
+                        Height="1"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Bottom"
+                        IsHitTestVisible="False"/>
+                </Grid>
             </Grid>
         </Border>
 
@@ -77,19 +85,6 @@
                 BorderThickness="2"
                 CornerRadius="0">
             <Grid>
-                <Border IsVisible="{Binding HelpModeActive}"
-                        Background="#1f2b1f"
-                        BorderBrush="#58ff9a"
-                        BorderThickness="0,0,0,1"
-                        Padding="10,8"
-                        VerticalAlignment="Top"
-                        HorizontalAlignment="Stretch"
-                        ZIndex="5">
-                    <TextBlock Text="Visualization modes: use 2D for per-axis trend cards, switch to 3D for spatial point/mesh view, and use Grid/Points/Mesh toggles to control rendering."
-                               FontSize="12"
-                               Foreground="#d6ffd9"
-                               TextWrapping="Wrap"/>
-                </Border>
                 <!-- Empty State (No data and no status message) -->
                 <Border IsVisible="{Binding !HasData}"
                         HorizontalAlignment="Center"
@@ -199,11 +194,11 @@
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <Border Grid.Row="0" Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="20" Margin="8,16,16,8">
+            <Grid Grid.Row="0" Margin="8,16,16,8">
+            <Border Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="20">
                 <Button Content="Run stage calibration"
                         Command="{Binding RunStageCalibrationCommand}"
                         Padding="16,12"
@@ -214,22 +209,16 @@
                         BorderBrush="#1b5e20"
                         HorizontalAlignment="Stretch"/>
             </Border>
+            <Border x:Name="HelpAnchorAnalysisRight"
+                    Width="1"
+                    Height="1"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Bottom"
+                    Margin="0,0,8,8"
+                    IsHitTestVisible="False"/>
+            </Grid>
 
-            <Border Grid.Row="1"
-                    IsVisible="{Binding HelpModeActive}"
-                    Background="#1f2b1f"
-                    BorderBrush="#58ff9a"
-                    BorderThickness="1"
-                    CornerRadius="8"
-                    Padding="10,8"
-                    Margin="8,8,16,12">
-                <TextBlock Text="Tip: top-right OPEN loads CSV into this tab; SAVE exports current plotted results."
-                           FontSize="12"
-                           Foreground="#d6ffd9"
-                           TextWrapping="Wrap"/>
-            </Border>
-
-            <Border Grid.Row="2" Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="20" Margin="8,8,16,12">
+            <Border Grid.Row="1" Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="20" Margin="8,8,16,12">
                 <ScrollViewer>
                     <StackPanel Spacing="16">
                         <Grid ColumnDefinitions="Auto,*">
@@ -261,7 +250,7 @@
             </Border>
 
             <!-- Preview Mode -->
-            <Border Grid.Row="3" Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="20" Margin="8,0,16,12">
+            <Border Grid.Row="2" Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="20" Margin="8,0,16,12">
                 <StackPanel Spacing="12">
                     <Grid ColumnDefinitions="Auto,*">
                         <Border Grid.Column="0" Width="20" Height="20" VerticalAlignment="Center">
@@ -325,7 +314,7 @@
                 </StackPanel>
             </Border>
 
-            <Border Grid.Row="4" Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="20" Margin="8,0,16,12">
+            <Border Grid.Row="3" Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="20" Margin="8,0,16,12">
                 <StackPanel Spacing="12">
                     <Grid ColumnDefinitions="Auto,*">
                         <Border Grid.Column="0" Width="20" Height="20" VerticalAlignment="Center">
@@ -342,7 +331,7 @@
             </Border>
 
             <!-- Error Log -->
-            <Border Grid.Row="5" Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="20" Margin="8,0,16,12">
+            <Border Grid.Row="4" Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="20" Margin="8,0,16,12">
                 <StackPanel Spacing="16">
                     <!-- Section Header -->
                     <Grid ColumnDefinitions="Auto,*">
@@ -382,5 +371,17 @@
                 <Button Content="Generate Report" Command="{Binding GenerateReportCommand}" Padding="20,12" FontSize="14"/>
             </StackPanel>
         </Border>
+
+        <v:HelpBubble IsOpen="{Binding HelpBubblesOpen}"
+                      PlacementTarget="{Binding #HelpAnchorVizToolbar}"
+                      Placement="Bottom"
+                      BubbleMaxWidth="400"
+                      HelpText="Visualization modes: use 2D for per-axis trend cards, switch to 3D for spatial point/mesh view, and use Grid/Points/Mesh toggles to control rendering."/>
+
+        <v:HelpBubble IsOpen="{Binding HelpBubblesOpen}"
+                      PlacementTarget="{Binding #HelpAnchorAnalysisRight}"
+                      Placement="Bottom"
+                      BubbleMaxWidth="340"
+                      HelpText="Tip: top-right OPEN loads CSV into this tab; SAVE exports current plotted results."/>
     </Grid>
 </UserControl>

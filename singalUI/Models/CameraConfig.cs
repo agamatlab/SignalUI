@@ -73,8 +73,8 @@ public class CameraConfig
     public string PatternCompatibleLenses { get; set; } = "Not specified";
 
     // Auto modes
-    [JsonPropertyName("autoFocus")]
-    public bool AutoFocus { get; set; } = false;
+    [JsonPropertyName("autoExposure")]
+    public bool AutoExposure { get; set; } = false;
 
     [JsonPropertyName("autoIllumination")]
     public bool AutoIllumination { get; set; } = false;
@@ -104,7 +104,22 @@ public class CameraConfig
     {
         try
         {
-            return JsonSerializer.Deserialize<CameraConfig>(json);
+            var c = JsonSerializer.Deserialize<CameraConfig>(json);
+            if (c == null)
+                return null;
+            try
+            {
+                using var doc = JsonDocument.Parse(json);
+                var root = doc.RootElement;
+                if (!root.TryGetProperty("autoExposure", out _) && root.TryGetProperty("autoFocus", out var af))
+                    c.AutoExposure = af.GetBoolean();
+            }
+            catch
+            {
+                // ignore migration errors
+            }
+
+            return c;
         }
         catch
         {
@@ -137,7 +152,7 @@ public class CameraConfig
             PatternConfigType = vm.PatternConfigType,
             PatternPitchSize = vm.PatternConfigPitchSize,
             PatternCompatibleLenses = vm.PatternCompatibleLenses,
-            AutoFocus = vm.AutoFocus,
+            AutoExposure = vm.AutoExposure,
             AutoIllumination = vm.AutoIllumination,
             EnableFftFocus = vm.EnableFftFocus,
             FftCalculationInterval = vm.FftCalculationInterval
@@ -169,7 +184,7 @@ public class CameraConfig
         vm.PatternConfigType = PatternConfigType;
         vm.PatternConfigPitchSize = PatternPitchSize;
         vm.PatternCompatibleLenses = PatternCompatibleLenses;
-        vm.AutoFocus = AutoFocus;
+        vm.AutoExposure = AutoExposure;
         vm.AutoIllumination = AutoIllumination;
         vm.EnableFftFocus = EnableFftFocus;
         vm.FftCalculationInterval = FftCalculationInterval;

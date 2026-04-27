@@ -3,6 +3,7 @@
              xmlns:vm="using:singalUI.ViewModels"
              xmlns:m="using:singalUI.Models"
              xmlns:s="using:singalUI.Services"
+             xmlns:v="using:singalUI.Views"
              x:Class="singalUI.Views.CalibrationSetupView"
              x:DataType="vm:CalibrationSetupViewModel"
              Background="#1a1a1a">
@@ -13,26 +14,16 @@
 
     <Grid RowDefinitions="*" ColumnDefinitions="*,300">
 
-        <ScrollViewer Grid.Row="0" Grid.Column="0" Margin="16,16,8,16" VerticalScrollBarVisibility="Auto">
-        <StackPanel Spacing="16">
-        <Border IsVisible="{Binding HelpModeActive}"
-                Background="#1f2b1f"
-                BorderBrush="#58ff9a"
-                BorderThickness="1"
-                CornerRadius="6"
-                Padding="10,8">
-            <StackPanel Spacing="4">
-                <TextBlock Text="Stage usage modes: Manual=single sample, Triggered=sample on new frame (+delay), Timed=sample every interval, Control=move stages by configured steps."
-                           FontSize="12"
-                           Foreground="#d6ffd9"
-                           TextWrapping="Wrap"/>
-                <TextBlock Text="Default mode is Control for motion workflow; switch to Manual/Triggered/Timed for no-motion pose sampling."
-                           FontSize="12"
-                           Foreground="#d6ffd9"
-                           TextWrapping="Wrap"/>
-            </StackPanel>
-        </Border>
-        <ItemsControl ItemsSource="{Binding StageMotionGroups}">
+        <Grid Grid.Row="0" Grid.Column="0" Margin="16,16,8,16">
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Spacing="0">
+        <Border x:Name="HelpAnchorCalibLeft"
+                Width="1"
+                Height="1"
+                HorizontalAlignment="Right"
+                Margin="0,0,8,0"
+                IsHitTestVisible="False"/>
+        <ItemsControl ItemsSource="{Binding StageMotionGroups}" Margin="0,12,0,0">
             <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="vm:ConnectedStageMotionGroup">
                     <Border Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="0" Margin="0,0,0,12">
@@ -161,21 +152,18 @@
         </StackPanel>
         </ScrollViewer>
 
-        <!-- Right Panel - Scrollable -->
-        <ScrollViewer Grid.Row="0" Grid.Column="1" Margin="8,16,16,16">
-            <StackPanel Spacing="12">
-                <Border IsVisible="{Binding HelpModeActive}"
-                        Background="#1f2b1f"
-                        BorderBrush="#58ff9a"
-                        BorderThickness="1"
-                        CornerRadius="6"
-                        Padding="10,8">
-                    <TextBlock Text="Stage connection: Add a controller, select hardware/COM, click Connect, verify green status, then run Start Sequence."
-                               FontSize="12"
-                               Foreground="#d6ffd9"
-                               TextWrapping="Wrap"/>
-                </Border>
+        <v:HelpBubble IsOpen="{Binding HelpBubblesOpen}"
+                      PlacementTarget="{Binding #HelpAnchorCalibLeft}"
+                      Placement="Bottom"
+                      BubbleMaxWidth="420"
+                      HelpText="Stage usage modes: Manual=single sample, Triggered=sample on new frame (+delay), Timed=sample every interval, Control=move stages by configured steps.&#x0a;&#x0a;Default mode is Control for motion workflow; switch to Manual/Triggered/Timed for no-motion pose sampling."/>
+        </Grid>
 
+        <!-- Right Panel - Scrollable -->
+        <Grid Grid.Row="0" Grid.Column="1" Margin="8,16,16,16">
+        <ScrollViewer>
+            <Grid>
+            <StackPanel Spacing="12">
                 <!-- Stage Controllers -->
                 <Border Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="16">
                     <StackPanel Spacing="12">
@@ -183,6 +171,12 @@
                             <TextBlock Grid.Column="0" Text="Stage Controllers" FontSize="16" FontWeight="SemiBold" Foreground="#ffffff" VerticalAlignment="Center"/>
                             <Button Grid.Column="1" Content="+ Add" Command="{Binding AddStageCommand}" Padding="10,6" FontSize="12" Foreground="#ffffff" HorizontalAlignment="Right"/>
                         </Grid>
+                        <Border x:Name="HelpAnchorCalibRight"
+                                Width="1"
+                                Height="1"
+                                HorizontalAlignment="Right"
+                                Margin="0,4,4,0"
+                                IsHitTestVisible="False"/>
 
                         <ItemsControl ItemsSource="{Binding StageWrappers}">
                             <ItemsControl.ItemTemplate>
@@ -321,7 +315,15 @@
                 </Border>
 
             </StackPanel>
+            </Grid>
         </ScrollViewer>
+
+        <v:HelpBubble IsOpen="{Binding HelpBubblesOpen}"
+                      PlacementTarget="{Binding #HelpAnchorCalibRight}"
+                      Placement="Bottom"
+                      BubbleMaxWidth="320"
+                      HelpText="Stage connection: Add a controller, select hardware/COM, click Connect, verify green status, then run Start Sequence."/>
+        </Grid>
 
     </Grid>
 </UserControl>

@@ -21,6 +21,7 @@ using System.Threading.Tasks;
 using System.Timers;
 using Avalonia.Threading;
 using Stagecontrol;
+using singalUI.Views;
 using PositionData = singalUI.Models.PositionData;
 
 namespace singalUI.ViewModels
@@ -31,9 +32,11 @@ namespace singalUI.ViewModels
 
         private readonly object _latestPoseLock = new();
         private readonly double[] _latestPoseForSharing = new double[6];
+        private readonly double[] _latestPoseAbsForSharing = new double[6];
         private long _latestPoseFrameSeqForSharing;
         private DateTime _latestPoseTimestampUtc = DateTime.MinValue;
         private bool _latestPoseValidForSharing;
+        private bool _latestPoseAbsValidForSharing;
 
         private readonly DispatcherTimer _cameraFrameTimer;
         private readonly DispatcherTimer _liveCameraApplyTimer;
@@ -158,10 +161,20 @@ namespace singalUI.ViewModels
 
         // Auto Mode Toggles
         [ObservableProperty]
-        private bool _autoFocus = false;
+        private bool _autoExposure = false;
 
         [ObservableProperty]
         private bool _autoIllumination = false;
+
+        /// <summary>Finite-difference step (µs) for ∂Focus/∂exposure; starts at 500 and can shrink when the score plateaus.</summary>
+        private double _autoExposureFiniteDiffStepUs = 500.0;
+
+        private readonly DispatcherTimer _autoExposureTimer;
+
+        private bool _autoExposureIterationBusy;
+
+        /// <summary>Skip <see cref="OnCameraParametersPropertyChanged"/> when syncing from hardware or auto-exposure to avoid reset/rewrite loops.</summary>
+        private bool _suppressCameraParametersLiveHook;
 
         // Modular collections for collapsible panels
         [ObservableProperty]
@@ -179,6 +192,22 @@ namespace singalUI.ViewModels
         partial void OnCameraParametersChanged(CameraParameters value)
         {
             HookCameraParameters(value);
+        }
+
+        partial void OnAutoExposureChanged(bool value)
+        {
+            if (value)
+            {
+                _autoExposureFiniteDiffStepUs = 500.0;
+                _autoExposureTimer.Start();
+                Log("[AutoExposure] Enabled — gradient ascent on Focus Level (finite diff step starts at 500 µs)");
+            }
+            else
+            {
+                _autoExposureTimer.Stop();
+                SyncCameraParametersFromHardware("AutoExposureOff");
+                Log("[AutoExposure] Disabled");
+            }
         }
 
         [ObservableProperty]
@@ -255,6 +284,10 @@ namespace singalUI.ViewModels
         [ObservableProperty]
         private bool _helpModeActive;
 
+        /// <summary>True when help mode is on and the Camera tab is selected (hides bubbles when switching tabs).</summary>
+        [ObservableProperty]
+        private bool _helpBubblesOpen;
+
         /// <summary>
         /// Display strings for the camera tab pose preview (numbers or "-" when the last result had no pose).
         /// Values come from the native six-vector: X,Y,Z = indices 3–5 (mm); Rx,Ry,Rz = 0–2 (shown as degrees°′″ after rad→deg).
@@ -304,6 +337,8 @@ namespace singalUI.ViewModels
             Instance = this;
             HelpModeActive = HelpModeService.IsEnabled;
             HelpModeService.HelpModeChanged += OnHelpModeChanged;
+            HelpModeService.ActiveMainTabChanged += OnActiveMainTabChanged;
+            SyncHelpBubblesOpen();
             Console.WriteLine("[CameraSetupViewModel] Constructor START");
             // Initialize logging
             File.WriteAllText(_logFile, $"=== Log started at {DateTime.Now:O} ===\n");
@@ -343,6 +378,13 @@ namespace singalUI.ViewModels
             _liveCameraApplyTimer.Tick += (s, e) => TryApplyLiveCameraParameters();
             _liveCameraApplyTimer.Start();
             Log("Live camera apply timer started");
+
+            _autoExposureTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(2600) };
+            _autoExposureTimer.Tick += (_, _) =>
+            {
+                if (AutoExposure)
+                    _ = RunAutoExposureGradientIterationAsync();
+            };
 
             InitializeModularCollections();
             HookCameraParameters(CameraParameters);
@@ -402,7 +444,7 @@ namespace singalUI.ViewModels
         /// <summary>
         /// One frame at a time: under <c>./storage/temp_capture</c>, remove previous PNG, save the frame used for this run, run NanoMeas on the same U8 buffer,
         /// post pose to the UI, then repeat with a new frame. PNG on disk matches what was fed to the DLL for that cycle.
-        /// After <see cref="NanoMeasSdkNative.NanoMeas_ProcessFrame_Track_U8"/>, copies <c>pose</c>/<c>pose_abs</c> and picks one for display when relative <c>pose</c> is zero but decode succeeded.
+        /// After <see cref="NanoMeasSdkNative.NanoMeas_ProcessFrame_Track_U8"/>, copies <c>pose_abs</c> and posts it to the pose preview display.
         /// </summary>
         private void NanoMeasLivePreviewLoop(CancellationToken ct)
         {
@@ -438,8 +480,8 @@ namespace singalUI.ViewModels
                         continue;
                     }
 
-                    var (buf, w, h, _) = camSvc.GetLatestFrameSnapshot();
-                    if (buf == null || w < 8 || h < 8 || buf.Length < w * h)
+                    var (buf, w, h, _, isComplete) = camSvc.GetLatestFrameSnapshotWithStatus();
+                    if (!isComplete || buf == null || w < 8 || h < 8 || buf.Length < w * h)
                     {
                         Thread.Sleep(50);
                         continue;
@@ -552,7 +594,8 @@ namespace singalUI.ViewModels
                         ref res);
 
                     NanoMeasSdkNative.CopyPipelinePoseArrays(ref res, poseBuf, poseAbsBuf);
-                    double[] p = SelectPoseForDisplay(poseBuf, poseAbsBuf, res.decode_success);
+                    UpdateSharedPoseSnapshots(poseBuf, poseAbsBuf);
+                    double[] p = SelectPoseForDisplay(poseAbsBuf);
                     PostPosePreviewTexts(p);
 
                     // Success path: clear repeated entry-point suppression state.
@@ -630,16 +673,21 @@ namespace singalUI.ViewModels
         }
 
         /// <summary>
-        /// Chooses which native six-vector to show: prefer <paramref name="pose"/>; if it is all near-zero and
-        /// <paramref name="decodeSuccess"/> is non-zero, use <paramref name="poseAbs"/> when it is non-zero (same index layout as <paramref name="pose"/>).
+        /// Uses native absolute six-vector for camera-tab pose preview display.
         /// </summary>
-        private static double[] SelectPoseForDisplay(double[] pose, double[] poseAbs, int decodeSuccess)
+        private static double[] SelectPoseForDisplay(double[] poseAbs) => poseAbs;
+
+        private void UpdateSharedPoseSnapshots(double[] pose, double[] poseAbs)
         {
-            if (!IsAllNearZero(pose))
-                return pose;
-            if (decodeSuccess != 0 && !IsAllNearZero(poseAbs))
-                return poseAbs;
-            return pose;
+            lock (_latestPoseLock)
+            {
+                Array.Copy(pose, _latestPoseForSharing, 6);
+                Array.Copy(poseAbs, _latestPoseAbsForSharing, 6);
+                _latestPoseFrameSeqForSharing = _latestFrameSeq;
+                _latestPoseTimestampUtc = DateTime.UtcNow;
+                _latestPoseValidForSharing = !IsAllNearZero(pose);
+                _latestPoseAbsValidForSharing = !IsAllNearZero(poseAbs);
+            }
         }
 
         /// <summary>
@@ -717,7 +765,21 @@ namespace singalUI.ViewModels
                 CameraConnected = cameraService.IsConnected;
                 CameraStatus = cameraService.IsConnected ? "Connected" : "Disconnected";
                 if (cameraService.IsConnected)
+                {
                     SyncCameraParametersFromHardware("InitialWireUp");
+                    IsAcquiring = cameraService.IsAcquiring;
+                    var onceSync = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1600) };
+                    onceSync.Tick += (_, _) =>
+                    {
+                        onceSync.Stop();
+                        if (App.CameraService is { IsConnected: true } cs)
+                        {
+                            SyncCameraParametersFromHardware("DelayedPostConnect");
+                            IsAcquiring = cs.IsAcquiring;
+                        }
+                    };
+                    onceSync.Start();
+                }
                 if (!cameraService.IsConnected)
                     FocusLevel = 0;
 
@@ -865,7 +927,7 @@ namespace singalUI.ViewModels
                 $"CTI={SelectedCtiFile ?? "(none)"}, Preset={SelectedPreset ?? "(none)"}, " +
                 $"Exposure={CameraParameters.Exposure}, Gain={CameraParameters.Gain}, FPS={CameraParameters.Fps}, Binning={CameraParameters.Binning}, " +
                 $"PatternType={SelectedPatternType}, Grid={CheckerBoardColumns}x{CheckerBoardRows}, Pitch={CheckerBoardPitchX}x{CheckerBoardPitchY}, Unit={CheckerBoardUnit}, " +
-                $"AutoFocus={AutoFocus}, AutoIllumination={AutoIllumination}";
+                $"AutoExposure={AutoExposure}, AutoIllumination={AutoIllumination}";
             Log($"[CameraConfig] {snapshot}");
         }
 
@@ -883,6 +945,8 @@ namespace singalUI.ViewModels
 
         private void OnCameraParametersPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
         {
+            if (_suppressCameraParametersLiveHook)
+                return;
             ResetAppliedCameraParameters();
             TryApplyLiveCameraParameters();
         }
@@ -920,7 +984,7 @@ namespace singalUI.ViewModels
             bool gainChanged = !_lastAppliedGain.HasValue || Math.Abs(gain - _lastAppliedGain.Value) > 0.001;
             bool fpsChanged = !_lastAppliedFps.HasValue || Math.Abs(fps - _lastAppliedFps.Value) > 0.001;
 
-            if (exposureChanged)
+            if (exposureChanged && !AutoExposure)
             {
                 cameraService.SetExposure(effectiveExposure);
                 _lastAppliedExposure = exposure;
@@ -968,7 +1032,11 @@ namespace singalUI.ViewModels
                 CameraStatus = connected ? "Connected" : "Disconnected";
                 IsAcquiring = false;
                 if (connected)
+                {
                     SyncCameraParametersFromHardware("ConnectionChanged");
+                    if (App.CameraService != null)
+                        IsAcquiring = App.CameraService.IsAcquiring;
+                }
 
                 if (!connected)
                 {
@@ -993,24 +1061,112 @@ namespace singalUI.ViewModels
                 if (!cameraService.TryReadAppliedParameters(out var exposureUs, out var gainDb, out var fps))
                     return;
 
-                if (!double.IsNaN(exposureUs) && exposureUs > 0)
-                    CameraParameters.Exposure = Math.Round(exposureUs, 1);
-                if (!double.IsNaN(gainDb))
-                    CameraParameters.Gain = gainDb;
-                if (!double.IsNaN(fps) && fps > 0)
-                    CameraParameters.Fps = fps;
+                _suppressCameraParametersLiveHook = true;
+                try
+                {
+                    if (!double.IsNaN(exposureUs) && exposureUs > 0)
+                        CameraParameters.Exposure = Math.Round(exposureUs, 1);
+                    if (!double.IsNaN(gainDb))
+                        CameraParameters.Gain = gainDb;
+                    if (!double.IsNaN(fps) && fps > 0)
+                        CameraParameters.Fps = fps;
 
-                // Prevent immediate redundant write-back after syncing from hardware.
-                _lastAppliedExposure = CameraParameters.Exposure;
-                _lastAppliedEffectiveExposure = CameraParameters.Exposure;
-                _lastAppliedGain = CameraParameters.Gain;
-                _lastAppliedFps = CameraParameters.Fps;
+                    // Prevent immediate redundant write-back after syncing from hardware.
+                    _lastAppliedExposure = CameraParameters.Exposure;
+                    _lastAppliedEffectiveExposure = CameraParameters.Exposure;
+                    _lastAppliedGain = CameraParameters.Gain;
+                    _lastAppliedFps = CameraParameters.Fps;
+                }
+                finally
+                {
+                    _suppressCameraParametersLiveHook = false;
+                }
 
                 Log($"[SyncFromCamera:{source}] Exposure={CameraParameters.Exposure:F1}us Gain={CameraParameters.Gain:F2}dB FPS={CameraParameters.Fps:F2}");
             }
             catch (Exception ex)
             {
                 Log($"[SyncFromCamera:{source}] Error: {ex.Message}");
+            }
+        }
+
+        private void ApplyExposureFromAutoAlgorithm(double exposureUs)
+        {
+            exposureUs = Math.Clamp(Math.Round(exposureUs, 1), 100.0, 100000.0);
+            _suppressCameraParametersLiveHook = true;
+            try
+            {
+                CameraParameters.Exposure = exposureUs;
+                _lastAppliedExposure = exposureUs;
+                _lastAppliedEffectiveExposure = exposureUs;
+            }
+            finally
+            {
+                _suppressCameraParametersLiveHook = false;
+            }
+        }
+
+        /// <summary>
+        /// One gradient-ascent step: estimate ∂Focus/∂(exposure) with central differences at ±step µs, then move exposure by η·gradient (clamped).
+        /// </summary>
+        private async Task RunAutoExposureGradientIterationAsync()
+        {
+            if (_autoExposureIterationBusy || !AutoExposure)
+                return;
+
+            var cam = App.CameraService;
+            if (cam == null || !cam.IsConnected || !cam.IsAcquiring)
+                return;
+
+            _autoExposureIterationBusy = true;
+            try
+            {
+                double step = Math.Clamp(_autoExposureFiniteDiffStepUs, 50.0, 2000.0);
+                double e0 = Math.Clamp(CameraParameters.Exposure, 100.0, 100000.0);
+                double ePlus = Math.Min(e0 + step, 100000.0);
+                double eMinus = Math.Max(e0 - step, 100.0);
+                if (ePlus <= eMinus + 1e-3)
+                    return;
+
+                cam.SetExposure(e0);
+                await Task.Delay(360);
+
+                cam.SetExposure(ePlus);
+                await Task.Delay(380);
+                double fPlus = await Dispatcher.UIThread.InvokeAsync(() => FocusLevel);
+
+                cam.SetExposure(eMinus);
+                await Task.Delay(380);
+                double fMinus = await Dispatcher.UIThread.InvokeAsync(() => FocusLevel);
+
+                double denom = ePlus - eMinus;
+                double grad = denom > 1e-6 ? (fPlus - fMinus) / denom : 0.0;
+
+                // Ascent on Focus (0–100); η scales µs per unit gradient.
+                const double eta = 2800.0;
+                double eNew = e0 + eta * grad;
+                eNew = Math.Clamp(eNew, 100.0, 100000.0);
+
+                cam.SetExposure(eNew);
+                double applied = eNew;
+                if (cam.TryReadAppliedParameters(out var readEx, out _, out _) && !double.IsNaN(readEx) && readEx > 0)
+                    applied = readEx;
+                ApplyExposureFromAutoAlgorithm(applied);
+
+                if (Math.Abs(fPlus - fMinus) < 0.35)
+                    _autoExposureFiniteDiffStepUs = Math.Max(50.0, step * 0.65);
+                else
+                    _autoExposureFiniteDiffStepUs = Math.Min(500.0, step * 1.05);
+
+                Log($"[AutoExposure] e0={e0:F0} µs step={step:F0} f+={fPlus:F1} f-={fMinus:F1} grad={grad:E3} → e={applied:F1} µs");
+            }
+            catch (Exception ex)
+            {
+                Log($"[AutoExposure] {ex.Message}");
+            }
+            finally
+            {
+                _autoExposureIterationBusy = false;
             }
         }
 
@@ -1029,14 +1185,30 @@ namespace singalUI.ViewModels
             }
         }
 
+        /// <summary>
+        /// Returns a copy of the latest absolute pose from the NanoMeas preview path when valid.
+        /// </summary>
+        public bool TryGetLatestPoseAbsSnapshot(out double[] poseAbs, out long frameSeq, out DateTime timestampUtc)
+        {
+            lock (_latestPoseLock)
+            {
+                poseAbs = (double[])_latestPoseAbsForSharing.Clone();
+                frameSeq = _latestPoseFrameSeqForSharing;
+                timestampUtc = _latestPoseTimestampUtc;
+                return _latestPoseAbsValidForSharing;
+            }
+        }
+
         private void ClearSharedPoseSnapshot()
         {
             lock (_latestPoseLock)
             {
                 Array.Clear(_latestPoseForSharing, 0, _latestPoseForSharing.Length);
+                Array.Clear(_latestPoseAbsForSharing, 0, _latestPoseAbsForSharing.Length);
                 _latestPoseFrameSeqForSharing = 0;
                 _latestPoseTimestampUtc = DateTime.MinValue;
                 _latestPoseValidForSharing = false;
+                _latestPoseAbsValidForSharing = false;
             }
         }
 
@@ -1264,6 +1436,46 @@ namespace singalUI.ViewModels
         }
 
         [RelayCommand]
+        private void OpenBrightnessDistribution()
+        {
+            try
+            {
+                var cameraService = App.CameraService;
+                if (cameraService == null)
+                {
+                    Log("[BrightnessDistribution] Camera service unavailable");
+                    return;
+                }
+
+                var (buffer, width, height, _) = cameraService.GetLatestFrameSnapshot();
+                int pixelTotal = width > 0 && height > 0 ? width * height : 0;
+
+                var counts = new int[256];
+                if (buffer != null && pixelTotal > 0)
+                {
+                    int n = Math.Min(pixelTotal, buffer.Length);
+                    for (int i = 0; i < n; i++)
+                        counts[buffer[i]]++;
+                }
+
+                var win = new BrightnessHistogramWindow();
+                win.SetHistogram(counts, pixelTotal);
+
+                var topLevel = Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
+                    ? desktop.MainWindow
+                    : null;
+                if (topLevel != null)
+                    win.Show(topLevel);
+                else
+                    win.Show();
+            }
+            catch (Exception ex)
+            {
+                Log($"[BrightnessDistribution] {ex.Message}");
+            }
+        }
+
+        [RelayCommand]
         private async Task RefreshConnection()
         {
             try
@@ -1321,6 +1533,7 @@ namespace singalUI.ViewModels
                 cameraService.StartAcquisition();
                 IsAcquiring = true;
                 CameraStatus = "Acquiring...";
+                SyncCameraParametersFromHardware("StartAcquisition");
                 Log("[StartAcquisition] Started");
             }
             catch (Exception ex)
@@ -1860,11 +2073,21 @@ namespace singalUI.ViewModels
             CameraParameters.PropertyChanged -= OnCameraParametersPropertyChanged;
             StagePositionService.PositionChanged -= OnSharedStagePositionChanged;
             HelpModeService.HelpModeChanged -= OnHelpModeChanged;
+            HelpModeService.ActiveMainTabChanged -= OnActiveMainTabChanged;
+        }
+
+        private void OnActiveMainTabChanged() => SyncHelpBubblesOpen();
+
+        private void SyncHelpBubblesOpen()
+        {
+            HelpBubblesOpen = HelpModeActive &&
+                              string.Equals(HelpModeService.ActiveMainTab, HelpModeService.TabCamera, StringComparison.Ordinal);
         }
 
         private void OnHelpModeChanged(bool enabled)
         {
             HelpModeActive = enabled;
+            SyncHelpBubblesOpen();
         }
     }
 }

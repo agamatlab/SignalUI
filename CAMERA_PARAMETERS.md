@@ -3,13 +3,13 @@
 ## Current Default Values (from ConfigViewModel.cs)
 
 ### Camera Intrinsics
-- **Fx (Focal length X in pixels):** 6363.64
-- **Fy (Focal length Y in pixels):** 6363.64
+- **Fx (Focal length X in pixels):** 12727.3
+- **Fy (Focal length Y in pixels):** 12727.3
 - **Cx (Principal point X):** 0.0
 - **Cy (Principal point Y):** 0.0
 
 ### Camera Physical Properties
-- **Focal Length:** 28.0 mm
+- **Focal Length:** 56.0 mm
 - **Pixel Size:** 0.0044 mm (4.4 µm)
 
 ### Pattern Configuration
@@ -19,7 +19,7 @@
 - **Components Y:** 11
 
 ### Algorithm Parameters
-- **Window Size:** 12.0
+- **Window Size:** 10.0
 - **Code Pitch Blocks:** 6
 
 ## How to View Current Values

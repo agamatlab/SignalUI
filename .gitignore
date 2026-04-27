@@ -16,6 +16,7 @@ artifacts/
 *.snupkg
 packages/
 
+out/
 singalUI/bin/
 singalUI/obj/
 tools/**/bin/

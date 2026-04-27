@@ -31,6 +31,11 @@ public class MatrixVisionCameraService : IDisposable
         return (null, 0, 0, 0);
     }
 
+    public (byte[]? buffer, int width, int height, long seq, bool isComplete) GetLatestFrameSnapshotWithStatus()
+    {
+        return (null, 0, 0, 0, false);
+    }
+
     public bool Initialize()
     {
         IsConnected = false;

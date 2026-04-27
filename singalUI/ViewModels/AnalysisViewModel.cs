@@ -97,6 +97,10 @@ namespace singalUI.ViewModels
 
         [ObservableProperty]
         private bool _helpModeActive = false;
+
+        /// <summary>True when help mode is on and the Visualization tab is selected.</summary>
+        [ObservableProperty]
+        private bool _helpBubblesOpen;
         
         [ObservableProperty]
         private string _currentSessionPath = "";
@@ -126,14 +130,25 @@ namespace singalUI.ViewModels
             Instance = this; // Set static instance for cross-ViewModel access
             HelpModeActive = HelpModeService.IsEnabled;
             HelpModeService.HelpModeChanged += OnHelpModeChanged;
+            HelpModeService.ActiveMainTabChanged += OnActiveMainTabChanged;
+            SyncHelpBubblesOpen();
             SelectedPlotLayout = 0;
             // Don't generate mock data - wait for real pose estimation results
             LogError("AnalysisViewModel initialized - Waiting for pose estimation data");
         }
 
+        private void OnActiveMainTabChanged() => SyncHelpBubblesOpen();
+
+        private void SyncHelpBubblesOpen()
+        {
+            HelpBubblesOpen = HelpModeActive &&
+                              string.Equals(HelpModeService.ActiveMainTab, HelpModeService.TabAnalysis, StringComparison.Ordinal);
+        }
+
         private void OnHelpModeChanged(bool enabled)
         {
             HelpModeActive = enabled;
+            SyncHelpBubblesOpen();
         }
 
         partial void OnSelectedPlotLayoutChanged(int value)
@@ -490,9 +505,9 @@ namespace singalUI.ViewModels
             
             LogError($"[LoadPoseEstimationResults] Overall RMS: {Overall_Rms}");
 
-            // Generate mock 3D visualization (like original version)
+            // Generate 3D visualization from live/sampled results.
             LogError("[LoadPoseEstimationResults] Generating 3D visualization");
-            Generate3DData();
+            Generate3DDataFromErrors(results);
 
             if (ChartCards.Count > 0)
             {

@@ -31,6 +31,7 @@ namespace singalUI.Services
         private int _frontWidth;
         private int _frontHeight;
         private long _frontSeq;
+        private bool _frontIsComplete;
         private readonly object _bufferLock = new();
 
         public event Action<long>? FrameUpdated;  // Notify UI new frame available (seq only)
@@ -72,6 +73,17 @@ namespace singalUI.Services
             lock (_bufferLock)
             {
                 return (_frontBuffer, _frontWidth, _frontHeight, _frontSeq);
+            }
+        }
+
+        /// <summary>
+        /// Get latest frame snapshot plus SDK completeness status.
+        /// </summary>
+        public (byte[]? buffer, int width, int height, long seq, bool isComplete) GetLatestFrameSnapshotWithStatus()
+        {
+            lock (_bufferLock)
+            {
+                return (_frontBuffer, _frontWidth, _frontHeight, _frontSeq, _frontIsComplete);
             }
         }
 
@@ -275,6 +287,7 @@ namespace singalUI.Services
                 _frontWidth = 0;
                 _frontHeight = 0;
                 _frontSeq = 0;
+                _frontIsComplete = false;
             }
 
             IsConnected = false;
@@ -749,6 +762,7 @@ namespace singalUI.Services
                     _frontWidth = w;
                     _frontHeight = h;
                     _frontSeq++;
+                    _frontIsComplete = true;
                 }
 
                 ImageWidth = w;
