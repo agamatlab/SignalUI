@@ -32,39 +32,13 @@ namespace singalUI.Tests
             }
         }
         
-        [Fact]
-        public void PoseEstimationTask_ShouldStoreAllRequiredData()
-        {
-            // Arrange & Act
-            var task = new singalUI.ViewModels.PoseEstimationTask
-            {
-                ImagePath = "/test/image.jpg",
-                PositionX = 1.5,
-                PositionY = 2.5,
-                PositionZ = 3.5,
-                PositionRx = 0.1,
-                PositionRy = 0.2,
-                PositionRz = 0.3,
-                Timestamp = DateTime.Now,
-                StepNumber = 42
-            };
-            
-            // Assert
-            Assert.Equal("/test/image.jpg", task.ImagePath);
-            Assert.Equal(1.5, task.PositionX);
-            Assert.Equal(2.5, task.PositionY);
-            Assert.Equal(3.5, task.PositionZ);
-            Assert.Equal(0.1, task.PositionRx);
-            Assert.Equal(0.2, task.PositionRy);
-            Assert.Equal(0.3, task.PositionRz);
-            Assert.Equal(42, task.StepNumber);
-        }
+        // PoseEstimationTask was removed - test removed
         
         [Fact]
         public void PoseEstimationResult_ShouldStoreAllRequiredData()
         {
             // Arrange & Act
-            var result = new singalUI.ViewModels.PoseEstimationResult
+            var result = new singalUI.Models.PoseEstimationResult
             {
                 ImagePath = "/test/image.jpg",
                 StageX = 1.0,
@@ -98,9 +72,9 @@ namespace singalUI.Tests
         {
             // Arrange
             var csvPath = Path.Combine(_testDirectory, "test_results.csv");
-            var results = new List<singalUI.ViewModels.PoseEstimationResult>
+            var results = new List<singalUI.Models.PoseEstimationResult>
             {
-                new singalUI.ViewModels.PoseEstimationResult
+                new singalUI.Models.PoseEstimationResult
                 {
                     StepNumber = 1,
                     Timestamp = DateTime.Now,
@@ -159,7 +133,7 @@ namespace singalUI.Tests
         {
             // Arrange
             var csvPath = Path.Combine(_testDirectory, "test_errors.csv");
-            var result = new singalUI.ViewModels.PoseEstimationResult
+            var result = new singalUI.Models.PoseEstimationResult
             {
                 StepNumber = 1,
                 Timestamp = DateTime.Now,
@@ -371,7 +345,7 @@ namespace singalUI.Tests
         public void PoseEstimationResult_ShouldHandleFailureCase()
         {
             // Arrange & Act
-            var result = new singalUI.ViewModels.PoseEstimationResult
+            var result = new singalUI.Models.PoseEstimationResult
             {
                 Success = false,
                 ErrorMessage = "Pattern detection failed",
