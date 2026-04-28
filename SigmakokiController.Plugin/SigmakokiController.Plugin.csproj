@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <OutputType>Library</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Reference the main application to access interfaces -->
+    <ProjectReference Include="..\singalUI\singalUI.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Serial port communication -->
+    <PackageReference Include="System.IO.Ports" Version="8.0.0" />
+  </ItemGroup>
+
+  <!-- Copy output to Plugins folder for testing -->
+  <Target Name="CopyToPluginsFolder" AfterTargets="Build">
+    <PropertyGroup>
+      <PluginsDir>$(SolutionDir)singalUI\bin\$(Configuration)\net8.0\Plugins</PluginsDir>
+    </PropertyGroup>
+    <MakeDir Directories="$(PluginsDir)" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(PluginsDir)" />
+    <Message Text="Copied Sigmakoki plugin to: $(PluginsDir)" Importance="high" />
+  </Target>
+</Project>

@@ -147,32 +147,22 @@
                         BorderThickness="0,2,0,0"
                         Padding="12,10"
                         CornerRadius="0">
-                    <Grid ColumnDefinitions="*,*,*" RowDefinitions="Auto,Auto" ColumnSpacing="18" RowSpacing="8">
-                        <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="X (mm):" FontSize="18" FontWeight="Bold" Foreground="#aaaaaa" FontFamily="Consolas,Courier New"/>
-                            <TextBlock Text="{Binding PosePreviewXText}" FontSize="18" FontWeight="Medium" Foreground="#dddddd" FontFamily="Consolas,Courier New"/>
-                        </StackPanel>
-                        <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="Y (mm):" FontSize="18" FontWeight="Bold" Foreground="#aaaaaa" FontFamily="Consolas,Courier New"/>
-                            <TextBlock Text="{Binding PosePreviewYText}" FontSize="18" FontWeight="Medium" Foreground="#dddddd" FontFamily="Consolas,Courier New"/>
-                        </StackPanel>
-                        <StackPanel Grid.Row="0" Grid.Column="2" Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="Z (mm):" FontSize="18" FontWeight="Bold" Foreground="#aaaaaa" FontFamily="Consolas,Courier New"/>
-                            <TextBlock Text="{Binding PosePreviewZText}" FontSize="18" FontWeight="Medium" Foreground="#dddddd" FontFamily="Consolas,Courier New"/>
-                        </StackPanel>
-                        <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="Rx:" FontSize="18" FontWeight="Bold" Foreground="#aaaaaa" FontFamily="Consolas,Courier New"/>
-                            <TextBlock Text="{Binding PosePreviewRxText}" FontSize="18" FontWeight="Medium" Foreground="#dddddd" FontFamily="Consolas,Courier New"/>
-                        </StackPanel>
-                        <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="Ry:" FontSize="18" FontWeight="Bold" Foreground="#aaaaaa" FontFamily="Consolas,Courier New"/>
-                            <TextBlock Text="{Binding PosePreviewRyText}" FontSize="18" FontWeight="Medium" Foreground="#dddddd" FontFamily="Consolas,Courier New"/>
-                        </StackPanel>
-                        <StackPanel Grid.Row="1" Grid.Column="2" Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="Rz:" FontSize="18" FontWeight="Bold" Foreground="#aaaaaa" FontFamily="Consolas,Courier New"/>
-                            <TextBlock Text="{Binding PosePreviewRzText}" FontSize="18" FontWeight="Medium" Foreground="#dddddd" FontFamily="Consolas,Courier New"/>
-                        </StackPanel>
-                    </Grid>
+                    <!-- Dynamic axis display using ItemsControl -->
+                    <ItemsControl ItemsSource="{Binding AxisDisplays}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel Orientation="Horizontal" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,18,8">
+                                    <TextBlock Text="{Binding Label}" FontSize="18" FontWeight="Bold" Foreground="#aaaaaa" FontFamily="Consolas,Courier New"/>
+                                    <TextBlock Text="{Binding ValueText}" FontSize="18" FontWeight="Medium" Foreground="#dddddd" FontFamily="Consolas,Courier New"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                 </Border>
             </Grid>
 

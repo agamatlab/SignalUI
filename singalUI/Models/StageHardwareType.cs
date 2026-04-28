@@ -8,5 +8,6 @@ public enum StageHardwareType
     None,
     PI,           // Physik Instrumente controllers
     Sigmakoki,    // Sigma Koki controllers (SKSampleClass)
-    SigmakokiRotationStage // HSC-103 COM, single rotation axis (θ / Rz), hsc103.py protocol
+    SigmakokiRotationStage, // HSC-103 COM, single rotation axis (θ / Rz), hsc103.py protocol
+    Plugin        // Plugin-based controller (loaded from external DLL)
 }

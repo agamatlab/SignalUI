@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <OutputType>Library</OutputType>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DefineConstants>X64</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Reference the main application to access interfaces -->
+    <ProjectReference Include="..\singalUI\singalUI.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+  </ItemGroup>
+
+  <!-- Copy output to StageControllers/PI folder -->
+  <Target Name="CopyToStageControllersFolder" AfterTargets="Build">
+    <PropertyGroup>
+      <StageControllersDir>$(MSBuildProjectDirectory)\..\singalUI\bin\$(Configuration)\net8.0\StageControllers\PI</StageControllersDir>
+    </PropertyGroup>
+    <MakeDir Directories="$(StageControllersDir)" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(StageControllersDir)" />
+    <!-- Copy PI DLLs -->
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\..\singalUI\libs\PI_GCS2_DLL_x64.dll" DestinationFolder="$(StageControllersDir)" Condition="Exists('$(MSBuildProjectDirectory)\..\singalUI\libs\PI_GCS2_DLL_x64.dll')" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\..\singalUI\libs\PI_GCS2_DLL.dll" DestinationFolder="$(StageControllersDir)" Condition="Exists('$(MSBuildProjectDirectory)\..\singalUI\libs\PI_GCS2_DLL.dll')" />
+    <Message Text="Copied PI controller to: $(StageControllersDir)" Importance="high" />
+  </Target>
+</Project>

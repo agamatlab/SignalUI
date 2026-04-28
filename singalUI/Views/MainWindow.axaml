@@ -10,6 +10,7 @@
         MinWidth="800"
         MinHeight="950"
         WindowStartupLocation="CenterScreen"
+        WindowState="FullScreen"
         SystemDecorations="Full"
         Background="#0d0d0d">
 
@@ -173,6 +174,30 @@
                                   Stretch="Uniform"/>
                         </Border>
                         <TextBlock Text="OPEN" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Button Command="{Binding ToggleFullscreenCommand}"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Foreground="#e0e0e0"
+                        FontSize="14"
+                        FontFamily="Segoe UI,Arial"
+                        Padding="16,8"
+                        Cursor="Hand"
+                        CornerRadius="0"
+                        ToolTip.Tip="Toggle fullscreen mode (F11)">
+                    <Button.Styles>
+                        <Style Selector="Button:pointerover">
+                            <Setter Property="Background" Value="#3a3a3a"/>
+                        </Style>
+                    </Button.Styles>
+                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <Border Width="16" Height="16">
+                            <Path Data="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"
+                                  Fill="#ffffff"
+                                  Stretch="Uniform"/>
+                        </Border>
+                        <TextBlock Text="FULLSCREEN" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Button>
                 <Button Command="{Binding ToggleHelpModeCommand}"

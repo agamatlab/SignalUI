@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Data.Core;
@@ -46,34 +47,52 @@ public partial class App : Application
     {
         Console.WriteLine("[App] OnFrameworkInitializationCompleted START");
 
-        // Initialize camera service
-        try
+        // Initialize plugin system in background (non-blocking)
+        Console.WriteLine("[App] Starting plugin system initialization (async)...");
+        Task.Run(() =>
         {
-            // Also log to file for Rider debugging
-            string logPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "singalUI", "camera_log.txt");
-            Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
-            File.WriteAllText(logPath, $"=== Camera Log Started {DateTime.Now:O} ===\n");
-
-            bool connected = CameraService.Initialize();
-            File.AppendAllText(logPath,
-                $"Camera connected: {connected}\n" +
-                $"moduleBase: {CameraService.LastInitModuleBase}\n" +
-                $"mvGenTLProducer.cti found: {CameraService.LastInitCtiFound}\n" +
-                $"deviceCount (after updateDeviceList): {CameraService.LastInitDeviceCount}\n");
-
-            if (connected)
+            try
             {
-                Console.WriteLine("[App] Camera connected, starting acquisition...");
-                File.AppendAllText(logPath, "Starting acquisition...\n");
-                CameraService.StartAcquisition();
+                StageControllerFactory.InitializePlugins();
+                Console.WriteLine("[App] Plugin system initialized");
             }
-        }
-        catch (Exception ex)
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[App] Plugin initialization error: {ex.Message}");
+            }
+        });
+
+        // Initialize camera service in background (non-blocking)
+        Task.Run(() =>
         {
-            Console.WriteLine($"[App] Camera service initialization failed: {ex.Message}");
-            string logPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "singalUI", "camera_error.txt");
-            File.WriteAllText(logPath, $"{DateTime.Now:O}: {ex.Message}\n{ex.StackTrace}\n");
-        }
+            try
+            {
+                // Also log to file for Rider debugging
+                string logPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "singalUI", "camera_log.txt");
+                Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
+                File.WriteAllText(logPath, $"=== Camera Log Started {DateTime.Now:O} ===\n");
+
+                bool connected = CameraService.Initialize();
+                File.AppendAllText(logPath,
+                    $"Camera connected: {connected}\n" +
+                    $"moduleBase: {CameraService.LastInitModuleBase}\n" +
+                    $"mvGenTLProducer.cti found: {CameraService.LastInitCtiFound}\n" +
+                    $"deviceCount (after updateDeviceList): {CameraService.LastInitDeviceCount}\n");
+
+                if (connected)
+                {
+                    Console.WriteLine("[App] Camera connected, starting acquisition...");
+                    File.AppendAllText(logPath, "Starting acquisition...\n");
+                    CameraService.StartAcquisition();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[App] Camera service initialization failed: {ex.Message}");
+                string logPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "singalUI", "camera_error.txt");
+                File.WriteAllText(logPath, $"{DateTime.Now:O}: {ex.Message}\n{ex.StackTrace}\n");
+            }
+        });
 
         // Initialize static StageManager with default stages
         StageManager.InitializeDefaultStages();

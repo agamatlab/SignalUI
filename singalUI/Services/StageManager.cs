@@ -78,13 +78,41 @@ public static class StageManager
         Wrappers.Clear();
         AxisToWrapperMap.Clear();
 
-        // Add default PI stage (axes determined after connection)
-        var wrapper1 = StageWrapper.Create(1, StageHardwareType.PI);
+        // Add default Sigmakoki stage on COM3 and auto-connect
+        var wrapper1 = StageWrapper.Create(1, StageHardwareType.Sigmakoki);
+        wrapper1.Configuration.SerialPortName = "COM3";
+        wrapper1.Configuration.SigmakokiController = SigmakokiControllerType.HSC_103;
 
         // Subscribe to property changes to forward them to UI
         wrapper1.PropertyChanged += (s, e) => WrapperPropertyChanged?.Invoke(s, e);
 
         Wrappers.Add(wrapper1);
+        
+        // Auto-connect in background
+        System.Threading.Tasks.Task.Run(async () =>
+        {
+            try
+            {
+                Console.WriteLine("[StageManager] Auto-connecting to Sigmakoki stage on COM3...");
+                bool success = await wrapper1.ConnectAsync();
+                if (success)
+                {
+                    Console.WriteLine($"[StageManager] Auto-connected successfully. Available axes: [{string.Join(", ", wrapper1.AvailableAxes)}]");
+                    RebuildAxisToWrapperMap();
+                    
+                    // Start position polling service
+                    StagePositionService.Start();
+                }
+                else
+                {
+                    Console.WriteLine($"[StageManager] Auto-connect failed: {wrapper1.ConnectionStatus}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[StageManager] Auto-connect error: {ex.Message}");
+            }
+        });
     }
 
     /// <summary>

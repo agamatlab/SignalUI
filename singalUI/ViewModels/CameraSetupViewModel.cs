@@ -299,6 +299,12 @@ namespace singalUI.ViewModels
         [ObservableProperty] private string _posePreviewRyText = "-";
         [ObservableProperty] private string _posePreviewRzText = "-";
 
+        /// <summary>
+        /// Dynamic axis display collection - populated based on connected stage controller
+        /// </summary>
+        [ObservableProperty]
+        private ObservableCollection<AxisDisplayInfo> _axisDisplays = new();
+
         private const string NanoMeasPosePreviewPngFileName = "last_camera_frame.png";
 
         private static string PosePreviewCaptureDirectory() =>
@@ -731,7 +737,96 @@ namespace singalUI.ViewModels
                     PosePreviewRyText = FormatDegreesMinutesSeconds(ryDeg, iv);
                     PosePreviewRzText = FormatDegreesMinutesSeconds(rzDeg, iv);
                 }
+
+                // Update dynamic axis displays
+                UpdateDynamicAxisDisplays(snap, rxDeg, ryDeg, rzDeg, noPose, dash, iv);
             });
+        }
+
+        /// <summary>
+        /// Updates the dynamic axis display collection based on connected stage axes
+        /// </summary>
+        private void UpdateDynamicAxisDisplays(double[] snap, double rxDeg, double ryDeg, double rzDeg, bool noPose, string dash, IFormatProvider iv)
+        {
+            // Get available axes from connected stages
+            var availableAxes = new HashSet<string>();
+            foreach (var wrapper in StageManager.Wrappers)
+            {
+                if (wrapper.IsConnected && wrapper.Controller != null)
+                {
+                    try
+                    {
+                        var axes = wrapper.Controller.GetAxesList();
+                        foreach (var axis in axes)
+                        {
+                            availableAxes.Add(axis.Trim().ToUpper());
+                        }
+                    }
+                    catch
+                    {
+                        // Ignore errors getting axes
+                    }
+                }
+            }
+
+            // If no axes available, show default 6-axis display
+            if (availableAxes.Count == 0)
+            {
+                availableAxes = new HashSet<string> { "X", "Y", "Z", "RX", "RY", "RZ" };
+            }
+
+            // Update or create axis displays
+            var axisOrder = new[] { "X", "Y", "Z", "RX", "RY", "RZ" };
+            var neededAxes = axisOrder.Where(a => availableAxes.Contains(a)).ToList();
+
+            // Remove axes that are no longer needed
+            for (int i = AxisDisplays.Count - 1; i >= 0; i--)
+            {
+                if (!neededAxes.Contains(AxisDisplays[i].Name))
+                {
+                    AxisDisplays.RemoveAt(i);
+                }
+            }
+
+            // Add or update axes
+            foreach (var axisName in neededAxes)
+            {
+                var existing = AxisDisplays.FirstOrDefault(a => a.Name == axisName);
+                if (existing == null)
+                {
+                    existing = new AxisDisplayInfo
+                    {
+                        Name = axisName,
+                        IsRotational = axisName.StartsWith("R")
+                    };
+
+                    // Set label with unit
+                    existing.Label = axisName.StartsWith("R") 
+                        ? $"{axisName}:" 
+                        : $"{axisName} (mm):";
+
+                    AxisDisplays.Add(existing);
+                }
+
+                // Update value
+                if (noPose)
+                {
+                    existing.ValueText = dash;
+                }
+                else
+                {
+                    existing.ValueText = axisName switch
+                    {
+                        "X" => snap[3].ToString("F9", iv),
+                        "Y" => snap[4].ToString("F9", iv),
+                        "Z" => snap[5].ToString("F9", iv),
+                        "RX" => FormatDegreesMinutesSeconds(rxDeg, iv),
+                        "RY" => FormatDegreesMinutesSeconds(ryDeg, iv),
+                        "RZ" => FormatDegreesMinutesSeconds(rzDeg, iv),
+                        _ => dash
+                    };
+                }
+            }
         }
 
         private static string FormatDegreesMinutesSeconds(double angleDeg, IFormatProvider provider)
