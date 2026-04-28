@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <OutputType>Library</OutputType>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DefineConstants>X64</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Reference the main application to access interfaces -->
+    <ProjectReference Include="..\singalUI\singalUI.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Copy PI DLLs to plugin output -->
+    <None Include="..\singalUI\libs\PI_GCS2_DLL_x64.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\singalUI\libs\PI_GCS2_DLL.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <!-- Copy output to Plugins folder for testing -->
+  <Target Name="CopyToPluginsFolder" AfterTargets="Build">
+    <PropertyGroup>
+      <PluginsDir>$(SolutionDir)singalUI\bin\$(Configuration)\net8.0\Plugins</PluginsDir>
+    </PropertyGroup>
+    <MakeDir Directories="$(PluginsDir)" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(PluginsDir)" />
+    <!-- Copy PI DLLs to Plugins folder too -->
+    <Copy SourceFiles="$(OutputPath)PI_GCS2_DLL_x64.dll" DestinationFolder="$(PluginsDir)" Condition="Exists('$(OutputPath)PI_GCS2_DLL_x64.dll')" />
+    <Copy SourceFiles="$(OutputPath)PI_GCS2_DLL.dll" DestinationFolder="$(PluginsDir)" Condition="Exists('$(OutputPath)PI_GCS2_DLL.dll')" />
+    <Message Text="Copied PI plugin to: $(PluginsDir)" Importance="high" />
+  </Target>
+</Project>

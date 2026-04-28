@@ -15,6 +15,40 @@
 
         <ScrollViewer Grid.Row="0" Grid.Column="0" Margin="16,16,8,16" VerticalScrollBarVisibility="Auto">
         <StackPanel Spacing="16">
+        
+        <!-- Stage Position Display -->
+        <Border Background="#252525" BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="16">
+            <StackPanel Spacing="12">
+                <TextBlock Text="Current Stage Position" FontSize="15" FontWeight="SemiBold" Foreground="#ffffff"/>
+                <WrapPanel Orientation="Horizontal">
+                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,18,8">
+                        <TextBlock Text="X:" FontSize="14" FontWeight="Bold" Foreground="#aaaaaa" FontFamily="Consolas,Courier New" MinWidth="30"/>
+                        <TextBlock Text="{Binding StagePositionX, StringFormat={}{0:F4}}" FontSize="14" FontWeight="Medium" Foreground="#dddddd" FontFamily="Consolas,Courier New" MinWidth="100"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,18,8">
+                        <TextBlock Text="Y:" FontSize="14" FontWeight="Bold" Foreground="#aaaaaa" FontFamily="Consolas,Courier New" MinWidth="30"/>
+                        <TextBlock Text="{Binding StagePositionY, StringFormat={}{0:F4}}" FontSize="14" FontWeight="Medium" Foreground="#dddddd" FontFamily="Consolas,Courier New" MinWidth="100"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,18,8">
+                        <TextBlock Text="Z:" FontSize="14" FontWeight="Bold" Foreground="#aaaaaa" FontFamily="Consolas,Courier New" MinWidth="30"/>
+                        <TextBlock Text="{Binding StagePositionZ, StringFormat={}{0:F4}}" FontSize="14" FontWeight="Medium" Foreground="#dddddd" FontFamily="Consolas,Courier New" MinWidth="100"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,18,8">
+                        <TextBlock Text="Rx:" FontSize="14" FontWeight="Bold" Foreground="#aaaaaa" FontFamily="Consolas,Courier New" MinWidth="30"/>
+                        <TextBlock Text="{Binding StagePositionRx, StringFormat={}{0:F4}}" FontSize="14" FontWeight="Medium" Foreground="#dddddd" FontFamily="Consolas,Courier New" MinWidth="100"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,18,8">
+                        <TextBlock Text="Ry:" FontSize="14" FontWeight="Bold" Foreground="#aaaaaa" FontFamily="Consolas,Courier New" MinWidth="30"/>
+                        <TextBlock Text="{Binding StagePositionRy, StringFormat={}{0:F4}}" FontSize="14" FontWeight="Medium" Foreground="#dddddd" FontFamily="Consolas,Courier New" MinWidth="100"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,18,8">
+                        <TextBlock Text="Rz:" FontSize="14" FontWeight="Bold" Foreground="#aaaaaa" FontFamily="Consolas,Courier New" MinWidth="30"/>
+                        <TextBlock Text="{Binding StagePositionRz, StringFormat={}{0:F4}}" FontSize="14" FontWeight="Medium" Foreground="#dddddd" FontFamily="Consolas,Courier New" MinWidth="100"/>
+                    </StackPanel>
+                </WrapPanel>
+            </StackPanel>
+        </Border>
+        
         <Border IsVisible="{Binding HelpModeActive}"
                 Background="#1f2b1f"
                 BorderBrush="#58ff9a"

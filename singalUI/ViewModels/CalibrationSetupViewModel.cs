@@ -204,6 +204,25 @@ namespace singalUI.ViewModels
         [ObservableProperty]
         private bool _movementModeAbsolute = true; // true = Absolute, false = Relative
 
+        // Stage position display
+        [ObservableProperty]
+        private double _stagePositionX = 0.0;
+
+        [ObservableProperty]
+        private double _stagePositionY = 0.0;
+
+        [ObservableProperty]
+        private double _stagePositionZ = 0.0;
+
+        [ObservableProperty]
+        private double _stagePositionRx = 0.0;
+
+        [ObservableProperty]
+        private double _stagePositionRy = 0.0;
+
+        [ObservableProperty]
+        private double _stagePositionRz = 0.0;
+
         // Position polling timer
         private Timer? _positionPollTimer;
         private CancellationTokenSource? _samplingSequenceCts;
@@ -214,11 +233,13 @@ namespace singalUI.ViewModels
             HelpModeActive = HelpModeService.IsEnabled;
             HelpModeService.HelpModeChanged += OnHelpModeChanged;
 
-            // Initialize static StageManager with default stages FIRST
-            StageManager.InitializeDefaultStages();
-
-            // THEN subscribe to wrapper property changes
+            // StageManager is already initialized in App.axaml.cs at startup
+            // Just subscribe to wrapper property changes
             InitializeMotionRows();
+
+            // Subscribe to stage position updates
+            StagePositionService.PositionChanged += OnStagePositionChanged;
+            UpdateStagePositionDisplay();
 
             CalculateTotals();
             StartConnectionPolling();
@@ -1820,6 +1841,26 @@ namespace singalUI.ViewModels
                 AxisType.Rz => 5,
                 _ => 0
             };
+        }
+
+        /// <summary>
+        /// Update stage position display from StagePositionService
+        /// </summary>
+        private void OnStagePositionChanged()
+        {
+            UpdateStagePositionDisplay();
+        }
+
+        private void UpdateStagePositionDisplay()
+        {
+            var shared = StagePositionService.Current;
+            StagePositionX = shared.X;
+            StagePositionY = shared.Y;
+            StagePositionZ = shared.Z;
+            StagePositionRx = shared.Rx;
+            StagePositionRy = shared.Ry;
+            StagePositionRz = shared.Rz;
+            Console.WriteLine($"[CalibrationSetupViewModel] Updated display: X={StagePositionX:F4}, Y={StagePositionY:F4}, Z={StagePositionZ:F4}");
         }
     }
 }

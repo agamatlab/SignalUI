@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <OutputType>Library</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Reference the main application to access interfaces -->
+    <ProjectReference Include="..\singalUI\singalUI.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+  </ItemGroup>
+
+  <!-- Copy output to StageControllers/Mock folder for new structure -->
+  <Target Name="CopyToStageControllersFolder" AfterTargets="Build">
+    <PropertyGroup>
+      <StageControllersDir>$(SolutionDir)singalUI\bin\$(Configuration)\net8.0\StageControllers\Mock</StageControllersDir>
+    </PropertyGroup>
+    <MakeDir Directories="$(StageControllersDir)" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(StageControllersDir)" />
+    <Message Text="Copied Mock controller to: $(StageControllersDir)" Importance="high" />
+  </Target>
+</Project>

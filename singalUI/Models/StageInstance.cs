@@ -40,6 +40,14 @@ public partial class StageInstance : ObservableObject
     [ObservableProperty]
     private double _degreesPerPulse = 0.00001;
 
+    /// <summary>Plugin name for Plugin hardware type</summary>
+    [ObservableProperty]
+    private string? _pluginName;
+
+    /// <summary>Plugin-specific configuration parameters</summary>
+    [ObservableProperty]
+    private System.Collections.Generic.Dictionary<string, object>? _pluginParameters;
+
     /// <summary>
     /// Get the axes this stage controls based on its hardware type
     /// Automatically determined based on controller type
@@ -51,6 +59,7 @@ public partial class StageInstance : ObservableObject
             StageHardwareType.PI => GetPIAxes(),
             StageHardwareType.Sigmakoki => GetSigmakokiAxes(),
             StageHardwareType.SigmakokiRotationStage => new[] { AxisType.Rz },
+            StageHardwareType.Plugin => System.Array.Empty<AxisType>(), // Plugin axes determined at runtime
             _ => System.Array.Empty<AxisType>()
         };
     }

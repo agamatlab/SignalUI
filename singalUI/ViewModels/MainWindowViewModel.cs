@@ -145,4 +145,21 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         HelpModeActive = enabled;
     }
+
+    [RelayCommand]
+    private void ToggleFullscreen()
+    {
+        var window = ShellTopLevel() as Window;
+        if (window == null)
+            return;
+
+        if (window.WindowState == WindowState.FullScreen)
+        {
+            window.WindowState = WindowState.Normal;
+        }
+        else
+        {
+            window.WindowState = WindowState.FullScreen;
+        }
+    }
 }

@@ -1,13 +1,89 @@
 using singalUI.libs;
 using singalUI.Models;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace singalUI.Services;
 
 /// <summary>
 /// Factory for creating stage controller instances based on hardware type
+/// Supports both built-in controllers and plugin-based controllers
 /// </summary>
 public static class StageControllerFactory
 {
+    private static PluginLoader? _pluginLoader;
+    
+    /// <summary>
+    /// Initialize the plugin system - must be called before using plugins
+    /// </summary>
+    public static void InitializePlugins()
+    {
+        Console.WriteLine("[StageControllerFactory] Initializing plugin system...");
+        _pluginLoader = new PluginLoader();
+        int loadedCount = _pluginLoader.LoadPlugins();
+        Console.WriteLine($"[StageControllerFactory] Plugin system initialized with {loadedCount} plugin(s)");
+    }
+    
+    /// <summary>
+    /// Get all available controller types (built-in + plugins)
+    /// </summary>
+    public static List<ControllerInfo> GetAvailableControllers()
+    {
+        var controllers = new List<ControllerInfo>();
+        
+        // Built-in controllers
+        controllers.Add(new ControllerInfo
+        {
+            Name = "PI",
+            DisplayName = "PI (Physik Instrumente)",
+            Manufacturer = "Physik Instrumente",
+            Description = "PI motion controllers via USB",
+            IsPlugin = false,
+            HardwareType = StageHardwareType.PI
+        });
+        
+        controllers.Add(new ControllerInfo
+        {
+            Name = "Sigmakoki",
+            DisplayName = "Sigma Koki",
+            Manufacturer = "Sigma Koki",
+            Description = "Sigma Koki controllers via serial port",
+            IsPlugin = false,
+            HardwareType = StageHardwareType.Sigmakoki
+        });
+        
+        controllers.Add(new ControllerInfo
+        {
+            Name = "SigmakokiRotation",
+            DisplayName = "Sigma Koki HSC-103 Rotation",
+            Manufacturer = "Sigma Koki",
+            Description = "HSC-103 rotation stage via Python bridge",
+            IsPlugin = false,
+            HardwareType = StageHardwareType.SigmakokiRotationStage
+        });
+        
+        // Plugin controllers
+        if (_pluginLoader != null)
+        {
+            foreach (var plugin in _pluginLoader.LoadedPlugins.Values)
+            {
+                controllers.Add(new ControllerInfo
+                {
+                    Name = plugin.Metadata.Name,
+                    DisplayName = plugin.Metadata.DisplayName,
+                    Manufacturer = plugin.Metadata.Manufacturer,
+                    Version = plugin.Metadata.Version,
+                    Description = plugin.Metadata.Description,
+                    IsPlugin = true,
+                    HardwareType = StageHardwareType.Plugin
+                });
+            }
+        }
+        
+        return controllers;
+    }
+    
     /// <summary>
     /// Create a stage controller instance based on the specified hardware type
     /// </summary>
@@ -18,16 +94,51 @@ public static class StageControllerFactory
     /// <summary>Create controller from full stage configuration (COM, HSC axis, DPP for rotation stage).</summary>
     public static StageController? CreateController(StageInstance configuration)
     {
-        return configuration.HardwareType switch
+        // Use built-in controllers for Sigmakoki only
+        if (configuration.HardwareType != StageHardwareType.Plugin)
         {
-            StageHardwareType.PI => new PIController(),
-            StageHardwareType.Sigmakoki => CreateSigmakokiController(configuration.SigmakokiController, configuration.SerialPortName),
-            StageHardwareType.SigmakokiRotationStage => new Hsc103RotationStageController(
-                configuration.SerialPortName,
-                configuration.Hsc103AxisNumber,
-                configuration.DegreesPerPulse),
-            _ => null
-        };
+            switch (configuration.HardwareType)
+            {
+                case StageHardwareType.PI:
+                    // PI is now a plugin - try to load it
+                    Console.WriteLine("[StageControllerFactory] PI controller is now a plugin");
+                    if (_pluginLoader != null)
+                    {
+                        var piConfig = new PluginConfiguration();
+                        return _pluginLoader.CreateController("PI", piConfig);
+                    }
+                    Console.WriteLine("[StageControllerFactory] PI plugin not found");
+                    return null;
+                    
+                case StageHardwareType.Sigmakoki:
+                    Console.WriteLine("[StageControllerFactory] Creating built-in Sigmakoki controller");
+                    return CreateSigmakokiController(configuration.SigmakokiController, configuration.SerialPortName);
+                    
+                case StageHardwareType.SigmakokiRotationStage:
+                    // Removed - Python wrapper no longer supported
+                    Console.WriteLine("[StageControllerFactory] SigmakokiRotationStage removed (Python wrapper)");
+                    return null;
+                    
+                case StageHardwareType.None:
+                default:
+                    return null;
+            }
+        }
+        
+        // Try to create from plugin
+        if (_pluginLoader != null && !string.IsNullOrEmpty(configuration.PluginName))
+        {
+            var pluginConfig = new PluginConfiguration
+            {
+                Parameters = configuration.PluginParameters ?? new Dictionary<string, object>()
+            };
+            
+            Console.WriteLine($"[StageControllerFactory] Creating controller from plugin: {configuration.PluginName}");
+            return _pluginLoader.CreateController(configuration.PluginName, pluginConfig);
+        }
+        
+        Console.WriteLine("[StageControllerFactory] No plugin name specified for Plugin hardware type");
+        return null;
     }
 
     public static StageController? CreateController(StageHardwareType hardwareType, SigmakokiControllerType sigmakokiType = SigmakokiControllerType.HSC_103, string portName = "COM3")
@@ -73,4 +184,26 @@ public static class StageControllerFactory
     {
         return StageHardwareUi.ProductName(hardwareType);
     }
+    
+    /// <summary>
+    /// Get the plugin loader instance
+    /// </summary>
+    public static PluginLoader? GetPluginLoader()
+    {
+        return _pluginLoader;
+    }
+}
+
+/// <summary>
+/// Information about an available controller (built-in or plugin)
+/// </summary>
+public class ControllerInfo
+{
+    public string Name { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public string Manufacturer { get; set; } = string.Empty;
+    public string Version { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public bool IsPlugin { get; set; }
+    public StageHardwareType? HardwareType { get; set; }
 }

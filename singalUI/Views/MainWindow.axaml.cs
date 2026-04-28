@@ -33,11 +33,10 @@ public partial class MainWindow : Window
     {
         try
         {
-            Console.WriteLine("[MainWindow] Constructor START");
             InitializeComponent();
+            Console.WriteLine("[MainWindow] Constructor START");
             
-            // Add F11 key handler for fullscreen toggle
-            this.KeyDown += OnKeyDown;
+            KeyDown += OnKeyDown;
             
             Console.WriteLine("[MainWindow] InitializeComponent completed");
 
@@ -69,6 +68,13 @@ public partial class MainWindow : Window
             Console.WriteLine($"[MainWindow] Stack trace: {ex.StackTrace}");
             throw;
         }
+    }
+
+    private void OnWindowOpened(object? sender, EventArgs e)
+    {
+        // Launch in fullscreen mode after window is fully initialized
+        WindowState = WindowState.FullScreen;
+        Console.WriteLine("[MainWindow] Launched in fullscreen mode");
     }
 
     private void NavigateToCamera(object sender, Avalonia.Input.PointerPressedEventArgs e)
@@ -180,13 +186,22 @@ public partial class MainWindow : Window
             {
                 // Exit fullscreen - restore to previous state
                 WindowState = _previousWindowState;
+                Console.WriteLine("[MainWindow] Exited fullscreen (F11)");
             }
             else
             {
                 // Enter fullscreen - save current state
                 _previousWindowState = WindowState;
                 WindowState = WindowState.FullScreen;
+                Console.WriteLine("[MainWindow] Entered fullscreen (F11)");
             }
+            e.Handled = true;
+        }
+        // ESC exits fullscreen mode (like a game)
+        else if (e.Key == Key.Escape && WindowState == WindowState.FullScreen)
+        {
+            WindowState = _previousWindowState;
+            Console.WriteLine("[MainWindow] Exited fullscreen (ESC)");
             e.Handled = true;
         }
     }
