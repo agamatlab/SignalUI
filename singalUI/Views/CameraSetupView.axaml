@@ -123,11 +123,10 @@
                         Background="#0a0a0a"
                         CornerRadius="0"
                         ClipToBounds="True">
-                    <Grid ClipToBounds="True">
+                    <Viewbox Stretch="Uniform" ClipToBounds="True">
                         <Image x:Name="CameraPreviewImage"
                                Source="{Binding CameraFrame}"
-                               Stretch="Uniform"
-                               ClipToBounds="True"
+                               Stretch="None"
                                HorizontalAlignment="Center"
                                VerticalAlignment="Center"
                                RenderTransformOrigin="0.5,0.5">
@@ -138,7 +137,7 @@
                                 </TransformGroup>
                             </Image.RenderTransform>
                         </Image>
-                    </Grid>
+                    </Viewbox>
                 </Border>
 
                 <Border Grid.Row="2"
