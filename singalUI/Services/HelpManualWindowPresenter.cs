@@ -85,14 +85,25 @@ public static class HelpManualWindowPresenter
         if (_owner == null || _window == null)
             return;
 
-        _window.WindowStartupLocation = WindowStartupLocation.Manual;
+        // Don't try to position if owner is in fullscreen mode - causes crashes on macOS
+        if (_owner.WindowState == WindowState.FullScreen)
+            return;
 
-        var x = _owner.Position.X + (int)Math.Round(_owner.Bounds.Width) + GapPx;
-        var y = _owner.Position.Y;
-        _window.Position = new PixelPoint(x, y);
+        try
+        {
+            _window.WindowStartupLocation = WindowStartupLocation.Manual;
 
-        var h = _owner.Bounds.Height;
-        if (h > 100 && Math.Abs(_window.Height - h) > 1)
-            _window.Height = h;
+            var x = _owner.Position.X + (int)Math.Round(_owner.Bounds.Width) + GapPx;
+            var y = _owner.Position.Y;
+            _window.Position = new PixelPoint(x, y);
+
+            var h = _owner.Bounds.Height;
+            if (h > 100 && Math.Abs(_window.Height - h) > 1)
+                _window.Height = h;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[HelpManualWindowPresenter] Error positioning window: {ex.Message}");
+        }
     }
 }
